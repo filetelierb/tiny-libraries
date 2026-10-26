@@ -1,0 +1,209 @@
+import { z } from 'zod';
+import type { StudySession, Source } from './domain';
+
+export type RichNode = {
+  type: string;
+  text?: string;
+  content?: RichNode[];
+  attrs?: {
+    level?: number;
+    start?: number;
+    colspan?: number;
+    rowspan?: number;
+    colwidth?: number[] | null;
+    language?: string | null;
+  };
+  marks?: Array<{ type: string; attrs?: { href: string } }>;
+};
+const safeLink = z
+  .string()
+  .max(2048)
+  .refine(
+    (value) => /^(https?:\/\/|mailto:)/i.test(value) && !/[\u0000-\u0020]/.test(value),
+    'Use an https, http or mailto link',
+  );
+const richNode: z.ZodType<RichNode> = z.lazy(() =>
+  z.object({
+    type: z.enum([
+      'doc',
+      'paragraph',
+      'text',
+      'heading',
+      'bulletList',
+      'orderedList',
+      'listItem',
+      'blockquote',
+      'codeBlock',
+      'hardBreak',
+      'horizontalRule',
+      'table',
+      'tableRow',
+      'tableCell',
+      'tableHeader',
+    ]),
+    text: z.string().max(40000).optional(),
+    content: z.array(richNode).max(2000).optional(),
+    attrs: z
+      .object({
+        level: z.number().int().min(1).max(3).optional(),
+        start: z.number().int().min(1).max(9999).optional(),
+        colspan: z.number().int().min(1).max(20).optional(),
+        rowspan: z.number().int().min(1).max(100).optional(),
+        colwidth: z.array(z.number().min(25).max(2000)).max(20).nullable().optional(),
+        language: z.string().max(40).nullable().optional(),
+      })
+      .optional(),
+    marks: z
+      .array(
+        z
+          .object({
+            type: z.enum(['bold', 'italic', 'underline', 'strike', 'code', 'link']),
+            attrs: z.object({ href: safeLink }).optional(),
+          })
+          .refine((mark) => mark.type !== 'link' || !!mark.attrs?.href),
+      )
+      .max(6)
+      .optional(),
+  }),
+);
+function boundedDocument(value: unknown) {
+  const stack = [{ value, depth: 0 }],
+    seen = new Set<object>();
+  let count = 0;
+  while (stack.length) {
+    const item = stack.pop()!;
+    if (
+      ++count > 4000 ||
+      item.depth > 24 ||
+      !item.value ||
+      typeof item.value !== 'object' ||
+      seen.has(item.value)
+    )
+      return false;
+    seen.add(item.value);
+    const content = (item.value as { content?: unknown }).content;
+    if (content !== undefined && !Array.isArray(content)) return false;
+    if (Array.isArray(content))
+      for (const child of content) stack.push({ value: child, depth: item.depth + 1 });
+  }
+  return new TextEncoder().encode(JSON.stringify(value)).byteLength <= 80000;
+}
+export const richDocumentSchema = z
+  .unknown()
+  .refine(boundedDocument, 'Annotation document is too large or deeply nested')
+  .pipe(richNode)
+  .refine((node) => node.type === 'doc');
+export function plainDocument(text = ''): RichNode {
+  return {
+    type: 'doc',
+    content: text.split('\n').map((line) => ({
+      type: 'paragraph',
+      ...(line ? { content: [{ type: 'text', text: line }] } : {}),
+    })),
+  };
+}
+export function richText(node: RichNode): string {
+  if (node.type === 'text') return node.text || '';
+  if (node.type === 'hardBreak') return '\n';
+  const text = (node.content || [])
+    .map(richText)
+    .join(
+      ['doc', 'bulletList', 'orderedList', 'blockquote', 'table', 'tableRow'].includes(node.type)
+        ? '\n'
+        : '',
+    );
+  return text;
+}
+export const locationSchema = z.object({
+  page: z.number().int().positive().max(100000).optional(),
+  seconds: z.number().nonnegative().max(86400).optional(),
+  quote: z.string().max(8000).optional(),
+});
+export type SourceLocation = z.infer<typeof locationSchema>;
+export const strokeSchema = z.object({
+  color: z.enum(['#007f76', '#e5913f', '#1f6bbb', '#c33d45', '#202f36']),
+  width: z.number().min(1).max(12),
+  points: z
+    .array(z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) }))
+    .min(1)
+    .max(2000),
+});
+export type DrawingStroke = z.infer<typeof strokeSchema>;
+export const drawingSchema = z
+  .array(strokeSchema)
+  .max(100)
+  .refine(
+    (strokes) => strokes.reduce((sum, stroke) => sum + stroke.points.length, 0) <= 3000,
+    'Drawing is too detailed; save this annotation and start another',
+  );
+export const annotationInputSchema = z.object({
+  id: z.string().uuid(),
+  sessionId: z.string().uuid(),
+  sourceId: z.string().uuid().nullable(),
+  sourceVersion: z.number().int().positive().nullable(),
+  title: z.string().trim().max(240),
+  document: richDocumentSchema,
+  location: locationSchema,
+  strokes: drawingSchema.default([]),
+  origin: z.enum(['manual', 'tutor']).default('manual'),
+  references: z.array(z.string().uuid()).max(20).default([]),
+  expectedRevision: z.number().int().nonnegative(),
+});
+export type AnnotationInput = z.infer<typeof annotationInputSchema>;
+export type Annotation = Omit<AnnotationInput, 'expectedRevision'> & {
+  revision: number;
+  text: string;
+  deleted: boolean;
+  createdAt: string;
+  updatedAt: string;
+  capture?: {
+    id: string;
+    width: number;
+    height: number;
+    size: number;
+    operationId?: string;
+    digest?: string;
+  };
+};
+export type AnnotationSummary = Omit<Annotation, 'document' | 'strokes'> & { strokeCount: number };
+export function annotationSummary({
+  document: _document,
+  strokes,
+  ...annotation
+}: Annotation): AnnotationSummary {
+  return { ...annotation, text: annotation.text.slice(0, 1000), strokeCount: strokes.length };
+}
+export async function migratedAnnotations(
+  session: StudySession,
+  files: Source[],
+): Promise<Annotation[]> {
+  return Promise.all(
+    session.notes.map(async (note) => {
+      const hash = new Uint8Array(
+        await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${session.id}:${note.id}`)),
+      );
+      hash[6] = (hash[6] & 15) | 128;
+      hash[8] = (hash[8] & 63) | 128;
+      const hex = [...hash.slice(0, 16)]
+        .map((value) => value.toString(16).padStart(2, '0'))
+        .join('');
+      return {
+        id: `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`,
+        sessionId: session.id,
+        sourceId: note.sourceId,
+        sourceVersion: files.find((file) => file.id === note.sourceId)?.version || 1,
+        title: note.text.split('\n')[0].slice(0, 80),
+        document: plainDocument(note.text),
+        location: {},
+        strokes: [],
+        origin: 'manual' as const,
+        references: [note.sourceId],
+        revision: 1,
+        text: note.text,
+        deleted: false,
+        createdAt: note.createdAt,
+        updatedAt: note.createdAt,
+      };
+    }),
+  );
+}

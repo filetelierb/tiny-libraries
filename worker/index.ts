@@ -22,6 +22,7 @@ import {
 export { ProcessingJob } from './jobs';
 import { runAssistant, bridgedFetch, gradeShortAnswer } from './meta';
 import { conversationRoute, conversationSnapshot } from './conversations';
+import { annotationRoute, AnnotationError } from './annotations';
 import {
   changeDirectory,
   ensureDirectories,
@@ -444,9 +445,17 @@ export class Library extends DurableObject<Env> {
         settings: () => this.settings(),
       });
       if (conversationResponse) return conversationResponse;
+      const annotationResponse = await annotationRoute(request, this.env, this.ctx.storage, () =>
+        boundedJson(request),
+      );
+      if (annotationResponse) return annotationResponse;
       throw new ApiError('Not found', 404);
     } catch (error) {
-      if (error instanceof ApiError || error instanceof DirectoryError)
+      if (
+        error instanceof ApiError ||
+        error instanceof DirectoryError ||
+        error instanceof AnnotationError
+      )
         return json({ error: error.message }, error.status);
       if (error instanceof z.ZodError || error instanceof SyntaxError)
         return json({ error: 'Invalid request' }, 400);
