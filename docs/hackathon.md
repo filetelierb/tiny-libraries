@@ -5,7 +5,7 @@ Reviewed 26 October 2026 against the authenticated [Participant Guide](https://c
 ## Non-negotiable requirements
 
 - Incorporate Meta models substantially and fit Build for Your World or Push the Frontier. This project's proposed theme is Build for Your World.
-- Public repository, rights to all code, data, and assets, and compliance with legal, ethical, and platform policies.
+- Public repository at submission, rights to all code, data, and assets, and compliance with legal, ethical, and platform policies. Development stays private until the owner explicitly decides to share; do not change visibility automatically.
 - Present only work developed during the event. Judges must be able to distinguish new contributions. New commits do not establish that imported code was newly authored.
 - The guide explicitly permits Startups to build on existing products while identifying new development. It does not explicitly extend that exception to Indie Developer entrants. This entrant is registered in Indie Developer. No eligibility approval for pre-existing implementation is assumed.
 - Maximum four people; solo participation permitted. Enter one track only. One representative submits one project for the team and lists all contributors.
