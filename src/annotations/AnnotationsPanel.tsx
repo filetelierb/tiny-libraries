@@ -6,13 +6,14 @@ import { sourceState } from '../../shared/directories';
 import { api } from '../api';
 import { Button, IconButton, Modal } from '../design/components';
 import { DirectoryTree, type TreeActions } from '../workspace/DirectoryTree';
-import { listAnnotations } from './api';
+import { queryAnnotations } from './api';
 import { RichContent } from './RichContent';
 import { StrokeLayer } from './Sketch';
 import type { T } from '../i18n';
 
 export function AnnotationsPanel({
   sessionId,
+  openSourceIds,
   source,
   catalog,
   t,
@@ -24,6 +25,7 @@ export function AnnotationsPanel({
   onError,
 }: {
   sessionId: string;
+  openSourceIds: string[];
   source: Source | null;
   catalog: Catalog;
   t: T;
@@ -36,22 +38,32 @@ export function AnnotationsPanel({
 }) {
   const [items, setItems] = useState<AnnotationSummary[]>([]),
     [all, setAll] = useState(!source),
-    [filter, setFilter] = useState<string | null>(null),
+    [excluded, setExcluded] = useState<Set<string>>(() => new Set()),
+    [includeSession, setIncludeSession] = useState(true),
     [trash, setTrash] = useState(false),
     [loading, setLoading] = useState(true),
     [refresh, setRefresh] = useState(0),
-    [picker, setPicker] = useState(false),
     [query, setQuery] = useState(''),
     [opened, setOpened] = useState<Annotation | null>(null);
+  const resourceKey = [...new Set(openSourceIds)].sort().join(',');
+  const openIds = new Set(openSourceIds);
+  const openFiles = catalog.files.filter(
+    (file) => openIds.has(file.id) && sourceState(file, catalog.directories) !== 'trash',
+  );
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setItems([]);
     let busy = false;
     const load = async () => {
       if (busy) return;
       busy = true;
       try {
-        const value = await listAnnotations(sessionId);
+        const value = await queryAnnotations(
+          sessionId,
+          resourceKey ? resourceKey.split(',') : [],
+          true,
+        );
         if (!cancelled) setItems(value);
       } catch (error) {
         if (!cancelled) onError(error instanceof Error ? error.message : t.error);
@@ -68,13 +80,25 @@ export function AnnotationsPanel({
       clearInterval(timer);
       window.removeEventListener('focus', load);
     };
-  }, [sessionId, tick, refresh]);
+  }, [sessionId, resourceKey, tick, refresh]);
   useEffect(() => {
     if (!source) setAll(true);
   }, [source?.id]);
-  const selected = all ? filter : source?.id;
+  const selectedIds = new Set(
+    openFiles.filter((file) => !excluded.has(file.id)).map((file) => file.id),
+  );
+  const counts = new Map<string, number>();
+  for (const item of items)
+    if (item.sourceId && item.deleted === trash)
+      counts.set(item.sourceId, (counts.get(item.sourceId) || 0) + 1);
   const visible = items.filter(
-    (item) => item.deleted === trash && (!selected || item.sourceId === selected),
+    (item) =>
+      item.deleted === trash &&
+      (all
+        ? item.sourceId
+          ? selectedIds.has(item.sourceId)
+          : includeSession && item.sessionId === sessionId
+        : item.sourceId === source?.id),
   );
   const open = async (item: AnnotationSummary, editing = false) => {
     try {
@@ -112,7 +136,6 @@ export function AnnotationsPanel({
           disabled={!source}
           onClick={() => {
             setAll(false);
-            setFilter(null);
           }}
         >
           {t.currentResource}
@@ -122,18 +145,71 @@ export function AnnotationsPanel({
         </Button>
       </div>
       {all && (
-        <div className="annotation-filter">
-          <Button onClick={() => setPicker(true)}>
-            {filter
-              ? catalog.files.find((file) => file.id === filter)?.name || t.sourceUnavailable
-              : t.filterResource}
-          </Button>
-          {filter && (
-            <Button variant="ghost" onClick={() => setFilter(null)}>
-              {t.clear}
-            </Button>
-          )}
-        </div>
+        <details className="annotation-resource-filter">
+          <summary>
+            {t.filterResources} · {selectedIds.size} / {openFiles.length}
+          </summary>
+          <div className="annotation-resource-filter-body">
+            <p className="muted">{t.openSessionResources}</p>
+            <div className="resource-filter-actions">
+              <Button
+                onClick={() => {
+                  setExcluded(new Set());
+                  setIncludeSession(true);
+                }}
+              >
+                {t.selectAll}
+              </Button>
+              <Button
+                onClick={() => {
+                  setExcluded(new Set(openSourceIds));
+                  setIncludeSession(false);
+                }}
+              >
+                {t.selectNone}
+              </Button>
+              <span role="status">
+                {selectedIds.size} / {openFiles.length} {t.resourcesSelected}
+              </span>
+            </div>
+            <input
+              type="search"
+              aria-label={t.search}
+              placeholder={t.search}
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+            <DirectoryTree
+              directories={catalog.directories}
+              files={openFiles}
+              t={t}
+              mode="filter"
+              query={query}
+              actions={actions}
+              storageKey="tl:tree:annotation-filter"
+              selectedFileIds={selectedIds}
+              fileCounts={counts}
+              toggleFile={(file, checked) =>
+                setExcluded((previous) => {
+                  const next = new Set(previous);
+                  if (checked) next.delete(file.id);
+                  else next.add(file.id);
+                  return next;
+                })
+              }
+            />
+            {items.some((item) => !item.sourceId && item.sessionId === sessionId) && (
+              <label className="annotation-session-filter">
+                <input
+                  type="checkbox"
+                  checked={includeSession}
+                  onChange={(event) => setIncludeSession(event.target.checked)}
+                />
+                {t.includeSessionAnnotations}
+              </label>
+            )}
+          </div>
+        </details>
       )}
       <label className="annotation-trash">
         <input
@@ -144,7 +220,20 @@ export function AnnotationsPanel({
         {t.showDeletedAnnotations}
       </label>
       {loading && <p role="status">{t.loadingAnnotations}</p>}
-      {!loading && !visible.length && <p className="small-empty">{t.noNotes}</p>}
+      <p className="annotation-result-count" role="status">
+        {!loading
+          ? `${visible.length} ${visible.length === 1 ? t.annotationSingular : t.annotationCount}`
+          : ''}
+      </p>
+      {!loading && !visible.length && (
+        <p className="small-empty">
+          {all && !openFiles.length && !items.some((item) => !item.sourceId)
+            ? t.openResourcesForNotes
+            : all && !selectedIds.size && !includeSession
+              ? t.selectResourcesForNotes
+              : t.noNotes}
+        </p>
+      )}
       {visible.map((item) => {
         const file = catalog.files.find((file) => file.id === item.sourceId),
           unavailable =
@@ -202,30 +291,6 @@ export function AnnotationsPanel({
           </article>
         );
       })}
-      {picker && (
-        <Modal title={t.filterResource} close={() => setPicker(false)} closeLabel={t.close}>
-          <input
-            type="search"
-            aria-label={t.search}
-            placeholder={t.search}
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-          <DirectoryTree
-            directories={catalog.directories}
-            files={catalog.files}
-            t={t}
-            mode="file"
-            query={query}
-            actions={actions}
-            storageKey="tl:tree:annotation-filter"
-            chooseFile={(file) => {
-              setFilter(file.id);
-              setPicker(false);
-            }}
-          />
-        </Modal>
-      )}
       {opened && (
         <Modal
           title={opened.title || t.untitledAnnotation}

@@ -1,5 +1,62 @@
 import { z } from 'zod';
-import type { StudySession, Source } from './domain';
+import { MAX_RESOURCE_TABS, type StudySession, type Source } from './domain';
+
+export const annotationQuerySchema = z.object({
+  sessionId: z.string().uuid(),
+  sourceIds: z
+    .array(z.string().uuid())
+    .max(MAX_RESOURCE_TABS * 2)
+    .refine((ids) => new Set(ids).size === ids.length),
+  includeSession: z.boolean().default(false),
+  after: z.string().max(512).nullable().optional(),
+});
+export type AnnotationQuery = z.infer<typeof annotationQuerySchema>;
+export function annotationQueryPrefixes(query: AnnotationQuery) {
+  return [
+    ...[...query.sourceIds].sort().map((id) => `annotation-source-summary:${id}:`),
+    ...(query.includeSession ? [`annotation-unbound-summary:${query.sessionId}:`] : []),
+  ];
+}
+export function annotationScopeKey(value: {
+  id: string;
+  sourceId: string | null;
+  sessionId: string;
+}) {
+  return value.sourceId
+    ? `annotation-source-summary:${value.sourceId}:${value.id}`
+    : `annotation-unbound-summary:${value.sessionId}:${value.id}`;
+}
+
+export async function readAnnotationQueryPage(
+  query: AnnotationQuery,
+  read: (options: {
+    prefix: string;
+    limit: number;
+    startAfter?: string;
+  }) => Promise<Map<string, AnnotationSummary>>,
+): Promise<{ items: AnnotationSummary[]; nextCursor: string | null } | { error: string }> {
+  const prefixes = annotationQueryPrefixes(query);
+  let start = 0;
+  if (query.after) {
+    start = prefixes.findIndex((prefix) => query.after!.startsWith(prefix));
+    if (
+      start < 0 ||
+      !z.string().uuid().safeParse(query.after.slice(prefixes[start].length)).success
+    )
+      return { error: 'Annotation selection changed; reload its first page' };
+  }
+  const items: AnnotationSummary[] = [];
+  for (let index = start; index < prefixes.length; index++) {
+    const entries = await read({
+      prefix: prefixes[index],
+      limit: 100 - items.length,
+      ...(index === start && query.after ? { startAfter: query.after } : {}),
+    });
+    items.push(...entries.values());
+    if (items.length === 100) return { items, nextCursor: [...entries.keys()].at(-1)! };
+  }
+  return { items, nextCursor: null };
+}
 
 export type RichNode = {
   type: string;

@@ -55,11 +55,14 @@ export function DirectoryTree({
   chooseFolder,
   actions,
   storageKey,
+  selectedFileIds,
+  fileCounts,
+  toggleFile,
 }: {
   directories: Directory[];
   files: Source[];
   t: T;
-  mode?: 'manage' | 'file' | 'folder';
+  mode?: 'manage' | 'file' | 'folder' | 'filter';
   view?: CatalogView;
   query?: string;
   active?: string;
@@ -68,6 +71,9 @@ export function DirectoryTree({
   chooseFolder?: (directory: Directory | null) => void;
   actions: TreeActions;
   storageKey: string;
+  selectedFileIds?: Set<string>;
+  fileCounts?: Map<string, number>;
+  toggleFile?: (file: Source, checked: boolean) => void;
 }) {
   const [collapsed, setCollapsed] = useState<Set<string>>(() => {
     try {
@@ -111,12 +117,16 @@ export function DirectoryTree({
       ? []
       : files.filter(
           (file) =>
-            sourceState(file, directories) === view &&
+            (mode === 'filter'
+              ? sourceState(file, directories) !== 'trash'
+              : sourceState(file, directories) === view) &&
             fold(`${file.folder}/${file.name}`).includes(needle),
         );
   const matchingDirectories = directories.filter(
     (directory) =>
-      directoryState(directory.path, directories) === view &&
+      (mode === 'filter'
+        ? visibleFiles.some((file) => containsPath(directory.path, file.folder))
+        : directoryState(directory.path, directories) === view) &&
       (!needle ||
         fold(directory.path).includes(needle) ||
         visibleFiles.some((file) => containsPath(directory.path, file.folder))),
@@ -261,7 +271,7 @@ export function DirectoryTree({
         .sort((a, b) => a.path.localeCompare(b.path))
         .map((directory) => {
           const expanded = !!needle || !collapsed.has(directory.id),
-            contextOnly = directoryState(directory.path, directories) !== view;
+            contextOnly = mode !== 'filter' && directoryState(directory.path, directories) !== view;
           const Icon = expanded ? FolderOpen : Folder;
           return (
             <li
@@ -294,7 +304,7 @@ export function DirectoryTree({
                   <Icon size={19} />
                   <span>{directoryName(directory.path)}</span>
                 </button>
-                {!contextOnly && (
+                {!contextOnly && mode !== 'filter' && (
                   <ActionMenu
                     label={`${t.directoryOptions}: ${directory.path}`}
                     icon={<Plus size={17} />}
@@ -324,22 +334,42 @@ export function DirectoryTree({
                 className={`tree-row file-row ${active === file.id ? 'active' : ''}`}
                 onContextMenu={context}
               >
-                <button
-                  type="button"
-                  title={view === 'trash' ? `${file.name} · ${t.restoreToOpen}` : file.name}
-                  disabled={view === 'trash'}
-                  onClick={() => chooseFile?.(file, 'preview')}
-                  onDoubleClick={() => chooseFile?.(file, 'retain')}
-                >
-                  <Icon size={18} />
-                  <span>{file.name}</span>
-                  {file.reviewed && (
-                    <CircleCheck className="reviewed-marker" size={17} aria-label={t.reviewed}>
-                      <title>{t.reviewed}</title>
-                    </CircleCheck>
-                  )}
-                </button>
-                <ActionMenu label={`${t.options}: ${file.name}`} actions={fileActions(file)} />
+                {mode === 'filter' ? (
+                  <label className="tree-file-select">
+                    <input
+                      type="checkbox"
+                      aria-label={`${t.includeResource}: ${file.name}`}
+                      checked={!!selectedFileIds?.has(file.id)}
+                      onChange={(event) => toggleFile?.(file, event.target.checked)}
+                    />
+                    <Icon size={18} />
+                    <span title={file.name}>{file.name}</span>
+                    <small
+                      aria-label={`${fileCounts?.get(file.id) || 0} ${fileCounts?.get(file.id) === 1 ? t.annotationSingular : t.annotationCount}`}
+                    >
+                      {fileCounts?.get(file.id) || 0}
+                    </small>
+                  </label>
+                ) : (
+                  <button
+                    type="button"
+                    title={view === 'trash' ? `${file.name} · ${t.restoreToOpen}` : file.name}
+                    disabled={view === 'trash'}
+                    onClick={() => chooseFile?.(file, 'preview')}
+                    onDoubleClick={() => chooseFile?.(file, 'retain')}
+                  >
+                    <Icon size={18} />
+                    <span>{file.name}</span>
+                    {file.reviewed && (
+                      <CircleCheck className="reviewed-marker" size={17} aria-label={t.reviewed}>
+                        <title>{t.reviewed}</title>
+                      </CircleCheck>
+                    )}
+                  </button>
+                )}
+                {mode !== 'filter' && (
+                  <ActionMenu label={`${t.options}: ${file.name}`} actions={fileActions(file)} />
+                )}
               </div>
             </li>
           );
@@ -370,7 +400,7 @@ export function DirectoryTree({
           {t.libraryRoot}
         </button>
       )}
-      {mode !== 'manage' && (
+      {mode !== 'manage' && mode !== 'filter' && (
         <div className="tree-picker-actions">
           <Button onClick={() => actions.create('')}>
             <FolderPlus size={17} />

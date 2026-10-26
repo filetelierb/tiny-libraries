@@ -2946,3 +2946,95 @@ body:has(.panel-resizer.resizing) {
   color: var(--primary);
   text-decoration: underline;
 }
+
+.tree-file-select {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-direction: row;
+  min-width: 0;
+  width: 100%;
+  margin: 0;
+  padding: 5px 8px;
+  cursor: pointer;
+}
+.tree-file-select input {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+  margin: 0;
+  accent-color: var(--primary);
+}
+.tree-file-select > svg {
+  flex: 0 0 18px;
+  color: var(--muted-text);
+}
+.tree-file-select > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+.tree-file-select > small {
+  border-radius: var(--radius-sm);
+  background: var(--secondary);
+  color: var(--on-secondary);
+  min-width: 24px;
+  padding: 2px 5px;
+  text-align: center;
+}
+.resource-filter-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 12px 0;
+}
+.resource-filter-actions > span {
+  color: var(--muted-text);
+  font-size: var(--font-size-small);
+}
+.annotation-session-filter {
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+  align-items: center;
+}
+.annotation-session-filter input {
+  width: auto;
+}
+.annotation-result-count {
+  color: var(--muted-text);
+  font-size: var(--font-size-small);
+  margin: 6px 0;
+}
+
+.annotation-resource-filter {
+  margin: 12px 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--background);
+}
+.annotation-resource-filter > summary {
+  cursor: pointer;
+  font-size: var(--font-size-control);
+  padding: 10px;
+  font-weight: 600;
+}
+.annotation-resource-filter-body {
+  border-top: 1px solid var(--border);
+  padding: 8px;
+}
+.annotation-resource-filter .directory-tree {
+  max-height: min(45dvh, 320px);
+}
+.annotation-resource-filter .resource-filter-actions {
+  gap: 5px;
+}
+.annotation-resource-filter .resource-filter-actions .button {
+  padding: 4px 8px;
+}
+.annotation-resource-filter .annotation-session-filter {
+  font-size: var(--font-size-control);
+}

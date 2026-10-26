@@ -1,6 +1,9 @@
 import { z } from 'zod';
 import {
   annotationInputSchema,
+  annotationQuerySchema,
+  readAnnotationQueryPage,
+  annotationScopeKey,
   annotationSummary,
   migratedAnnotations,
   richText,
@@ -24,6 +27,7 @@ async function saveAnnotation(storage: Pick<DurableObjectStorage, 'put'>, annota
     `annotation-summary:${annotation.sessionId}:${annotation.id}`,
     annotationSummary(annotation),
   );
+  await storage.put(annotationScopeKey(annotation), annotationSummary(annotation));
 }
 const json = (data: unknown, status = 200) =>
   Response.json(data, { status, headers: { 'Cache-Control': 'no-store' } });
@@ -44,15 +48,57 @@ async function requireContext(
   if (sourceState(source, directories) === 'trash')
     throw new AnnotationError('Restore the source before editing its annotations', 409);
 }
-async function importNotes(storage: DurableObjectStorage, sessionId: string) {
-  const session = await storage.get<StudySession>(`session:${sessionId}`);
+async function importNotes(
+  storage: DurableObjectStorage,
+  sessionId: string,
+  snapshot?: StudySession,
+  sources?: Source[],
+) {
+  const session = snapshot || (await storage.get<StudySession>(`session:${sessionId}`));
   if (!session) throw new AnnotationError('Session not found', 404);
-  const files = [...(await storage.list<Source>({ prefix: 'file:' })).values()];
+  const fingerprint = [
+    ...new Uint8Array(
+      await crypto.subtle.digest(
+        'SHA-256',
+        new TextEncoder().encode(JSON.stringify(session.notes)),
+      ),
+    ),
+  ]
+    .map((value) => value.toString(16).padStart(2, '0'))
+    .join('');
+  const migrationKey = `annotation-note-import:${sessionId}`;
+  if ((await storage.get(migrationKey)) === fingerprint) return;
+  const files = sources || [...(await storage.list<Source>({ prefix: 'file:' })).values()];
   for (const annotation of await migratedAnnotations(session, files))
     await storage.transaction(async (tx) => {
       const key = `annotation:${annotation.id}`;
       if (!(await tx.get(key))) await saveAnnotation(tx, annotation);
     });
+  await storage.put(migrationKey, fingerprint);
+}
+
+async function ensureSharedAnnotations(storage: DurableObjectStorage) {
+  const sessions = await storage.list<StudySession>({ prefix: 'session:' });
+  const files = [...(await storage.list<Source>({ prefix: 'file:' })).values()];
+  for (const session of sessions.values()) await importNotes(storage, session.id, session, files);
+  if (await storage.get('annotation-source-index:v1')) return;
+  let after: string | undefined;
+  for (;;) {
+    const entries = await storage.list<AnnotationSummary>({
+      prefix: 'annotation-summary:',
+      limit: 100,
+      ...(after ? { startAfter: after } : {}),
+    });
+    for (const summary of entries.values())
+      await storage.transaction(async (tx) => {
+        // Read the current revision inside the transaction so a concurrent edit wins.
+        const value = await tx.get<Annotation>(`annotation:${summary.id}`);
+        if (value) await tx.put(annotationScopeKey(value), annotationSummary(value));
+      });
+    if (entries.size < 100) break;
+    after = [...entries.keys()].at(-1);
+  }
+  await storage.put('annotation-source-index:v1', true);
 }
 export async function annotationRoute(
   request: Request,
@@ -62,8 +108,24 @@ export async function annotationRoute(
 ): Promise<Response | null> {
   const url = new URL(request.url),
     list = url.pathname === '/api/annotations',
+    query = url.pathname === '/api/annotations/query',
     match = url.pathname.match(/^\/api\/annotations\/([a-f0-9-]+)(\/capture)?$/);
-  if (!list && !match) return null;
+  if (!list && !match && !query) return null;
+  if (query) {
+    if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
+    const input = annotationQuerySchema.parse(await body());
+    if (!(await storage.get(`session:${input.sessionId}`)))
+      throw new AnnotationError('Session not found', 404);
+    for (const sourceId of input.sourceIds)
+      if (!(await storage.get(`file:${sourceId}`)))
+        throw new AnnotationError('Source not found', 404);
+    await ensureSharedAnnotations(storage);
+    const result = await readAnnotationQueryPage(input, (options) =>
+      storage.list<AnnotationSummary>(options),
+    );
+    if ('error' in result) throw new AnnotationError(result.error);
+    return json(result);
+  }
   if (list) {
     if (request.method !== 'GET') return json({ error: 'Method not allowed' }, 405);
     const sessionId = z.string().uuid().parse(url.searchParams.get('sessionId'));

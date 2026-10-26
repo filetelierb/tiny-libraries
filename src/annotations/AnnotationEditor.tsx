@@ -199,7 +199,7 @@ export default function AnnotationEditor({
       if (sourceMode) editor.commands.setContent(markdown, { contentType: 'markdown' });
       const input = annotationInputSchema.parse({
         id: request.id,
-        sessionId,
+        sessionId: request.initial?.sessionId || sessionId,
         sourceId: request.sourceId,
         sourceVersion: request.initial?.sourceVersion ?? source?.version ?? null,
         title,

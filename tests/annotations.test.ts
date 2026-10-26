@@ -9,6 +9,7 @@ import {
   migratedAnnotations,
   annotationSummary,
   type Annotation,
+  type AnnotationSummary,
 } from '../shared/annotations';
 import { sessionSchema, type Source } from '../shared/domain';
 
@@ -131,4 +132,101 @@ test('annotation summaries omit large documents and drawings without losing sour
   assert.equal('strokes' in summary, false);
   assert.deepEqual(summary.capture, value.capture);
   assert.equal(summary.location.page, 2);
+});
+
+test('file annotation indexes are independent of their creator session, while unbound notes stay session-scoped', async () => {
+  const { annotationScopeKey, annotationQuerySchema, annotationQueryPrefixes } =
+    await import('../shared/annotations');
+  const id = crypto.randomUUID(),
+    secondSession = crypto.randomUUID();
+  assert.equal(
+    annotationScopeKey({ id, sourceId, sessionId }),
+    annotationScopeKey({ id, sourceId, sessionId: secondSession }),
+  );
+  assert.notEqual(
+    annotationScopeKey({ id, sourceId: null, sessionId }),
+    annotationScopeKey({ id, sourceId: null, sessionId: secondSession }),
+  );
+  const input = annotationQuerySchema.parse({
+    sessionId,
+    sourceIds: [sourceId],
+    includeSession: true,
+  });
+  assert.deepEqual(annotationQueryPrefixes(input), [
+    `annotation-source-summary:${sourceId}:`,
+    `annotation-unbound-summary:${sessionId}:`,
+  ]);
+  assert.equal(
+    annotationQuerySchema.safeParse({ ...input, sourceIds: [sourceId, sourceId] }).success,
+    false,
+  );
+});
+
+test('multi-resource annotation queries paginate at 100 without duplicates or widening the selected scope', async () => {
+  const { annotationQuerySchema, annotationScopeKey, readAnnotationQueryPage } =
+    await import('../shared/annotations');
+  const otherSource = '41c90f6e-93ee-4018-87ab-03964476cb22',
+    hiddenSource = crypto.randomUUID();
+  const values = [
+    ...Array.from({ length: 103 }, () => ({
+      id: crypto.randomUUID(),
+      sessionId: crypto.randomUUID(),
+      sourceId,
+    })),
+    ...Array.from({ length: 2 }, () => ({
+      id: crypto.randomUUID(),
+      sessionId: crypto.randomUUID(),
+      sourceId: otherSource,
+    })),
+    { id: crypto.randomUUID(), sessionId, sourceId: null },
+    { id: crypto.randomUUID(), sessionId: crypto.randomUUID(), sourceId: null },
+    { id: crypto.randomUUID(), sessionId, sourceId: hiddenSource },
+  ];
+  const records = new Map(
+    values.map((item) => [annotationScopeKey(item), item as AnnotationSummary]),
+  );
+  const read = async ({
+    prefix,
+    limit,
+    startAfter,
+  }: {
+    prefix: string;
+    limit: number;
+    startAfter?: string;
+  }) =>
+    new Map(
+      [...records]
+        .filter(([key]) => key.startsWith(prefix) && (!startAfter || key > startAfter))
+        .sort(([a], [b]) => a.localeCompare(b))
+        .slice(0, limit),
+    );
+  const query = annotationQuerySchema.parse({
+    sessionId,
+    sourceIds: [otherSource, sourceId],
+    includeSession: true,
+  });
+  const first = await readAnnotationQueryPage(query, read);
+  assert.ok(!('error' in first));
+  assert.equal(first.items.length, 100);
+  assert.ok(first.nextCursor);
+  const second = await readAnnotationQueryPage({ ...query, after: first.nextCursor }, read);
+  assert.ok(!('error' in second));
+  assert.equal(second.items.length, 6);
+  assert.equal(second.nextCursor, null);
+  const all = [...first.items, ...second.items];
+  assert.equal(new Set(all.map((item) => item.id)).size, 106);
+  assert.equal(all.filter((item) => !item.sourceId).length, 1);
+  assert.ok(all.every((item) => item.sourceId !== hiddenSource));
+  const narrowed = await readAnnotationQueryPage(
+    { ...query, sourceIds: [otherSource], after: first.nextCursor },
+    read,
+  );
+  assert.ok('error' in narrowed);
+  const none = await readAnnotationQueryPage(
+    { ...query, sourceIds: [], includeSession: false },
+    async () => {
+      throw new Error('No resource buckets should be read');
+    },
+  );
+  assert.deepEqual(none, { items: [], nextCursor: null });
 });

@@ -1124,6 +1124,7 @@ export function App() {
             <AnnotationsPanel
               key={session.id}
               sessionId={session.id}
+              openSourceIds={[...new Set(resources.resourceTabs.flatMap((tab) => tab.sources))]}
               source={active}
               catalog={catalog}
               t={t}
