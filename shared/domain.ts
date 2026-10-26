@@ -121,12 +121,33 @@ export type Bookmark = {
   page?: number;
 };
 export type Note = { id: string; sourceId: string; text: string; createdAt: string };
+export const MAX_RESOURCE_TABS = 100;
+export const resourceTabSchema = z.object({
+  id: z.string().min(1).max(200),
+  sources: z
+    .array(z.string().min(1).max(200))
+    .min(1)
+    .max(2)
+    .refine((values) => new Set(values).size === values.length),
+  preview: z.boolean(),
+});
+export type ResourceTab = z.infer<typeof resourceTabSchema>;
 export const sessionSchema = z.object({
   id: z.string().uuid(),
   name: z.string().min(1).max(160),
-  tabs: z.array(z.string()).max(50),
+  tabs: z.array(z.string()).max(MAX_RESOURCE_TABS * 2),
   active: z.string().nullable(),
   split: z.string().nullable(),
+  resourceTabs: z
+    .array(resourceTabSchema)
+    .max(MAX_RESOURCE_TABS)
+    .refine(
+      (values) =>
+        new Set(values.map((tab) => tab.id)).size === values.length &&
+        values.filter((tab) => tab.preview).length <= 1,
+    )
+    .optional(),
+  activeTabId: z.string().nullable().optional(),
   positions: z.record(z.string(), z.number().nonnegative()),
   notes: z
     .array(

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type CSSProperties } from 'react';
 import {
   BookOpen,
   PanelLeft,
@@ -35,6 +35,8 @@ import {
   LoaderCircle,
   RotateCcw,
   LibraryBig,
+  Pin,
+  PinOff,
 } from 'lucide-react';
 import {
   type Catalog,
@@ -47,6 +49,7 @@ import {
   type Job,
   type Attempt,
   MAX_FILE_BYTES,
+  MAX_RESOURCE_TABS,
   kindFor,
   fold,
   reviewSummary,
@@ -57,6 +60,18 @@ import { Badge, Button, Empty, IconButton, Modal } from './design/components';
 import { Viewer } from './Viewer';
 import { GeneratedArtifact } from './GeneratedArtifact';
 import { SignalExplorer } from './SignalExplorer';
+import { PanelResizer, useDrawerFocus, usePanels } from './workspace/Panels';
+import {
+  readWorkspace,
+  workspacePatch,
+  openResource,
+  closeResourceTab,
+  retainTab,
+  openSplit,
+  unsplit,
+  type ResourceWorkspace,
+} from './workspace/tabs';
+import { ResourceTabs } from './workspace/ResourceTabs';
 
 const fileIcon = (kind: Source['kind']) =>
   kind === 'video' ? Film : kind === 'audio' ? Headphones : kind === 'image' ? FileImage : FileText;
@@ -69,12 +84,24 @@ export function App() {
   const [catalog, setCatalog] = useState<Catalog | null>(null),
     [locale, setLocale] = useState<Locale>(() => localGet('tl:locale', 'en') as Locale),
     [session, setSession] = useState<StudySession | null>(null);
-  const [left, setLeft] = useState(() => window.innerWidth >= 1000),
-    [right, setRight] = useState(() => window.innerWidth >= 1150),
-    [focus, setFocus] = useState(false),
+  const panels = usePanels();
+  const left = panels.effective.left.open,
+    right = panels.effective.right.open;
+  const setLeft = (value: boolean) => panels.open('left', value);
+  const setRight = (value: boolean) => panels.open('right', value);
+  const leftPanelRef = useRef<HTMLElement>(null),
+    rightPanelRef = useRef<HTMLElement>(null);
+  const [focus, setFocus] = useState(false),
     [tab, setTab] = useState<StudyTab>('chapters'),
     [query, setQuery] = useState(''),
     [archived, setArchived] = useState(false);
+  const [splitQuery, setSplitQuery] = useState('');
+  useDrawerFocus('left', !!catalog && !focus && panels.drawer === 'left', leftPanelRef, () =>
+    setLeft(false),
+  );
+  useDrawerFocus('right', !!catalog && !focus && panels.drawer === 'right', rightPanelRef, () =>
+    setRight(false),
+  );
   const [modal, setModal] = useState<'settings' | 'upload' | 'session' | 'rename' | 'split' | null>(
       null,
     ),
@@ -93,6 +120,10 @@ export function App() {
     t = dictionaries[locale] || dictionaries.en;
   const active = catalog?.files.find((f) => f.id === session?.active) || null,
     split = catalog?.files.find((f) => f.id === session?.split) || null;
+  const resources = session ? readWorkspace(session) : { resourceTabs: [], activeTabId: null };
+  const activeResourceTab = resources.resourceTabs.find(
+    (item) => item.id === resources.activeTabId,
+  );
   const run = async (work: () => Promise<void>) => {
     setError('');
     try {
@@ -151,26 +182,45 @@ export function App() {
     setLearning(null);
     setSeek(null);
   }
-  function openFile(file: Source) {
+  function commitWorkspace(next: ResourceWorkspace) {
+    if (next.resourceTabs.length > MAX_RESOURCE_TABS) {
+      setError(t.tabLimit);
+      return;
+    }
+    updateSession(workspacePatch(next));
+  }
+  function openFile(file: Source, mode: 'preview' | 'retain' = 'preview') {
     if (!sessionRef.current) return;
-    const current = sessionRef.current;
-    updateSession({
-      tabs: current.tabs.includes(file.id) ? current.tabs : [...current.tabs, file.id],
-      active: file.id,
-    });
+    commitWorkspace(openResource(readWorkspace(sessionRef.current), file.id, mode));
     setArtifact(false);
     setSeek(null);
-    if (window.innerWidth < 800) setLeft(false);
+    if (panels.drawer === 'left') setLeft(false);
   }
   function closeFile(id: string) {
     if (!sessionRef.current) return;
-    const current = sessionRef.current,
-      tabs = current.tabs.filter((x) => x !== id);
-    updateSession({
-      tabs,
-      active: current.active === id ? tabs.at(-1) || null : current.active,
-      split: current.split === id ? null : current.split,
-    });
+    const current = readWorkspace(sessionRef.current);
+    commitWorkspace(closeResourceTab(current, id));
+    if (current.activeTabId === id) {
+      setArtifact(false);
+      setSeek(null);
+    }
+  }
+  function selectResourceTab(id: string) {
+    if (!sessionRef.current) return;
+    commitWorkspace({ ...readWorkspace(sessionRef.current), activeTabId: id });
+    setArtifact(false);
+    setSeek(null);
+  }
+  function keepResourceTab(id: string) {
+    if (sessionRef.current) commitWorkspace(retainTab(readWorkspace(sessionRef.current), id));
+  }
+  function closeSplit() {
+    if (sessionRef.current) commitWorkspace(unsplit(readWorkspace(sessionRef.current)));
+    setArtifact(false);
+  }
+  function showSplitPicker() {
+    setSplitQuery('');
+    setModal('split');
   }
   useEffect(() => {
     setLearning(null);
@@ -233,7 +283,7 @@ export function App() {
         setUploadProgress(0);
         const source = await uploadFile(file, folder, setUploadProgress);
         setCatalog((c) => (c ? { ...c, files: [...c.files, source] } : c));
-        openFile(source);
+        openFile(source, 'retain');
       }
       setModal(null);
     } finally {
@@ -273,141 +323,170 @@ export function App() {
       </div>
     );
   return (
-    <div className={`app ${focus ? 'focus' : ''}`}>
-      {left && !focus && (
-        <>
-          <aside className="library-panel">
-            <div className="brand">
-              <span className="brand-mark">
-                <BookOpen size={20} />
-              </span>
-              <div>
-                <strong>Tailored Library</strong>
-                <span>{t.local}</span>
-              </div>
-              <IconButton label={t.hideFiles} onClick={() => setLeft(false)}>
-                <PanelLeft />
-              </IconButton>
-            </div>
-            <div className="library-search">
-              <Search size={15} />
-              <input
-                aria-label={t.search}
-                placeholder={t.search}
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-              />
-            </div>
-            <div className="library-actions">
-              <Button variant="primary" onClick={() => setModal('upload')}>
-                <Plus size={15} />
-                {t.upload}
-              </Button>
-              <IconButton label={t.settings} onClick={() => setModal('settings')}>
-                <SettingsIcon />
-              </IconButton>
-            </div>
-            <div className="catalog-switch">
-              <button className={!archived ? 'selected' : ''} onClick={() => setArchived(false)}>
-                {t.files}
-                <span>{catalog.files.filter((f) => !f.archived).length}</span>
-              </button>
-              <button className={archived ? 'selected' : ''} onClick={() => setArchived(true)}>
-                <Archive size={13} />
-                {t.archived}
-                <span>{catalog.files.filter((f) => f.archived).length}</span>
-              </button>
-            </div>
-            <div className="file-tree">
-              <FileTree
-                files={filtered}
-                t={t}
-                active={active?.id}
-                onOpen={openFile}
-                onArchive={(file) => void run(() => editFile(file, { archived: !file.archived }))}
-                onRename={(file) => {
-                  setRename(file);
-                  setModal('rename');
-                }}
-              />
-              {!filtered.length && <p className="small-empty">{query ? t.noResults : t.noFiles}</p>}
-            </div>
-            <div className="sessions-heading">
-              <span>{t.sessions}</span>
-              <IconButton label={t.newSession} onClick={() => setModal('session')}>
-                <Plus />
-              </IconButton>
-            </div>
-            <div className="session-list">
-              {[...catalog.sessions].reverse().map((s) => (
-                <button
-                  key={s.id}
-                  className={`session-row ${s.id === session.id ? 'active' : ''}`}
-                  onClick={() => selectSession(s)}
-                >
-                  <BookOpen size={15} />
-                  <span>
-                    {s.name}
-                    <small>
-                      {s.tabs.length} {t.files.toLowerCase()}
-                    </small>
-                  </span>
-                  <ChevronRight size={13} />
-                </button>
-              ))}
-            </div>
-            <div className="sidebar-foot">
-              <span
-                className={`connection-dot ${catalog.settings.configured ? 'connected' : ''}`}
-              />
-              <button onClick={() => setModal('settings')}>
-                {catalog.settings.configured ? t.configured : t.notConfigured}
-              </button>
-              <span className="language-pill">{locale.toUpperCase()}</span>
-            </div>
-          </aside>
-          <button className="panel-backdrop" aria-label={t.close} onClick={() => setLeft(false)} />
-        </>
-      )}
-      <main className="workspace">
-        <div className="resource-tabs">
-          <IconButton label={left ? t.hideFiles : t.openFiles} onClick={() => setLeft((v) => !v)}>
+    <div
+      className={`app ${focus ? 'focus' : ''}`}
+      style={
+        {
+          '--panel-width': `${panels.resolved.left.width}px`,
+          '--study-width': `${panels.resolved.right.width}px`,
+        } as CSSProperties
+      }
+    >
+      <aside
+        id="left-panel"
+        ref={leftPanelRef}
+        aria-label={t.library}
+        hidden={!left || focus}
+        inert={!!panels.drawer && panels.drawer !== 'left'}
+        className={`library-panel ${panels.resolved.left.docked ? 'docked' : 'floating'}`}
+        role={panels.drawer === 'left' ? 'dialog' : undefined}
+        aria-modal={panels.drawer === 'left' ? true : undefined}
+      >
+        <div className="brand">
+          <span className="brand-mark">
+            <BookOpen size={20} />
+          </span>
+          <div>
+            <strong>Tailored Library</strong>
+            <span>{t.local}</span>
+          </div>
+          <IconButton
+            label={panels.preferences.left.pinned ? t.unpinPanel : t.pinPanel}
+            aria-pressed={panels.preferences.left.pinned}
+            onClick={() => panels.pin('left')}
+          >
+            {panels.preferences.left.pinned ? <Pin /> : <PinOff />}
+          </IconButton>
+          <IconButton
+            label={panels.drawer === 'left' ? t.backToSession : t.hideFiles}
+            onClick={() => setLeft(false)}
+          >
             <PanelLeft />
           </IconButton>
-          <div role="tablist" aria-label={t.files} className="tab-list">
-            {session.tabs
-              .map((id) => catalog.files.find((f) => f.id === id))
-              .filter((f): f is Source => !!f)
-              .map((file) => {
-                const Icon = fileIcon(file.kind);
-                return (
-                  <div
-                    className={`resource-tab ${active?.id === file.id ? 'active' : ''}`}
-                    key={file.id}
-                  >
-                    <button
-                      role="tab"
-                      aria-selected={active?.id === file.id}
-                      title={file.name}
-                      onClick={() => openFile(file)}
-                    >
-                      <Icon size={14} />
-                      <span>{file.name}</span>
-                    </button>
-                    <IconButton
-                      label={`${t.close} ${file.name}`}
-                      onClick={() => closeFile(file.id)}
-                    >
-                      <X size={12} />
-                    </IconButton>
-                  </div>
-                );
-              })}
-          </div>
+        </div>
+        <div className="library-search">
+          <Search size={15} />
+          <input
+            aria-label={t.search}
+            placeholder={t.search}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+        <div className="library-actions">
+          <Button variant="primary" onClick={() => setModal('upload')}>
+            <Plus size={15} />
+            {t.upload}
+          </Button>
+          <IconButton label={t.settings} onClick={() => setModal('settings')}>
+            <SettingsIcon />
+          </IconButton>
+        </div>
+        <div className="catalog-switch">
+          <button className={!archived ? 'selected' : ''} onClick={() => setArchived(false)}>
+            {t.files}
+            <span>{catalog.files.filter((f) => !f.archived).length}</span>
+          </button>
+          <button className={archived ? 'selected' : ''} onClick={() => setArchived(true)}>
+            <Archive size={13} />
+            {t.archived}
+            <span>{catalog.files.filter((f) => f.archived).length}</span>
+          </button>
+        </div>
+        <div className="file-tree">
+          <FileTree
+            files={filtered}
+            t={t}
+            active={active?.id}
+            onOpen={openFile}
+            onRetain={(file) => openFile(file, 'retain')}
+            onArchive={(file) => void run(() => editFile(file, { archived: !file.archived }))}
+            onRename={(file) => {
+              setRename(file);
+              setModal('rename');
+            }}
+          />
+          {!filtered.length && <p className="small-empty">{query ? t.noResults : t.noFiles}</p>}
+        </div>
+        <div className="sessions-heading">
+          <span>{t.sessions}</span>
           <IconButton label={t.newSession} onClick={() => setModal('session')}>
             <Plus />
           </IconButton>
-          <IconButton label={t.study} aria-expanded={right} onClick={() => setRight((v) => !v)}>
+        </div>
+        <div className="session-list">
+          {[...catalog.sessions].reverse().map((s) => (
+            <button
+              key={s.id}
+              className={`session-row ${s.id === session.id ? 'active' : ''}`}
+              onClick={() => selectSession(s)}
+            >
+              <BookOpen size={15} />
+              <span>
+                {s.name}
+                <small>
+                  {s.tabs.length} {t.files.toLowerCase()}
+                </small>
+              </span>
+              <ChevronRight size={13} />
+            </button>
+          ))}
+        </div>
+        <div className="sidebar-foot">
+          <span className={`connection-dot ${catalog.settings.configured ? 'connected' : ''}`} />
+          <button onClick={() => setModal('settings')}>
+            {catalog.settings.configured ? t.configured : t.notConfigured}
+          </button>
+          <span className="language-pill">{locale.toUpperCase()}</span>
+        </div>
+      </aside>
+      {left && !focus && panels.resolved.left.docked && (
+        <PanelResizer
+          side="left"
+          label={t.filePanelWidth}
+          help={t.resizeHelp}
+          width={panels.resolved.left.width}
+          max={panels.resolved.left.max}
+          change={(value) => panels.resize('left', value)}
+        />
+      )}
+      {panels.drawer && !focus && (
+        <button
+          className="drawer-backdrop"
+          tabIndex={-1}
+          aria-label={t.dismissPanels}
+          onClick={() => panels.open(panels.drawer!, false)}
+        />
+      )}
+      <main className="workspace" inert={!!panels.drawer && !focus}>
+        <div className="resource-tabs">
+          <IconButton
+            label={left ? t.hideFiles : t.openFiles}
+            aria-controls="left-panel"
+            aria-expanded={left && !focus}
+            data-panel-toggle="left"
+            onClick={() => setLeft(!left)}
+          >
+            <PanelLeft />
+          </IconButton>
+          <ResourceTabs
+            workspace={resources}
+            files={catalog.files}
+            t={t}
+            select={selectResourceTab}
+            keep={keepResourceTab}
+            close={closeFile}
+          />
+          <IconButton label={t.newSession} onClick={() => setModal('session')}>
+            <Plus />
+          </IconButton>
+          <IconButton
+            label={t.study}
+            aria-expanded={right && !focus}
+            aria-controls="right-panel"
+            data-panel-toggle="right"
+            onClick={() => setRight(!right)}
+          >
             <PanelRight />
           </IconButton>
         </div>
@@ -477,7 +556,7 @@ export function App() {
                 </IconButton>
                 <IconButton
                   label={split ? t.noSplit : t.split}
-                  onClick={() => (split ? updateSession({ split: null }) : setModal('split'))}
+                  onClick={() => (split ? closeSplit() : showSplitPicker())}
                 >
                   <Columns2 />
                 </IconButton>
@@ -570,7 +649,14 @@ export function App() {
                 )}
               </div>
             )}
-            <div className={`viewers ${split && !artifact ? 'split' : ''}`}>
+            <div
+              id="resource-view"
+              role="tabpanel"
+              aria-labelledby={
+                activeResourceTab ? `resource-tab-${activeResourceTab.id}` : undefined
+              }
+              className={`viewers ${split && !artifact ? 'split' : ''}`}
+            >
               {artifact ? (
                 <div className="artifact-stage">
                   <Button variant="ghost" onClick={() => setArtifact(false)}>
@@ -619,7 +705,7 @@ export function App() {
                 <div className="split-pane">
                   <div className="split-title">
                     <span>{split.name}</span>
-                    <IconButton label={t.noSplit} onClick={() => updateSession({ split: null })}>
+                    <IconButton label={t.noSplit} onClick={closeSplit}>
                       <X />
                     </IconButton>
                   </div>
@@ -649,315 +735,337 @@ export function App() {
           </span>
         </div>
       </main>
-      {right && !focus && (
-        <>
-          <button className="study-backdrop" aria-label={t.close} onClick={() => setRight(false)} />
-          <aside className="study-panel">
-            <div className="study-heading">
-              <span>
-                <Sparkles size={15} />
-                {t.study}
-              </span>
-              <IconButton label={t.close} onClick={() => setRight(false)}>
-                <X />
-              </IconButton>
+      {right && !focus && panels.resolved.right.docked && (
+        <PanelResizer
+          side="right"
+          label={t.studyPanelWidth}
+          help={t.resizeHelp}
+          width={panels.resolved.right.width}
+          max={panels.resolved.right.max}
+          change={(value) => panels.resize('right', value)}
+        />
+      )}
+      <aside
+        id="right-panel"
+        ref={rightPanelRef}
+        aria-label={t.study}
+        hidden={!right || focus}
+        inert={!!panels.drawer && panels.drawer !== 'right'}
+        className={`study-panel ${panels.resolved.right.docked ? 'docked' : 'floating'}`}
+        role={panels.drawer === 'right' ? 'dialog' : undefined}
+        aria-modal={panels.drawer === 'right' ? true : undefined}
+      >
+        <div className="study-heading">
+          <span>
+            <Sparkles size={15} />
+            {t.study}
+          </span>
+          <div className="panel-heading-actions">
+            <IconButton
+              label={panels.preferences.right.pinned ? t.unpinPanel : t.pinPanel}
+              aria-pressed={panels.preferences.right.pinned}
+              onClick={() => panels.pin('right')}
+            >
+              {panels.preferences.right.pinned ? <Pin /> : <PinOff />}
+            </IconButton>
+            <IconButton
+              label={panels.drawer === 'right' ? t.backToSession : t.close}
+              onClick={() => setRight(false)}
+            >
+              <X />
+            </IconButton>
+          </div>
+        </div>
+        <div className="study-tabs" role="tablist" aria-label={t.study}>
+          {(
+            [
+              ['chapters', List],
+              ['notes', StickyNote],
+              ['bookmarks', Bookmark],
+              ['glossary', BookOpen],
+              ['practice', GraduationCap],
+              ['review', Activity],
+              ['assistant', MessageSquare],
+              ['miniapp', Code2],
+            ] as const
+          ).map(([name, Icon]) => (
+            <button
+              key={name}
+              role="tab"
+              aria-selected={tab === name}
+              className={tab === name ? 'active' : ''}
+              onClick={() => setTab(name)}
+              title={t[name]}
+            >
+              <Icon size={14} />
+              <span>{t[name]}</span>
+            </button>
+          ))}
+        </div>
+        <div className="study-content">
+          {!active ? (
+            <div className="small-empty">
+              <BookOpen size={24} />
+              <p>{t.noSelectionBody}</p>
             </div>
-            <div className="study-tabs" role="tablist" aria-label={t.study}>
-              {(
-                [
-                  ['chapters', List],
-                  ['notes', StickyNote],
-                  ['bookmarks', Bookmark],
-                  ['glossary', BookOpen],
-                  ['practice', GraduationCap],
-                  ['review', Activity],
-                  ['assistant', MessageSquare],
-                  ['miniapp', Code2],
-                ] as const
-              ).map(([name, Icon]) => (
-                <button
-                  key={name}
-                  role="tab"
-                  aria-selected={tab === name}
-                  className={tab === name ? 'active' : ''}
-                  onClick={() => setTab(name)}
-                  title={t[name]}
-                >
-                  <Icon size={14} />
-                  <span>{t[name]}</span>
-                </button>
-              ))}
-            </div>
-            <div className="study-content">
-              {!active ? (
-                <div className="small-empty">
-                  <BookOpen size={24} />
-                  <p>{t.noSelectionBody}</p>
-                </div>
-              ) : (
+          ) : (
+            <>
+              {tab === 'chapters' && (
                 <>
-                  {tab === 'chapters' && (
-                    <>
-                      <div className="section-label">
-                        {t.chapters}
-                        {learning && <Badge>{learning.synthesis.chapters.length}</Badge>}
+                  <div className="section-label">
+                    {t.chapters}
+                    {learning && <Badge>{learning.synthesis.chapters.length}</Badge>}
+                  </div>
+                  {!learning ? (
+                    <div className="prepare-card">
+                      <div className="prepare-symbol">
+                        <Sparkles />
                       </div>
-                      {!learning ? (
-                        <div className="prepare-card">
-                          <div className="prepare-symbol">
-                            <Sparkles />
-                          </div>
-                          <h3>{t.process}</h3>
-                          <p>{t.noChapters}</p>
-                          <Button
-                            variant="primary"
-                            disabled={
-                              busy ||
-                              (!!job && ['queued', 'running', 'partial'].includes(job.status))
-                            }
-                            onClick={() => void run(prepare)}
-                          >
-                            {busy ? (
-                              <LoaderCircle className="spin" size={14} />
-                            ) : (
-                              <Sparkles size={14} />
-                            )}{' '}
-                            {t.process}
-                          </Button>
-                          <small>{t.processingNotice}</small>
-                        </div>
-                      ) : (
-                        learning.synthesis.chapters.map((chapter, i) => (
-                          <section className="chapter-card" key={chapter.id}>
-                            <button
-                              className="chapter-title"
-                              onClick={() => {
-                                const segment = learning.segments.find(
-                                  (s) => s.id === chapter.segmentIds[0],
-                                );
-                                if (segment) cite(segment);
-                              }}
-                            >
-                              <span>{String(i + 1).padStart(2, '0')}</span>
-                              <strong>{chapter.title}</strong>
-                            </button>
-                            <p>{chapter.summary}</p>
-                            <Citations
-                              ids={chapter.segmentIds}
-                              segments={learning.segments}
-                              onCite={cite}
-                              t={t}
-                            />
-                            <Button variant="ghost" onClick={() => setTab('practice')}>
-                              <GraduationCap size={13} />
-                              {t.quiz}
-                            </Button>
-                          </section>
-                        ))
-                      )}
-                      {job?.segments?.length && !learning ? (
-                        <details className="transcript">
-                          <summary>{t.showTranscript}</summary>
-                          {job.segments.map((s) => (
-                            <button key={s.id} onClick={() => cite(s)}>
-                              {s.start != null && <span>{formatPosition(s.start)}</span>}
-                              {s.text}
-                            </button>
-                          ))}
-                        </details>
-                      ) : null}
-                      {['video', 'audio'].includes(active.kind) &&
-                        job &&
-                        job.completedChunks > 0 && (
-                          <div className="caption-downloads">
-                            {(['original', 'translated'] as const).map((track) => (
-                              <div key={track}>
-                                <span>{t[track]}</span>
-                                {['vtt', 'srt'].map((format) => (
-                                  <a
-                                    key={format}
-                                    href={`/api/captions/${active.id}/${track}.${format}`}
-                                    download={`${active.name}.${track}.${format}`}
-                                  >
-                                    {format.toUpperCase()}
-                                  </a>
-                                ))}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      <button className="artifact-link" onClick={() => setArtifact(true)}>
-                        <span>
-                          <Activity size={17} />
-                          <strong>{t.artifact}</strong>
-                        </span>
-                        <p>{t.artifactBody}</p>
-                        <span className="text-link">
-                          {t.open}
-                          <ChevronRight size={13} />
-                        </span>
-                      </button>
-                    </>
+                      <h3>{t.process}</h3>
+                      <p>{t.noChapters}</p>
+                      <Button
+                        variant="primary"
+                        disabled={
+                          busy || (!!job && ['queued', 'running', 'partial'].includes(job.status))
+                        }
+                        onClick={() => void run(prepare)}
+                      >
+                        {busy ? (
+                          <LoaderCircle className="spin" size={14} />
+                        ) : (
+                          <Sparkles size={14} />
+                        )}{' '}
+                        {t.process}
+                      </Button>
+                      <small>{t.processingNotice}</small>
+                    </div>
+                  ) : (
+                    learning.synthesis.chapters.map((chapter, i) => (
+                      <section className="chapter-card" key={chapter.id}>
+                        <button
+                          className="chapter-title"
+                          onClick={() => {
+                            const segment = learning.segments.find(
+                              (s) => s.id === chapter.segmentIds[0],
+                            );
+                            if (segment) cite(segment);
+                          }}
+                        >
+                          <span>{String(i + 1).padStart(2, '0')}</span>
+                          <strong>{chapter.title}</strong>
+                        </button>
+                        <p>{chapter.summary}</p>
+                        <Citations
+                          ids={chapter.segmentIds}
+                          segments={learning.segments}
+                          onCite={cite}
+                          t={t}
+                        />
+                        <Button variant="ghost" onClick={() => setTab('practice')}>
+                          <GraduationCap size={13} />
+                          {t.quiz}
+                        </Button>
+                      </section>
+                    ))
                   )}
-                  {tab === 'notes' && (
-                    <Notes
-                      key={active.id}
-                      source={active}
-                      session={session}
-                      update={updateSession}
-                      t={t}
-                    />
-                  )}
-                  {tab === 'bookmarks' && (
-                    <>
-                      <div className="section-label">{t.bookmarks}</div>
-                      {session.bookmarks
-                        .filter((b) => b.sourceId === active.id)
-                        .map((b) => (
-                          <div className="bookmark-row" key={b.id}>
-                            <button
-                              onClick={() => {
-                                setSeek({ value: b.seconds ?? b.page ?? 0, nonce: Date.now() });
-                                setArtifact(false);
-                              }}
-                            >
-                              <Bookmark size={14} />
-                              <span>
-                                {b.label}
-                                <small>
-                                  {b.page ? `${t.page} ${b.page}` : formatPosition(b.seconds || 0)}
-                                </small>
-                              </span>
-                            </button>
-                            <IconButton
-                              label={t.remove}
-                              onClick={() =>
-                                updateSession({
-                                  bookmarks: session.bookmarks.filter((v) => v.id !== b.id),
-                                })
-                              }
-                            >
-                              <X size={12} />
-                            </IconButton>
-                          </div>
-                        ))}
-                      {!session.bookmarks.some((b) => b.sourceId === active.id) && (
-                        <p className="small-empty">{t.noBookmarks}</p>
-                      )}
-                    </>
-                  )}
-                  {tab === 'glossary' && (
-                    <>
-                      <div className="section-label">{t.glossary}</div>
-                      {learning?.synthesis.glossary.map((concept) => (
-                        <section className="glossary-card" key={concept.term}>
-                          <h3>{concept.term}</h3>
-                          <p>
-                            {catalog.concepts?.find(
-                              (entry) => fold(entry.term) === fold(concept.term),
-                            )?.definition || concept.definition}
-                          </p>
-                          <Citations
-                            ids={concept.segmentIds}
-                            segments={learning.segments}
-                            onCite={cite}
-                            t={t}
-                          />
-                          {catalog.concepts
-                            ?.filter((entry) => fold(entry.term) === fold(concept.term))
-                            .map((entry) => (
-                              <div key={entry.id}>
-                                {entry.reviewed ? (
-                                  <Badge tone="success">{t.reviewed}</Badge>
-                                ) : (
-                                  <Button
-                                    variant="ghost"
-                                    onClick={() =>
-                                      void run(async () => {
-                                        await api(`/concepts/${entry.id}`, 'PATCH', {
-                                          reviewed: true,
-                                        });
-                                        await refresh();
-                                      })
-                                    }
-                                  >
-                                    {t.reviewDefinition}
-                                  </Button>
-                                )}
-                                {entry.proposals.map((proposal) => (
-                                  <details className="glossary-proposal" key={proposal.id}>
-                                    <summary>{t.proposed}</summary>
-                                    <p>{proposal.definition}</p>
-                                    <Button
-                                      onClick={() =>
-                                        void run(async () => {
-                                          await api(`/concepts/${entry.id}`, 'PATCH', {
-                                            proposalId: proposal.id,
-                                          });
-                                          await refresh();
-                                        })
-                                      }
-                                    >
-                                      {t.acceptDefinition}
-                                    </Button>
-                                  </details>
-                                ))}
-                              </div>
-                            ))}
-                        </section>
+                  {job?.segments?.length && !learning ? (
+                    <details className="transcript">
+                      <summary>{t.showTranscript}</summary>
+                      {job.segments.map((s) => (
+                        <button key={s.id} onClick={() => cite(s)}>
+                          {s.start != null && <span>{formatPosition(s.start)}</span>}
+                          {s.text}
+                        </button>
                       ))}
-                      {!learning && <p className="small-empty">{t.noConcepts}</p>}
-                    </>
+                    </details>
+                  ) : null}
+                  {['video', 'audio'].includes(active.kind) && job && job.completedChunks > 0 && (
+                    <div className="caption-downloads">
+                      {(['original', 'translated'] as const).map((track) => (
+                        <div key={track}>
+                          <span>{t[track]}</span>
+                          {['vtt', 'srt'].map((format) => (
+                            <a
+                              key={format}
+                              href={`/api/captions/${active.id}/${track}.${format}`}
+                              download={`${active.name}.${track}.${format}`}
+                            >
+                              {format.toUpperCase()}
+                            </a>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
                   )}
-                  {tab === 'practice' && (
-                    <Practice
-                      key={`${active.id}-${learning?.createdAt}`}
-                      source={active}
-                      learning={learning}
-                      t={t}
-                      onAttempt={(attempt) =>
-                        setCatalog((c) => (c ? { ...c, attempts: [...c.attempts, attempt] } : c))
-                      }
-                      onError={setError}
-                      onCite={cite}
-                    />
-                  )}
-                  {tab === 'review' && (
-                    <Review
-                      attempts={catalog.attempts.filter((a) => a.sourceId === active.id)}
-                      t={t}
-                      showPractice={() => setTab('practice')}
-                      showArtifact={() => setArtifact(true)}
-                    />
-                  )}
-                  {tab === 'assistant' && (
-                    <Assistant
-                      key={`${session.id}-${active.id}`}
-                      source={active}
-                      session={session}
-                      t={t}
-                      learning={learning}
-                      onError={setError}
-                      update={(patch) => {
-                        if (sessionRef.current?.id === session.id) updateSession(patch);
-                        else
-                          void run(async () => {
-                            const latest = await api<Catalog>('/catalog');
-                            const target = latest.sessions.find((item) => item.id === session.id);
-                            if (target)
-                              await api(`/sessions/${target.id}`, 'PUT', { ...target, ...patch });
-                            await refresh();
-                          });
-                      }}
-                    />
-                  )}
-                  {tab === 'miniapp' && <CodePanel t={t} onError={setError} />}
+                  <button className="artifact-link" onClick={() => setArtifact(true)}>
+                    <span>
+                      <Activity size={17} />
+                      <strong>{t.artifact}</strong>
+                    </span>
+                    <p>{t.artifactBody}</p>
+                    <span className="text-link">
+                      {t.open}
+                      <ChevronRight size={13} />
+                    </span>
+                  </button>
                 </>
               )}
-            </div>
-          </aside>
-        </>
-      )}
+              {tab === 'notes' && (
+                <Notes
+                  key={active.id}
+                  source={active}
+                  session={session}
+                  update={updateSession}
+                  t={t}
+                />
+              )}
+              {tab === 'bookmarks' && (
+                <>
+                  <div className="section-label">{t.bookmarks}</div>
+                  {session.bookmarks
+                    .filter((b) => b.sourceId === active.id)
+                    .map((b) => (
+                      <div className="bookmark-row" key={b.id}>
+                        <button
+                          onClick={() => {
+                            setSeek({ value: b.seconds ?? b.page ?? 0, nonce: Date.now() });
+                            setArtifact(false);
+                          }}
+                        >
+                          <Bookmark size={14} />
+                          <span>
+                            {b.label}
+                            <small>
+                              {b.page ? `${t.page} ${b.page}` : formatPosition(b.seconds || 0)}
+                            </small>
+                          </span>
+                        </button>
+                        <IconButton
+                          label={t.remove}
+                          onClick={() =>
+                            updateSession({
+                              bookmarks: session.bookmarks.filter((v) => v.id !== b.id),
+                            })
+                          }
+                        >
+                          <X size={12} />
+                        </IconButton>
+                      </div>
+                    ))}
+                  {!session.bookmarks.some((b) => b.sourceId === active.id) && (
+                    <p className="small-empty">{t.noBookmarks}</p>
+                  )}
+                </>
+              )}
+              {tab === 'glossary' && (
+                <>
+                  <div className="section-label">{t.glossary}</div>
+                  {learning?.synthesis.glossary.map((concept) => (
+                    <section className="glossary-card" key={concept.term}>
+                      <h3>{concept.term}</h3>
+                      <p>
+                        {catalog.concepts?.find((entry) => fold(entry.term) === fold(concept.term))
+                          ?.definition || concept.definition}
+                      </p>
+                      <Citations
+                        ids={concept.segmentIds}
+                        segments={learning.segments}
+                        onCite={cite}
+                        t={t}
+                      />
+                      {catalog.concepts
+                        ?.filter((entry) => fold(entry.term) === fold(concept.term))
+                        .map((entry) => (
+                          <div key={entry.id}>
+                            {entry.reviewed ? (
+                              <Badge tone="success">{t.reviewed}</Badge>
+                            ) : (
+                              <Button
+                                variant="ghost"
+                                onClick={() =>
+                                  void run(async () => {
+                                    await api(`/concepts/${entry.id}`, 'PATCH', {
+                                      reviewed: true,
+                                    });
+                                    await refresh();
+                                  })
+                                }
+                              >
+                                {t.reviewDefinition}
+                              </Button>
+                            )}
+                            {entry.proposals.map((proposal) => (
+                              <details className="glossary-proposal" key={proposal.id}>
+                                <summary>{t.proposed}</summary>
+                                <p>{proposal.definition}</p>
+                                <Button
+                                  onClick={() =>
+                                    void run(async () => {
+                                      await api(`/concepts/${entry.id}`, 'PATCH', {
+                                        proposalId: proposal.id,
+                                      });
+                                      await refresh();
+                                    })
+                                  }
+                                >
+                                  {t.acceptDefinition}
+                                </Button>
+                              </details>
+                            ))}
+                          </div>
+                        ))}
+                    </section>
+                  ))}
+                  {!learning && <p className="small-empty">{t.noConcepts}</p>}
+                </>
+              )}
+              {tab === 'practice' && (
+                <Practice
+                  key={`${active.id}-${learning?.createdAt}`}
+                  source={active}
+                  learning={learning}
+                  t={t}
+                  onAttempt={(attempt) =>
+                    setCatalog((c) => (c ? { ...c, attempts: [...c.attempts, attempt] } : c))
+                  }
+                  onError={setError}
+                  onCite={cite}
+                />
+              )}
+              {tab === 'review' && (
+                <Review
+                  attempts={catalog.attempts.filter((a) => a.sourceId === active.id)}
+                  t={t}
+                  showPractice={() => setTab('practice')}
+                  showArtifact={() => setArtifact(true)}
+                />
+              )}
+              {tab === 'assistant' && (
+                <Assistant
+                  key={`${session.id}-${active.id}`}
+                  source={active}
+                  session={session}
+                  t={t}
+                  learning={learning}
+                  onError={setError}
+                  update={(patch) => {
+                    if (sessionRef.current?.id === session.id) updateSession(patch);
+                    else
+                      void run(async () => {
+                        const latest = await api<Catalog>('/catalog');
+                        const target = latest.sessions.find((item) => item.id === session.id);
+                        if (target)
+                          await api(`/sessions/${target.id}`, 'PUT', { ...target, ...patch });
+                        await refresh();
+                      });
+                  }}
+                />
+              )}
+              {tab === 'miniapp' && <CodePanel t={t} onError={setError} />}
+            </>
+          )}
+        </div>
+      </aside>
       {modal === 'settings' && (
         <SettingsModal
           initial={catalog.settings}
@@ -1024,15 +1132,31 @@ export function App() {
       )}
       {modal === 'split' && (
         <Modal title={t.chooseSplit} close={() => setModal(null)} closeLabel={t.close}>
+          <input
+            aria-label={t.search}
+            placeholder={t.search}
+            value={splitQuery}
+            onChange={(event) => setSplitQuery(event.target.value)}
+          />
           <div className="split-picker">
             {catalog.files
-              .filter((f) => !f.archived && f.id !== active?.id)
+              .filter(
+                (f) =>
+                  !f.archived &&
+                  f.id !== active?.id &&
+                  fold(`${f.name} ${f.folder}`).includes(fold(splitQuery)),
+              )
               .map((file) => (
                 <Button
                   key={file.id}
                   onClick={() => {
-                    updateSession({ split: file.id });
+                    if (sessionRef.current && active)
+                      commitWorkspace(
+                        openSplit(readWorkspace(sessionRef.current), active.id, file.id),
+                      );
                     setModal(null);
+                    setArtifact(false);
+                    setSeek(null);
                   }}
                 >
                   <FileText size={14} />
@@ -1051,6 +1175,7 @@ function FileTree({
   t,
   active,
   onOpen,
+  onRetain,
   onArchive,
   onRename,
 }: {
@@ -1058,6 +1183,7 @@ function FileTree({
   t: T;
   active?: string;
   onOpen: (file: Source) => void;
+  onRetain: (file: Source) => void;
   onArchive: (file: Source) => void;
   onRename: (file: Source) => void;
 }) {
@@ -1091,7 +1217,11 @@ function FileTree({
           const Icon = fileIcon(file.kind);
           return (
             <div className={`file-row ${active === file.id ? 'active' : ''}`} key={file.id}>
-              <button title={file.name} onClick={() => onOpen(file)}>
+              <button
+                title={file.name}
+                onClick={() => onOpen(file)}
+                onDoubleClick={() => onRetain(file)}
+              >
                 <Icon size={15} />
                 <span>{file.name}</span>
                 {file.reviewed && <Check size={12} />}
@@ -1100,11 +1230,19 @@ function FileTree({
                 <summary aria-label={`${t.options}: ${file.name}`}>
                   <MoreHorizontal size={14} />
                 </summary>
-                <div>
+                <div
+                  onClick={(event) => {
+                    if ((event.target as HTMLElement).closest('button'))
+                      event.currentTarget.closest('details')?.removeAttribute('open');
+                  }}
+                >
+                  <button onClick={() => onOpen(file)}>{t.openCurrent}</button>
+                  <button onClick={() => onRetain(file)}>{t.openSeparate}</button>
                   <button onClick={() => onRename(file)}>{t.rename}</button>
                   <button onClick={() => onArchive(file)}>
                     {file.archived ? t.restore : t.archive}
                   </button>
+                  <small>{t.previewHint}</small>
                 </div>
               </details>
             </div>

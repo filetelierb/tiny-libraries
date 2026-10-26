@@ -1,6 +1,18 @@
 * {
   box-sizing: border-box;
 }
+[hidden] {
+  display: none !important;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 html,
 body,
 #root {
@@ -230,10 +242,14 @@ hr {
   flex-direction: column;
   gap: 5px;
   flex: 1;
+  min-width: 0;
 }
 .brand strong {
   font-size: 14px;
   letter-spacing: -0.3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .brand span:not(.brand-mark) {
   font-size: 10px;
@@ -382,7 +398,7 @@ hr {
   right: 2px;
   top: 29px;
   z-index: 50;
-  min-width: 130px;
+  width: 224px;
   padding: 4px;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -514,6 +530,7 @@ hr {
   display: flex;
   align-items: stretch;
   flex: 1;
+  min-width: 0;
   overflow: auto;
   scrollbar-width: none;
   height: 48px;
@@ -528,6 +545,7 @@ hr {
   border-radius: 10px 10px 0 0;
   max-width: 220px;
   min-width: 120px;
+  flex: 0 0 auto;
   color: var(--muted-text);
   background: color-mix(in oklch, var(--surface), transparent 55%);
 }
@@ -542,6 +560,19 @@ hr {
   padding: 10px;
   min-width: 0;
   font-size: 11px;
+  flex: 1;
+}
+.resource-tab.preview > button:first-child {
+  font-style: italic;
+}
+.resource-tab [role='tab']:focus-visible {
+  outline-offset: -3px;
+}
+.no-open-resources {
+  align-self: center;
+  color: var(--muted-text);
+  font-size: 12px;
+  padding: 0 12px 7px;
 }
 .resource-tab span {
   overflow: hidden;
@@ -724,6 +755,91 @@ hr {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+.panel-heading-actions {
+  display: flex;
+  gap: 2px;
+}
+.library-panel.docked,
+.study-panel.docked {
+  position: static;
+  z-index: auto;
+  box-shadow: none;
+}
+.library-panel.docked {
+  width: var(--panel-width);
+}
+.study-panel.docked {
+  width: var(--study-width);
+}
+.library-panel.floating,
+.study-panel.floating {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  z-index: 42;
+  min-width: 0;
+  box-shadow: var(--paper-shadow);
+}
+.library-panel.floating {
+  left: 0;
+  width: min(var(--panel-width), calc(100vw - 24px));
+}
+.study-panel.floating {
+  right: 0;
+  width: min(var(--study-width), calc(100vw - 24px));
+}
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 41;
+  background: color-mix(in oklch, var(--foreground), transparent 78%);
+}
+.panel-resizer {
+  position: relative;
+  flex: 0 0 6px;
+  width: 6px;
+  min-height: 0;
+  background: var(--background);
+  cursor: col-resize;
+  touch-action: none;
+  z-index: 1;
+}
+.panel-resizer > span {
+  display: block;
+  width: 2px;
+  height: 100%;
+  margin: auto;
+  background: var(--border);
+}
+.panel-resizer:hover > span,
+.panel-resizer.resizing > span,
+.panel-resizer:focus-visible > span {
+  background: var(--primary);
+}
+.panel-resizer:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -1px;
+}
+body:has(.panel-resizer.resizing) {
+  cursor: col-resize;
+  user-select: none;
+}
+.library-panel .brand {
+  gap: 6px;
+  padding: 20px 12px 18px;
+}
+.library-panel .brand-mark {
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+}
+.file-menu small {
+  display: block;
+  padding: 8px 10px;
+  max-width: 210px;
+  color: var(--muted-text);
+  font-size: 11px;
 }
 .study-tabs {
   display: grid;
@@ -1502,10 +1618,6 @@ hr {
   gap: 14px;
   color: var(--primary);
 }
-.panel-backdrop,
-.study-backdrop {
-  display: none;
-}
 .spin {
   animation: spin 1.2s linear infinite;
 }
@@ -1515,19 +1627,11 @@ hr {
   }
 }
 @media (min-width: 1500px) {
-  :root {
-    --panel-width: 320px;
-    --study-width: 380px;
-  }
   .document-reader {
     padding-top: 55px;
   }
 }
 @media (max-width: 1150px) {
-  :root {
-    --panel-width: 260px;
-    --study-width: 300px;
-  }
   .toolbar-actions {
     gap: 0;
   }
@@ -1554,20 +1658,6 @@ hr {
   }
 }
 @media (max-width: 1000px) {
-  .library-panel {
-    position: fixed;
-    inset: 0 auto 0 0;
-    width: 300px;
-    z-index: 31;
-    box-shadow: var(--paper-shadow);
-  }
-  .panel-backdrop {
-    display: block;
-    position: fixed;
-    inset: 0;
-    z-index: 30;
-    background: rgb(11 34 39 / 20%);
-  }
   .document-reader {
     padding: 32px;
   }
@@ -1579,22 +1669,6 @@ hr {
   }
 }
 @media (max-width: 720px) {
-  :root {
-    --study-width: min(370px, 100vw);
-  }
-  .study-panel {
-    position: fixed;
-    inset: 0 0 0 auto;
-    z-index: 40;
-    box-shadow: var(--paper-shadow);
-  }
-  .study-backdrop {
-    display: block;
-    position: fixed;
-    inset: 0;
-    z-index: 39;
-    background: rgb(11 34 39 / 20%);
-  }
   .study-tabs > button {
     font-size: 10px;
     min-height: 53px;
