@@ -1,0 +1,42 @@
+{
+  "name": "tailored-library",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "dev": "tsx scripts/dev.ts",
+    "dev:ui": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "check": "tsc --noEmit && tsc -p tsconfig.worker.json --noEmit",
+    "test": "tsx --test tests/*.test.ts",
+    "types": "wrangler types worker-env.d.ts --include-runtime false",
+    "start": "npm run build && npm run dev",
+    "smoke": "tsx scripts/smoke.ts"
+  },
+  "dependencies": {
+    "@muse-code/sdk": "1.4.13",
+    "@napi-rs/canvas": "1.0.13",
+    "lucide-react": "1.61.0",
+    "pdfjs-dist": "6.4.299",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "react-markdown": "10.1.0",
+    "remark-gfm": "4.0.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20261026.1",
+    "@types/node": "26.6.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "esbuild": "0.28.2",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2",
+    "vite": "8.3.5",
+    "wrangler": "4.153.0"
+  }
+}
