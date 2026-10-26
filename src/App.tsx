@@ -1185,6 +1185,11 @@ export function App() {
               treeActions={treeActions}
               questionRequest={questionRequest}
               consumeQuestion={() => setQuestionRequest(null)}
+              openConcept={(id) => {
+                setGlossaryFocus({ id, nonce: crypto.randomUUID() });
+                setRight(true);
+                setTab('glossary');
+              }}
               annotate={(content, ids, context) => {
                 if (
                   context &&

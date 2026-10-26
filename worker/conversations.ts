@@ -17,6 +17,8 @@ import {
 } from '../shared/domain';
 import { runAssistant, bridgedFetch } from './meta';
 import { createSuggestedBookmark } from './annotations';
+import { conceptReferencesSchema } from '../shared/tutor-context';
+import { loadTutorConcepts } from './tutor-context';
 
 export async function conversationSnapshot(
   storage: DurableObjectStorage,
@@ -129,6 +131,7 @@ export async function conversationRoute({
       prompt: z.string().trim().min(1).max(8000),
       requestId: z.string().uuid(),
       context: questionContextSchema.optional(),
+      concepts: conceptReferencesSchema.default([]),
     })
     .parse(await body());
   const runKey = `conversation-run:${conversation.id}`;
@@ -220,6 +223,29 @@ export async function conversationRoute({
           );
       }
     }
+    const glossaryContext = await loadTutorConcepts(storage, input.concepts, materials);
+    const userMessage = {
+      role: 'user' as const,
+      content: input.prompt,
+      requestId: input.requestId,
+      sourceIds,
+      ...(context ? { context } : {}),
+      ...(glossaryContext.mentions.length ? { concepts: glossaryContext.mentions } : {}),
+    };
+    if (
+      new TextEncoder().encode(
+        JSON.stringify({
+          ...reservation.current,
+          messages: [...reservation.current.messages, userMessage],
+        }),
+      ).length > 80000
+    )
+      return json(
+        {
+          error: 'This conversation is full. Start a new conversation to keep its history intact.',
+        },
+        409,
+      );
     const attempts = [...(await storage.list<Attempt>({ prefix: 'attempt:' })).values()].filter(
       (attempt) => sourceIds.includes(attempt.sourceId),
     );
@@ -233,6 +259,7 @@ export async function conversationRoute({
       bridgedFetch(env),
       context,
       {
+        concepts: glossaryContext.concepts,
         createBookmark: ({ sourceId, sourceVersion, segment, label }) =>
           createSuggestedBookmark(storage, {
             sessionId: reservation.current.sessionId,
@@ -257,17 +284,12 @@ export async function conversationRoute({
         updatedAt: new Date().toISOString(),
         messages: [
           ...current.messages.slice(-98),
-          {
-            role: 'user',
-            content: input.prompt,
-            requestId: input.requestId,
-            sourceIds,
-            ...(context ? { context } : {}),
-          },
+          userMessage,
           {
             role: 'assistant',
             content: result.text,
             tools: result.tools,
+            citations: result.citations,
             requestId: input.requestId,
             sourceIds,
           },

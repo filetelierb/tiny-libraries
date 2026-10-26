@@ -353,6 +353,7 @@ export function DirectoryTree({
                 ) : (
                   <button
                     type="button"
+                    data-file-choice={file.id}
                     title={view === 'trash' ? `${file.name} · ${t.restoreToOpen}` : file.name}
                     disabled={view === 'trash'}
                     onClick={() => chooseFile?.(file, 'preview')}

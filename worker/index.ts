@@ -18,7 +18,7 @@ import {
   type Attempt,
 } from '../shared/domain';
 export { ProcessingJob } from './jobs';
-import { runAssistant, bridgedFetch, gradeShortAnswer, analyzeConcepts } from './meta';
+import { runAssistant, bridgedFetch, gradeShortAnswer, analyzeConcepts, MetaError } from './meta';
 import { conceptSuggestionsRoute } from './concept-suggestions';
 import { conversationRoute, conversationSnapshot } from './conversations';
 import { annotationRoute, AnnotationError } from './annotations';
@@ -435,6 +435,8 @@ export class Library extends DurableObject<Env> {
         error instanceof GlossaryError
       )
         return json({ error: error.message }, error.status);
+      if (error instanceof MetaError)
+        return json({ error: error.message }, error.retryable ? 503 : 422);
       if (error instanceof z.ZodError || error instanceof SyntaxError)
         return json({ error: 'Invalid request' }, 400);
       throw error;

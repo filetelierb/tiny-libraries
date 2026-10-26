@@ -1,5 +1,26 @@
 import type { Locale } from '../shared/domain';
 const en = {
+  inspectConcept: 'Inspect concept context',
+  conceptScopedMeanings:
+    'Only the meanings supplied to this reply are shown. Open the current glossary entry to see every meaning.',
+  conceptRevisionNotice:
+    'This is the saved definition revision used as context. Original files remain separate references.',
+  newerConceptRevision: 'Latest revision:',
+  openCurrentConcept: 'Open current glossary entry',
+  useLatestConcept: 'Use latest revision',
+  mentionOptions: 'Mention options',
+  mentionType: 'Mention type',
+  mentionFilterHint: 'Type after @ to filter. Escape keeps your text.',
+  mentionGlossary: 'Glossary concepts',
+  noMatchingConcepts: 'No matching concepts.',
+  conceptLimit: 'You can attach up to 10 concepts to a question.',
+  attachedConcepts: 'Attached concepts',
+  conceptsForQuestion: 'Concepts for this question',
+  conceptAttachmentNotice: 'These saved definitions are included for one question.',
+  removeConcept: 'Remove concept',
+  toolReadConcepts: 'Read saved concept definitions',
+  recoveredCitationNotice: 'Verified against the current prepared source',
+  savedSourceCitation: 'Saved source excerpt',
   conceptAnalysisReady: 'Ready',
   conceptAnalysisInterrupted: 'Interrupted',
   conceptAnalysisHistory: 'Saved analyses',
@@ -492,6 +513,27 @@ const en = {
 };
 type Dictionary = typeof en;
 const es: Dictionary = {
+  inspectConcept: 'Inspeccionar contexto del concepto',
+  conceptScopedMeanings:
+    'Solo se muestran los significados proporcionados a esta respuesta. Abre la entrada actual del glosario para ver todos los significados.',
+  conceptRevisionNotice:
+    'Esta es la revisión guardada de la definición utilizada como contexto. Los archivos originales siguen siendo referencias separadas.',
+  newerConceptRevision: 'Última revisión:',
+  openCurrentConcept: 'Abrir entrada actual del glosario',
+  useLatestConcept: 'Usar última revisión',
+  mentionOptions: 'Opciones de mención',
+  mentionType: 'Tipo de mención',
+  mentionFilterHint: 'Escribe después de @ para filtrar. Esc conserva tu texto.',
+  mentionGlossary: 'Conceptos del glosario',
+  noMatchingConcepts: 'No hay conceptos coincidentes.',
+  conceptLimit: 'Puedes adjuntar hasta 10 conceptos a una pregunta.',
+  attachedConcepts: 'Conceptos adjuntos',
+  conceptsForQuestion: 'Conceptos para esta pregunta',
+  conceptAttachmentNotice: 'Estas definiciones guardadas se incluyen en una sola pregunta.',
+  removeConcept: 'Quitar concepto',
+  toolReadConcepts: 'Leer definiciones guardadas',
+  recoveredCitationNotice: 'Verificado con el recurso preparado actual',
+  savedSourceCitation: 'Fragmento de fuente guardado',
   conceptAnalysisReady: 'Listo',
   conceptAnalysisInterrupted: 'Interrumpido',
   conceptAnalysisHistory: 'Análisis guardados',

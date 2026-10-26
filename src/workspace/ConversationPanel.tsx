@@ -24,6 +24,19 @@ import { api } from '../api';
 import { Button, IconButton, Modal } from '../design/components';
 import type { T } from '../i18n';
 import { DirectoryTree, type TreeActions } from './DirectoryTree';
+import {
+  conceptMentionsSchema,
+  conceptMention,
+  recoverCitations,
+  MAX_QUESTION_CONCEPTS,
+  type ConceptMention,
+  type TutorCitation,
+} from '../../shared/tutor-context';
+import { normalizeConcept, type GlossaryEntry } from '../../shared/glossary';
+import { ConceptInspector } from '../tutor/ConceptInspector';
+import { TutorMentionPicker, type MentionPickerHandle } from '../tutor/TutorMentionPicker';
+import { citationFromHref, remarkTutorCitations } from '../tutor/citations';
+import { useCitationRecovery } from '../tutor/useCitationRecovery';
 
 function stored(key: string) {
   try {
@@ -50,6 +63,7 @@ export function ConversationPanel({
   annotate,
   questionRequest,
   consumeQuestion,
+  openConcept,
 }: {
   sessionId: string;
   source: Source | null;
@@ -59,6 +73,7 @@ export function ConversationPanel({
   annotate: (content: string, sourceIds: string[], context?: QuestionContext) => void;
   questionRequest: { id: string; context: QuestionContext; prompt?: string } | null;
   consumeQuestion: () => void;
+  openConcept: (id: string) => void;
   onError: (message: string) => void;
   changed: () => Promise<unknown>;
   cite: (sourceId: string, segment: Segment) => void;
@@ -200,6 +215,7 @@ export function ConversationPanel({
           annotate={annotate}
           questionRequest={questionRequest}
           consumeQuestion={consumeQuestion}
+          openConcept={openConcept}
         />
       ) : (
         <div className="small-empty">
@@ -224,6 +240,7 @@ function ConversationThread({
   annotate,
   questionRequest,
   consumeQuestion,
+  openConcept,
 }: {
   conversation: Conversation;
   catalog: Catalog;
@@ -232,11 +249,48 @@ function ConversationThread({
   annotate: (content: string, sourceIds: string[], context?: QuestionContext) => void;
   questionRequest: { id: string; context: QuestionContext; prompt?: string } | null;
   consumeQuestion: () => void;
+  openConcept: (id: string) => void;
   receive: (conversation: Conversation) => Promise<void>;
   onError: (message: string) => void;
   cite: (sourceId: string, segment: Segment) => void;
 }) {
   const draftKey = `tl:conversation-draft:${conversation.id}`;
+  const conceptKey = `tl:concept-draft:${conversation.id}`;
+  const retryKey = `tl:conversation-request:${conversation.id}`;
+  const [conceptDraft, setConceptDraft] = useState<{ items: ConceptMention[]; stamp: string }>(
+    () => {
+      try {
+        const data = JSON.parse(stored(conceptKey) || '{}'),
+          parsed = conceptMentionsSchema.safeParse(data.items);
+        return {
+          items: parsed.success ? parsed.data : [],
+          stamp: typeof data.stamp === 'string' ? data.stamp : crypto.randomUUID(),
+        };
+      } catch {
+        return { items: [], stamp: crypto.randomUUID() };
+      }
+    },
+  );
+  const conceptDraftRef = useRef(conceptDraft);
+  conceptDraftRef.current = conceptDraft;
+  const changeConcepts = (items: ConceptMention[]) => {
+    const value = { items, stamp: crypto.randomUUID() };
+    conceptDraftRef.current = value;
+    setConceptDraft(value);
+    store(conceptKey, JSON.stringify(value));
+  };
+  const [inspectedConcept, setInspectedConcept] = useState<
+    (ConceptMention & { meaningIds?: string[] }) | null
+  >(null);
+  const [unavailableCitation, setUnavailableCitation] = useState<Extract<
+    TutorCitation,
+    { kind: 'source' }
+  > | null>(null);
+  const mentionPicker = useRef<MentionPickerHandle>(null);
+  const mentionBusy = useRef(false);
+  const recoveredMaterials = useCitationRecovery(conversation, catalog);
+  const contextStampKey = `tl:question-context-stamp:${conversation.id}`;
+  const contextStamp = useRef(stored(contextStampKey) || crypto.randomUUID());
   const contextKey = `tl:question-context:${conversation.id}`;
   const [context, setContext] = useState<QuestionContext | null>(() => {
     try {
@@ -251,6 +305,8 @@ function ConversationThread({
   contextRef.current = context;
   const changeContext = (value: QuestionContext | null) => {
     contextRef.current = value;
+    contextStamp.current = crypto.randomUUID();
+    store(contextStampKey, contextStamp.current);
     setContext(value);
     store(contextKey, value ? JSON.stringify(value) : '');
   };
@@ -265,24 +321,21 @@ function ConversationThread({
   const [draft, setDraft] = useState(() => stored(draftKey)),
     [pending, setPending] = useState(false),
     [running, setRunning] = useState(false),
+    [mentionPending, setMentionPending] = useState(false),
     [prompt, setPrompt] = useState(''),
     [picker, setPicker] = useState(false),
     [rename, setRename] = useState(false),
     [title, setTitle] = useState(conversation.name),
     [query, setQuery] = useState('');
-  const [mentionIndex, setMentionIndex] = useState(0),
-    [mentionDismissed, setMentionDismissed] = useState(false);
+  const mentionDismissedKey = `tl:mention-dismissed:${conversation.id}`;
+  const [mentionDismissed, setMentionDismissed] = useState(
+    () => !!stored(draftKey) && stored(mentionDismissedKey) === stored(draftKey),
+  );
+  useEffect(() => {
+    store(mentionDismissedKey, mentionDismissed ? draft : '');
+  }, [mentionDismissed, draft, mentionDismissedKey]);
   const mentionQuery = draft.match(/(?:^|\s)@([^\n@]*)$/)?.[1];
-  const mentions =
-    !mentionDismissed && mentionQuery !== undefined
-      ? catalog.files
-          .filter(
-            (file) =>
-              sourceState(file, catalog.directories) === 'files' &&
-              fold(file.name).includes(fold(mentionQuery.trim())),
-          )
-          .slice(0, 8)
-      : [];
+  const mentionOpen = !mentionDismissed && mentionQuery !== undefined;
   const draftRef = useRef(draft),
     alive = useRef(true);
   draftRef.current = draft;
@@ -327,6 +380,29 @@ function ConversationThread({
       return false;
     }
   };
+  useEffect(() => {
+    let sent: {
+      requestId?: string;
+      conceptStamp?: string;
+      contextStamp?: string;
+      context?: QuestionContext;
+    } = {};
+    try {
+      sent = JSON.parse(stored(retryKey) || '{}');
+    } catch {}
+    if (
+      !sent.requestId ||
+      !conversation.messages.some((m) => m.role === 'assistant' && m.requestId === sent.requestId)
+    )
+      return;
+    if (sent.conceptStamp === conceptDraftRef.current.stamp) changeConcepts([]);
+    if (
+      sent.contextStamp === contextStamp.current &&
+      JSON.stringify(sent.context) === JSON.stringify(contextRef.current || undefined)
+    )
+      changeContext(null);
+    store(retryKey, '');
+  }, [conversation.messages]);
   const resolve = async (sourceId: string, segmentId: string, question?: QuestionContext) => {
     if (question?.sourceId === sourceId && segmentId === 'selected-passage') {
       cite(sourceId, {
@@ -347,25 +423,74 @@ function ConversationThread({
     }
   };
   const mention = async (file: Source) => {
-    if (!conversation.sourceIds.includes(file.id)) {
-      if (conversation.sourceIds.length >= 20) {
-        onError(t.referenceLimit);
-        return;
+    if (mentionBusy.current) return;
+    mentionBusy.current = true;
+    const before = draftRef.current;
+    setMentionPending(true);
+    try {
+      if (!conversation.sourceIds.includes(file.id)) {
+        if (conversation.sourceIds.length >= 20) {
+          onError(t.referenceLimit);
+          return;
+        }
+        if (!(await patch({ sourceIds: [...conversation.sourceIds, file.id] }))) return;
       }
-      if (!(await patch({ sourceIds: [...conversation.sourceIds, file.id] }))) return;
+      // A reference save may finish after the user has started a different draft.
+      if (draftRef.current === before) {
+        changeDraft(`${before.slice(0, before.lastIndexOf('@'))}@${file.name} `);
+        setMentionDismissed(true);
+      }
+    } finally {
+      mentionBusy.current = false;
+      if (alive.current) setMentionPending(false);
     }
-    changeDraft(`${draftRef.current.slice(0, draftRef.current.lastIndexOf('@'))}@${file.name} `);
-    setMentionDismissed(true);
   };
-  const citationMarkdown = (content: string, ids: string[]) =>
-    content.replace(/\[([\w:.-]+)\](?!\()/g, (text, id: string) => {
-      const separator = id.indexOf(':');
-      const sourceId = separator > 0 ? id.slice(0, separator) : ids.length === 1 ? ids[0] : null;
-      const segmentId = separator > 0 ? id.slice(separator + 1) : id;
-      return sourceId && ids.includes(sourceId)
-        ? `[${segmentId}](#evidence/${sourceId}/${encodeURIComponent(segmentId)})`
-        : text;
+  const mentionConcept = (entry: GlossaryEntry) => {
+    const current = conceptDraftRef.current.items;
+    if (!current.some((c) => c.id === entry.id) && current.length >= MAX_QUESTION_CONCEPTS) {
+      onError(t.conceptLimit);
+      return;
+    }
+    changeConcepts([...current.filter((c) => c.id !== entry.id), conceptMention(entry)]);
+    changeDraft(`${draftRef.current.slice(0, draftRef.current.lastIndexOf('@'))}@${entry.term} `);
+    setMentionDismissed(true);
+    composer.current?.focus();
+  };
+  const citationLabel = (ref: TutorCitation) =>
+    ref.kind === 'concept'
+      ? ref.term
+      : ref.location.page
+        ? `${t.page} ${ref.location.page}`
+        : ref.location.seconds != null
+          ? `${Math.floor(ref.location.seconds / 60)}:${String(Math.floor(ref.location.seconds % 60)).padStart(2, '0')}`
+          : catalog.files.find((f) => f.id === ref.sourceId)?.name || t.source;
+  const openCitation = (ref: TutorCitation) => {
+    if (ref.kind === 'concept') {
+      setInspectedConcept({
+        id: ref.conceptId,
+        term: ref.term,
+        version: ref.version,
+        reviewed: ref.reviewed,
+        ...(ref.meaningIds ? { meaningIds: ref.meaningIds } : {}),
+      });
+      return;
+    }
+    const file = catalog.files.find((f) => f.id === ref.sourceId);
+    if (
+      !file ||
+      file.version !== ref.sourceVersion ||
+      sourceState(file, catalog.directories) === 'trash'
+    ) {
+      setUnavailableCitation(ref);
+      return;
+    }
+    cite(ref.sourceId, {
+      id: ref.segmentId,
+      text: `${ref.location.quote || ''}${ref.excerptTruncated ? '…' : ''}`,
+      ...(ref.location.page ? { page: ref.location.page } : {}),
+      ...(ref.location.seconds != null ? { start: ref.location.seconds } : {}),
     });
+  };
   const contextFor = (message: (typeof conversation.messages)[number]) =>
     message.context ||
     (message.requestId
@@ -376,9 +501,19 @@ function ConversationThread({
   async function send() {
     const text = draftRef.current.trim(),
       question = contextRef.current || undefined;
-    const fingerprint = JSON.stringify({ prompt: text, context: question });
-    if (!text || pending || running) return;
-    const retryKey = `tl:conversation-request:${conversation.id}`;
+    const questionConcepts = conceptDraftRef.current.items.map(({ id, version }) => ({
+      id,
+      version,
+    }));
+    const conceptStamp = conceptDraftRef.current.stamp,
+      questionStamp = contextStamp.current;
+    const fingerprint = JSON.stringify({
+      prompt: text,
+      context: question,
+      concepts: questionConcepts,
+      sourceIds: [...conversation.sourceIds].sort(),
+    });
+    if (!text || pending || running || mentionBusy.current) return;
     let previous: { prompt?: string; requestId?: string; fingerprint?: string } = {};
     try {
       previous = JSON.parse(stored(retryKey) || '{}');
@@ -387,7 +522,18 @@ function ConversationThread({
       previous.fingerprint === fingerprint && previous.requestId
         ? previous.requestId
         : crypto.randomUUID();
-    store(retryKey, JSON.stringify({ prompt: text, context: question, fingerprint, requestId }));
+    store(
+      retryKey,
+      JSON.stringify({
+        prompt: text,
+        context: question,
+        concepts: questionConcepts,
+        conceptStamp,
+        contextStamp: questionStamp,
+        fingerprint,
+        requestId,
+      }),
+    );
     setPending(true);
     setPrompt(text);
     changeDraft('');
@@ -395,11 +541,16 @@ function ConversationThread({
       const next = await api<Conversation>(`/conversations/${conversation.id}/turns`, 'POST', {
         prompt: text,
         requestId,
+        concepts: questionConcepts,
         ...(question ? { context: question } : {}),
       });
       await receive(next);
       store(retryKey, '');
-      if (JSON.stringify(contextRef.current || undefined) === JSON.stringify(question))
+      if (conceptDraftRef.current.stamp === conceptStamp) changeConcepts([]);
+      if (
+        contextStamp.current === questionStamp &&
+        JSON.stringify(contextRef.current || undefined) === JSON.stringify(question)
+      )
         changeContext(null);
     } catch (error) {
       // Do not overwrite a new draft typed while this reply was running.
@@ -462,89 +613,110 @@ function ConversationThread({
             : t.generalTutorNotice}
       </p>
       <div className="conversation-messages" aria-live="polite" aria-relevant="additions text">
-        {conversation.messages.map((message, index) => (
-          <div
-            className={`chat-message ${message.role}`}
-            key={`${message.requestId || 'history'}-${index}`}
-          >
-            {message.role === 'user' && message.context && (
-              <div className="message-question-context">
-                <button
+        {conversation.messages.map((message, index) => {
+          const references =
+            message.citations ?? recoverCitations(message, conversation, recoveredMaterials);
+          const byId = new Map(references.map((ref) => [ref.id, ref]));
+          return (
+            <div
+              className={`chat-message ${message.role}`}
+              key={`${message.requestId || 'history'}-${index}`}
+            >
+              {message.role === 'user' && message.context && (
+                <div className="message-question-context">
+                  <button
+                    onClick={() =>
+                      void resolve(message.context!.sourceId, 'selected-passage', message.context)
+                    }
+                  >
+                    {message.context.sourceName}
+                    {message.context.location.page
+                      ? ` · ${t.page} ${message.context.location.page}`
+                      : message.context.location.seconds != null
+                        ? ` · ${Math.floor(message.context.location.seconds / 60)}:${String(Math.floor(message.context.location.seconds % 60)).padStart(2, '0')}`
+                        : ''}
+                  </button>
+                  {message.context.location.quote && (
+                    <blockquote>{message.context.location.quote}</blockquote>
+                  )}
+                </div>
+              )}
+              {message.role === 'user' && message.concepts?.length ? (
+                <div className="message-concepts" aria-label={t.attachedConcepts}>
+                  {message.concepts.map((ref) => (
+                    <button key={ref.id} onClick={() => setInspectedConcept(ref)}>
+                      {ref.term} · {t.revision} {ref.version}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              <Markdown
+                remarkPlugins={[
+                  remarkGfm,
+                  [remarkTutorCitations, { references, label: citationLabel }],
+                ]}
+                components={{
+                  a: ({ href, children }) => {
+                    const ref = citationFromHref(href, byId);
+                    if (ref)
+                      return (
+                        <button
+                          className="evidence-link"
+                          title={`${citationLabel(ref)}${ref.kind === 'concept' ? ` · ${t.revision} ${ref.version}` : ref.recovered ? ` · ${t.recoveredCitationNotice}` : ''}`}
+                          onClick={() => openCitation(ref)}
+                        >
+                          {children}
+                        </button>
+                      );
+                    if (href?.startsWith('#tutor/') || href?.startsWith('#evidence/'))
+                      return <span>{children}</span>;
+                    return (
+                      <a href={href} target="_blank" rel="noreferrer">
+                        {children}
+                      </a>
+                    );
+                  },
+                }}
+              >
+                {message.content}
+              </Markdown>
+              {message.role === 'assistant' && (
+                <Button
+                  variant="ghost"
                   onClick={() =>
-                    void resolve(message.context!.sourceId, 'selected-passage', message.context)
+                    annotate(
+                      message.content,
+                      message.sourceIds || conversation.sourceIds,
+                      contextFor(message),
+                    )
                   }
                 >
-                  {message.context.sourceName}
-                  {message.context.location.page
-                    ? ` · ${t.page} ${message.context.location.page}`
-                    : message.context.location.seconds != null
-                      ? ` · ${Math.floor(message.context.location.seconds / 60)}:${String(Math.floor(message.context.location.seconds % 60)).padStart(2, '0')}`
-                      : ''}
-                </button>
-                {message.context.location.quote && (
-                  <blockquote>{message.context.location.quote}</blockquote>
-                )}
-              </div>
-            )}
-            <Markdown
-              remarkPlugins={[remarkGfm]}
-              components={{
-                a: ({ href, children }) => {
-                  const match = href?.match(/^#evidence\/([\w-]+)\/(.+)$/);
-                  return match ? (
-                    <button
-                      className="evidence-link"
-                      onClick={() =>
-                        void resolve(match[1], decodeURIComponent(match[2]), contextFor(message))
-                      }
-                    >
-                      {children}
-                    </button>
-                  ) : (
-                    <a href={href} target="_blank" rel="noreferrer">
-                      {children}
-                    </a>
-                  );
-                },
-              }}
-            >
-              {citationMarkdown(message.content, message.sourceIds || conversation.sourceIds)}
-            </Markdown>
-            {message.role === 'assistant' && (
-              <Button
-                variant="ghost"
-                onClick={() =>
-                  annotate(
-                    message.content,
-                    message.sourceIds || conversation.sourceIds,
-                    contextFor(message),
-                  )
-                }
-              >
-                <Pencil size={14} />
-                {t.saveAsAnnotation}
-              </Button>
-            )}
-            {message.tools?.length ? (
-              <small>
-                {t.toolsUsed}:{' '}
-                {[...new Set(message.tools)]
-                  .map(
-                    (tool) =>
-                      (
-                        ({
-                          read_segments: t.toolReadSegments,
-                          practice_summary: t.toolPracticeSummary,
-                          list_concepts: t.toolListConcepts,
-                          create_bookmark: t.toolCreateBookmark,
-                        }) as Record<string, string>
-                      )[tool] || t.studyTool,
-                  )
-                  .join(', ')}
-              </small>
-            ) : null}
-          </div>
-        ))}
+                  <Pencil size={14} />
+                  {t.saveAsAnnotation}
+                </Button>
+              )}
+              {message.tools?.length ? (
+                <small>
+                  {t.toolsUsed}:{' '}
+                  {[...new Set(message.tools)]
+                    .map(
+                      (tool) =>
+                        (
+                          ({
+                            read_segments: t.toolReadSegments,
+                            practice_summary: t.toolPracticeSummary,
+                            list_concepts: t.toolListConcepts,
+                            read_concepts: t.toolReadConcepts,
+                            create_bookmark: t.toolCreateBookmark,
+                          }) as Record<string, string>
+                        )[tool] || t.studyTool,
+                    )
+                    .join(', ')}
+                </small>
+              ) : null}
+            </div>
+          );
+        })}
         {pending && (
           <>
             <div className="chat-message user">
@@ -587,6 +759,39 @@ function ConversationThread({
             <small>{t.questionContextNotice}</small>
           </div>
         )}
+        {!!conceptDraft.items.length && (
+          <section className="question-concepts" aria-label={t.attachedConcepts}>
+            <strong>{t.conceptsForQuestion}</strong>
+            <p>{t.conceptAttachmentNotice}</p>
+            {conceptDraft.items.map((ref) => {
+              const current = catalog.concepts.find((c) => c.id === ref.id);
+              return (
+                <div className="question-concept" key={ref.id}>
+                  <button
+                    type="button"
+                    title={t.inspectConcept}
+                    onClick={() => setInspectedConcept(ref)}
+                  >
+                    {ref.term} · {t.revision} {ref.version}
+                  </button>
+                  {current && current.version !== ref.version && (
+                    <small>
+                      {t.newerConceptRevision} {current.version}
+                    </small>
+                  )}
+                  <IconButton
+                    label={`${t.removeConcept}: ${ref.term}`}
+                    onClick={() =>
+                      changeConcepts(conceptDraftRef.current.items.filter((c) => c.id !== ref.id))
+                    }
+                  >
+                    <X size={14} />
+                  </IconButton>
+                </div>
+              );
+            })}
+          </section>
+        )}
         <textarea
           ref={composer}
           aria-label={t.assistant}
@@ -594,56 +799,83 @@ function ConversationThread({
           maxLength={8000}
           value={draft}
           aria-autocomplete="list"
-          aria-controls={mentions.length ? `mentions-${conversation.id}` : undefined}
-          aria-expanded={mentions.length > 0}
+          aria-controls={mentionOpen ? `mentions-${conversation.id}` : undefined}
+          aria-expanded={mentionOpen}
           onChange={(event) => {
             changeDraft(event.target.value);
-            setMentionIndex(0);
             setMentionDismissed(false);
           }}
           onKeyDown={(event) => {
-            if (!mentions.length) return;
-            if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-              event.preventDefault();
-              setMentionIndex(
-                (index) =>
-                  (index + (event.key === 'ArrowDown' ? 1 : mentions.length - 1)) % mentions.length,
-              );
-            } else if (event.key === 'Escape') {
+            if (!mentionOpen) return;
+            if (event.key === 'Escape') {
               event.preventDefault();
               event.stopPropagation();
               setMentionDismissed(true);
-            } else if (event.key === 'Enter' && !event.shiftKey) {
-              event.preventDefault();
-              void mention(mentions[Math.min(mentionIndex, mentions.length - 1)]);
+              return;
             }
+            if (!event.shiftKey && mentionPicker.current?.key(event.key)) event.preventDefault();
           }}
         />
-        {mentions.length > 0 && (
-          <div
-            className="mention-list"
-            role="listbox"
-            id={`mentions-${conversation.id}`}
-            aria-label={t.mentionSource}
-          >
-            {mentions.map((file, index) => (
-              <button
-                type="button"
-                role="option"
-                aria-selected={index === mentionIndex}
-                key={file.id}
-                onClick={() => void mention(file)}
-              >
-                {file.name}
-              </button>
-            ))}
+        {mentionOpen && (
+          <div id={`mentions-${conversation.id}`}>
+            <TutorMentionPicker
+              ref={mentionPicker}
+              query={mentionQuery || ''}
+              catalog={catalog}
+              t={t}
+              actions={treeActions}
+              pickFile={(file) => {
+                void mention(file).then(() => composer.current?.focus());
+              }}
+              pickConcept={mentionConcept}
+              focusComposer={() => composer.current?.focus()}
+            />
           </div>
         )}
-        <Button variant="primary" type="submit" disabled={pending || running || !draft.trim()}>
+        <Button
+          variant="primary"
+          type="submit"
+          disabled={pending || running || mentionPending || !draft.trim()}
+        >
           <ArrowUp size={15} />
           {t.send}
         </Button>
       </form>
+      {inspectedConcept && (
+        <ConceptInspector
+          reference={inspectedConcept}
+          catalog={catalog}
+          t={t}
+          close={() => setInspectedConcept(null)}
+          openConcept={openConcept}
+          cite={cite}
+          useLatest={
+            conceptDraft.items.some(
+              (c) => c.id === inspectedConcept.id && c.version === inspectedConcept.version,
+            ) && !inspectedConcept.meaningIds
+              ? (entry) =>
+                  changeConcepts(
+                    conceptDraftRef.current.items.map((ref) =>
+                      ref.id === entry.id ? conceptMention(entry) : ref,
+                    ),
+                  )
+              : undefined
+          }
+        />
+      )}
+      {unavailableCitation && (
+        <Modal
+          title={t.savedSourceCitation}
+          close={() => setUnavailableCitation(null)}
+          closeLabel={t.close}
+        >
+          <p>{t.sourceUnavailable}</p>
+          <p>
+            {t.sourceVersion} {unavailableCitation.sourceVersion}
+          </p>
+          <blockquote>{unavailableCitation.location.quote}</blockquote>
+        </Modal>
+      )}
       {rename && (
         <Modal title={t.renameConversation} close={() => setRename(false)} closeLabel={t.close}>
           <form
