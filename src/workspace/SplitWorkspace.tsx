@@ -177,7 +177,9 @@ export function SplitWorkspace({
             aria-labelledby={narrow && sources.length === 2 ? `${id}-tab-${source.id}` : undefined}
             data-source-id={source.id}
             hidden={narrow && focused !== source.id}
-            style={{ flexGrow: sources.length === 1 ? 1 : index === 0 ? shown : 1 - shown }}
+            style={{
+              flexGrow: narrow || sources.length === 1 ? 1 : index === 0 ? shown : 1 - shown,
+            }}
             onPointerDownCapture={() => {
               if (focused !== source.id) focus(source.id);
             }}

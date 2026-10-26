@@ -216,6 +216,20 @@ export function App() {
       .catch((e) => setError(e.message));
   }
   function selectSession(value: StudySession) {
+    if (sessionRef.current && value.id !== sessionRef.current.id) {
+      const positions = { ...sessionRef.current.positions };
+      for (const pane of document.querySelectorAll<HTMLElement>('[data-source-id]')) {
+        const player = pane.querySelector<HTMLMediaElement>('audio,video');
+        if (
+          player &&
+          player.readyState > 0 &&
+          pane.dataset.sourceId &&
+          Number.isFinite(player.currentTime)
+        )
+          positions[pane.dataset.sourceId] = player.currentTime;
+      }
+      updateSession({ positions });
+    }
     sessionRef.current = value;
     setSession(value);
     localStorage.setItem('tl:session', value.id);
@@ -906,6 +920,9 @@ export function App() {
                       ) : (
                         <Viewer
                           source={source}
+                          bookmarks={session.bookmarks.filter(
+                            (bookmark) => bookmark.sourceId === source.id,
+                          )}
                           t={t}
                           learning={material || null}
                           position={session.positions[source.id] || 0}

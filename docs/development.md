@@ -53,3 +53,10 @@ Record actual implementation and validation as it lands. Commit dates remain act
 - Live Meta/browser checks verified source-free study help, grounded source reads, clickable evidence, reference add/remove, keyboard mention selection, conversation creation/history switching and session renaming. A completed request ID returned the same two-message result; a parallel turn was rejected and a title edit made during generation survived.
 - All 43 tests, type checks and production build passed. Full runtime stop/start retained five conversations/eight messages, sessions, directories, original file hashes and configured credential status. The browser restored the selected conversation and its unsent draft.
 - Split entry and restoration now hide/unpin side panels while preserving widths, with explicit drawer reopening and pin controls.
+
+### Media player controls
+
+- Added shared audio/video controls with five-second buttons/keyboard seeking, every quarter-step playback speed from 0.25x to 4x, volume, captions and browser fullscreen. Bookmark markers seek to saved timestamps; chapter markers retain actual evidence intervals and use separate rows when those intervals overlap.
+- Browser checks covered muted audio, an authored silent video, byte ranges, bookmark/chapter seeking, 2.25x/3.75x speeds, caption switching without position reset, fullscreen entry/exit, idle hiding and keyboard reveal. At 390px, controls stayed within the viewport and hidden-pane audio paused.
+- Session switching now captures the current media position before unmount; the verified 5.741051-second position remained attached to the previous session. Browser reload restored source preferences, bookmarks and position.
+- All 46 tests, type checks and production build passed. Physical touch gestures remain unverified; the configured browser automation exposes pointer/keyboard input only. Reduced motion disables the controls transition.

@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { FileText, BookOpen, Download, Minus, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
-import type { Source, PublicLearning, Segment } from '../shared/domain';
+import type { Source, PublicLearning, Bookmark } from '../shared/domain';
 import { Button, Empty, IconButton } from './design/components';
 import type { T } from './i18n';
+import { MediaPlayer } from './MediaPlayer';
 
 export function Viewer({
   source,
@@ -13,20 +14,19 @@ export function Viewer({
   position = 0,
   onPosition,
   seek,
+  bookmarks = [],
 }: {
   source: Source;
+  bookmarks?: Bookmark[];
   t: T;
   learning: PublicLearning | null;
   position?: number;
   onPosition: (value: number) => void;
   seek: { value: number; nonce: number } | null;
 }) {
-  const media = useRef<HTMLVideoElement & HTMLAudioElement>(null),
-    [text, setText] = useState(''),
+  const [text, setText] = useState(''),
     [page, setPage] = useState(Math.max(1, Math.round(position) || 1)),
-    [zoom, setZoom] = useState(100),
-    [speed, setSpeed] = useState(1),
-    [track, setTrack] = useState('original');
+    [zoom, setZoom] = useState(100);
   const url = `/api/files/${source.id}/content`;
   useEffect(() => {
     if (source.kind === 'text' || source.kind === 'markdown') {
@@ -40,74 +40,24 @@ export function Viewer({
   }, [source.id]);
   useEffect(() => {
     if (!seek) return;
-    if (media.current) media.current.currentTime = seek.value;
-    else if (source.kind === 'pdf') {
+    if (source.kind === 'pdf') {
       setPage(Math.max(1, Math.round(seek.value)));
       onPosition(Math.max(1, Math.round(seek.value)));
     }
   }, [seek?.nonce]);
-  if (source.kind === 'video' || source.kind === 'audio') {
-    const Tag = source.kind === 'video' ? 'video' : 'audio';
+  if (source.kind === 'video' || source.kind === 'audio')
     return (
-      <div className={`media-stage ${source.kind}`}>
-        <Tag
-          key={`${source.id}-${track}`}
-          ref={media}
-          src={url}
-          controls
-          preload="metadata"
-          playsInline
-          aria-label={source.name}
-          onLoadedMetadata={() => {
-            if (media.current) {
-              media.current.currentTime = position;
-              media.current.playbackRate = speed;
-            }
-          }}
-          onPause={() => {
-            if (media.current) onPosition(media.current.currentTime);
-          }}
-          onSeeked={() => {
-            if (media.current) onPosition(media.current.currentTime);
-          }}
-        >
-          <track
-            key={track}
-            kind="subtitles"
-            label={track === 'original' ? t.original : t.translated}
-            src={`/api/captions/${source.id}/${track}.vtt`}
-            default
-          />
-        </Tag>
-        <div className="media-options">
-          <label>
-            {t.subtitle}
-            <select value={track} onChange={(e) => setTrack(e.target.value)}>
-              <option value="original">{t.original}</option>
-              <option value="translated">{t.translated}</option>
-            </select>
-          </label>
-          <label>
-            {t.view}
-            <select
-              aria-label="Playback speed"
-              value={speed}
-              onChange={(e) => {
-                setSpeed(Number(e.target.value));
-                if (media.current) media.current.playbackRate = Number(e.target.value);
-              }}
-            >
-              {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4].map((s) => (
-                <option key={s} value={s}>
-                  {s}×
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-      </div>
+      <MediaPlayer
+        key={source.id}
+        source={source}
+        learning={learning}
+        bookmarks={bookmarks}
+        position={position}
+        onPosition={onPosition}
+        seek={seek}
+        t={t}
+      />
     );
-  }
   if (source.kind === 'pdf')
     return (
       <div className="pdf-stage">

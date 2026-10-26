@@ -74,3 +74,11 @@ Use **Start conversation** without opening a file for general study help. Inside
 **Persistent references** controls which prepared files the tutor can access. Add/remove files through the shared library picker or type **@** to mention a file. Changing resource tabs does not change references. Requests use the reference selection captured when sent, so edits made while a reply runs affect the next request. Source citations open the relevant file and quoted evidence. A conversation without references cannot read library files.
 
 Messages and references live in celld. Drafts and the selected conversation live in browser storage for the current origin. Switching conversations or sessions, reloading the browser, and stopping/restarting the app retain them in that profile. Completed request IDs return their recorded reply on retry. Requests interrupted before completion may need an explicit retry; no exactly-once provider-charge guarantee is made.
+
+## Playback controls
+
+The audio/video player includes five-second skip buttons, a seek bar, volume, captions, fullscreen and playback speeds from 0.25x to 4x in quarter steps. Left/Right seeks five seconds while the player is focused; Space/K toggles playback from the player region. Volume and speed fields retain their own keyboard behavior.
+
+Bookmark markers return to saved times. Chapter markers use the source’s actual timing; overlapping evidence intervals appear in separate rows. Caption/speed/volume preferences persist per recording in browser storage, and switching caption language keeps playback position. Position is checkpointed during playback and saved on pause, seek or session navigation.
+
+Video controls hide after three seconds of inactivity during playback. Pointer movement or keyboard focus reveals them; keyboard interaction and slider drags keep them accessible. Audio controls remain visible. Browser fullscreen is independent of workspace focus mode.
