@@ -20,7 +20,6 @@ import {
   Sparkles,
   Bookmark,
   StickyNote,
-  List,
   GraduationCap,
   MessageSquare,
   Activity,
@@ -34,9 +33,10 @@ import {
   Code2,
   LoaderCircle,
   RotateCcw,
-  LibraryBig,
+  CircleCheck,
   Pin,
   PinOff,
+  PenLine,
 } from 'lucide-react';
 import {
   type Catalog,
@@ -72,12 +72,11 @@ import {
   type ResourceWorkspace,
 } from './workspace/tabs';
 import { ResourceTabs } from './workspace/ResourceTabs';
+import { StudyTabs, type StudyTab } from './workspace/StudyTabs';
 
 const fileIcon = (kind: Source['kind']) =>
   kind === 'video' ? Film : kind === 'audio' ? Headphones : kind === 'image' ? FileImage : FileText;
 const localGet = (key: string, fallback: string) => localStorage.getItem(key) || fallback;
-type StudyTab =
-  'chapters' | 'notes' | 'bookmarks' | 'glossary' | 'practice' | 'review' | 'assistant' | 'miniapp';
 type ChatMessage = { role: 'user' | 'assistant'; content: string; tools?: string[] };
 
 export function App() {
@@ -343,11 +342,8 @@ export function App() {
         aria-modal={panels.drawer === 'left' ? true : undefined}
       >
         <div className="brand">
-          <span className="brand-mark">
-            <BookOpen size={20} />
-          </span>
           <div>
-            <strong>Tailored Library</strong>
+            <strong>{t.catalogTitle}</strong>
             <span>{t.local}</span>
           </div>
           <IconButton
@@ -374,7 +370,7 @@ export function App() {
           />
         </div>
         <div className="library-actions">
-          <Button variant="primary" onClick={() => setModal('upload')}>
+          <Button onClick={() => setModal('upload')}>
             <Plus size={15} />
             {t.upload}
           </Button>
@@ -500,22 +496,28 @@ export function App() {
           </div>
         )}
         {!active ? (
-          <Empty
-            icon={<LibraryBig />}
-            title={catalog.files.length ? t.noSelection : t.welcome}
-            description={catalog.files.length ? t.noSelectionBody : t.welcomeBody}
-          >
+          <Empty icon={<BookOpen />} title={t.welcome} description={t.welcomeBody}>
             <div className="welcome-actions">
-              <Button variant="primary" onClick={() => setModal('upload')}>
-                <Upload size={16} />
-                {t.upload}
+              <Button
+                onClick={() => {
+                  setLeft(true);
+                  if (!catalog.files.length) setModal('upload');
+                }}
+              >
+                <Folder size={18} />
+                {t.exploreFiles}
               </Button>
-              <Button onClick={() => void run(example)}>
-                {t.addDemo}
-                <ChevronRight size={14} />
+              <Button
+                variant="primary"
+                onClick={() => {
+                  setTab('assistant');
+                  setRight(true);
+                }}
+              >
+                <MessageSquare size={18} />
+                {t.study}
               </Button>
             </div>
-            <span className="eyebrow">{t.intro}</span>
           </Empty>
         ) : (
           <>
@@ -524,61 +526,68 @@ export function App() {
                 <span>{active.folder || t.library}</span>
                 <strong title={active.name}>{active.name}</strong>
               </div>
-              <div className="toolbar-actions">
-                <IconButton
-                  label={t.addBookmark}
-                  onClick={() =>
-                    updateSession({
-                      bookmarks: [
-                        ...session.bookmarks,
-                        {
-                          id: crypto.randomUUID(),
-                          sourceId: active.id,
-                          label: active.name,
-                          ...(active.kind === 'pdf'
-                            ? { page: Math.max(1, position || 1) }
-                            : { seconds: position }),
-                        },
-                      ],
-                    })
-                  }
-                >
-                  <Bookmark />
-                </IconButton>
-                <IconButton
-                  label={t.notes}
-                  onClick={() => {
-                    setRight(true);
-                    setTab('notes');
-                  }}
-                >
-                  <StickyNote />
-                </IconButton>
-                <IconButton
-                  label={split ? t.noSplit : t.split}
-                  onClick={() => (split ? closeSplit() : showSplitPicker())}
-                >
-                  <Columns2 />
-                </IconButton>
-                <IconButton
-                  label={active.reviewed ? t.reviewed : t.markReviewed}
-                  aria-pressed={active.reviewed}
-                  onClick={() => void run(() => editFile(active, { reviewed: !active.reviewed }))}
-                >
-                  <Check />
-                </IconButton>
-                <a
-                  className="button icon-button button-ghost"
-                  href={`/api/files/${active.id}/content`}
-                  download={active.name}
-                  title={t.download}
-                  aria-label={t.download}
-                >
-                  <Download size={16} />
-                </a>
-                <IconButton label={focus ? t.unfocus : t.focus} onClick={() => setFocus((v) => !v)}>
-                  {focus ? <Minimize2 /> : <Maximize2 />}
-                </IconButton>
+              <div className="reader-commands">
+                <div className="toolbar-actions" aria-label={t.resourceTools}>
+                  <IconButton
+                    label={t.addBookmark}
+                    onClick={() =>
+                      updateSession({
+                        bookmarks: [
+                          ...session.bookmarks,
+                          {
+                            id: crypto.randomUUID(),
+                            sourceId: active.id,
+                            label: active.name,
+                            ...(active.kind === 'pdf'
+                              ? { page: Math.max(1, position || 1) }
+                              : { seconds: position }),
+                          },
+                        ],
+                      })
+                    }
+                  >
+                    <Bookmark />
+                  </IconButton>
+                  <IconButton
+                    label={t.notes}
+                    onClick={() => {
+                      setRight(true);
+                      setTab('notes');
+                    }}
+                  >
+                    <StickyNote />
+                  </IconButton>
+                  <IconButton
+                    label={split ? t.noSplit : t.split}
+                    onClick={() => (split ? closeSplit() : showSplitPicker())}
+                  >
+                    <Columns2 />
+                  </IconButton>
+                  <IconButton
+                    label={active.reviewed ? t.reviewed : t.markReviewed}
+                    aria-pressed={active.reviewed}
+                    onClick={() => void run(() => editFile(active, { reviewed: !active.reviewed }))}
+                  >
+                    <Check />
+                  </IconButton>
+                  <a
+                    className="button icon-button button-ghost"
+                    href={`/api/files/${active.id}/content`}
+                    download={active.name}
+                    title={t.download}
+                    aria-label={t.download}
+                  >
+                    <Download size={16} />
+                  </a>
+                </div>
+                <div className="focus-action">
+                  <IconButton
+                    label={focus ? t.unfocus : t.focus}
+                    onClick={() => setFocus((v) => !v)}
+                  >
+                    {focus ? <Minimize2 /> : <Maximize2 />}
+                  </IconButton>
+                </div>
               </div>
             </div>
             {evidence && (
@@ -756,10 +765,7 @@ export function App() {
         aria-modal={panels.drawer === 'right' ? true : undefined}
       >
         <div className="study-heading">
-          <span>
-            <Sparkles size={15} />
-            {t.study}
-          </span>
+          <span>{t.study}</span>
           <div className="panel-heading-actions">
             <IconButton
               label={panels.preferences.right.pinned ? t.unpinPanel : t.pinPanel}
@@ -776,33 +782,13 @@ export function App() {
             </IconButton>
           </div>
         </div>
-        <div className="study-tabs" role="tablist" aria-label={t.study}>
-          {(
-            [
-              ['chapters', List],
-              ['notes', StickyNote],
-              ['bookmarks', Bookmark],
-              ['glossary', BookOpen],
-              ['practice', GraduationCap],
-              ['review', Activity],
-              ['assistant', MessageSquare],
-              ['miniapp', Code2],
-            ] as const
-          ).map(([name, Icon]) => (
-            <button
-              key={name}
-              role="tab"
-              aria-selected={tab === name}
-              className={tab === name ? 'active' : ''}
-              onClick={() => setTab(name)}
-              title={t[name]}
-            >
-              <Icon size={14} />
-              <span>{t[name]}</span>
-            </button>
-          ))}
-        </div>
-        <div className="study-content">
+        <StudyTabs value={tab} change={setTab} t={t} />
+        <div
+          id="study-content"
+          role="tabpanel"
+          aria-labelledby={`study-tab-${tab}`}
+          className="study-content"
+        >
           {!active ? (
             <div className="small-empty">
               <BookOpen size={24} />
@@ -1096,6 +1082,11 @@ export function App() {
             progress={uploadProgress}
             submit={(files, folder) => void run(() => addFiles(files, folder))}
           />
+          <div className="sample-material">
+            <Button variant="ghost" disabled={busy} onClick={() => void run(example)}>
+              {t.addDemo}
+            </Button>
+          </div>
         </Modal>
       )}
       {modal === 'session' && (
@@ -1224,7 +1215,11 @@ function FileTree({
               >
                 <Icon size={15} />
                 <span>{file.name}</span>
-                {file.reviewed && <Check size={12} />}
+                {file.reviewed && (
+                  <CircleCheck className="reviewed-marker" size={17} aria-label={t.reviewed}>
+                    <title>{t.reviewed}</title>
+                  </CircleCheck>
+                )}
               </button>
               <details className="file-menu">
                 <summary aria-label={`${t.options}: ${file.name}`}>
@@ -1236,10 +1231,21 @@ function FileTree({
                       event.currentTarget.closest('details')?.removeAttribute('open');
                   }}
                 >
-                  <button onClick={() => onOpen(file)}>{t.openCurrent}</button>
-                  <button onClick={() => onRetain(file)}>{t.openSeparate}</button>
-                  <button onClick={() => onRename(file)}>{t.rename}</button>
+                  <button onClick={() => onOpen(file)}>
+                    <FileText size={17} />
+                    {t.openCurrent}
+                  </button>
+                  <button onClick={() => onRetain(file)}>
+                    <Plus size={17} />
+                    {t.openSeparate}
+                  </button>
+                  <hr />
+                  <button onClick={() => onRename(file)}>
+                    <PenLine size={17} />
+                    {t.rename}
+                  </button>
                   <button onClick={() => onArchive(file)}>
+                    {file.archived ? <RotateCcw size={17} /> : <Archive size={17} />}
                     {file.archived ? t.restore : t.archive}
                   </button>
                   <small>{t.previewHint}</small>
@@ -1663,7 +1669,7 @@ function SettingsModal({
     [locale, setLocale] = useState(initial.locale),
     [model, setModel] = useState(initial.model),
     [pending, setPending] = useState(false),
-    [status, setStatus] = useState('');
+    [status, setStatus] = useState<'settingsSaved' | 'keyRemoved' | null>(null);
   return (
     <Modal title={t.keyTitle} close={close} closeLabel={t.close}>
       <p className="muted">{t.keyBody}</p>
@@ -1675,7 +1681,7 @@ function SettingsModal({
           try {
             await save({ locale, model, ...(key.trim() ? { apiKey: key.trim() } : {}) });
             setKey('');
-            setStatus(t.keySaved);
+            setStatus('settingsSaved');
           } catch (e) {
             onError(e instanceof Error ? e.message : t.error);
           } finally {
@@ -1715,7 +1721,7 @@ function SettingsModal({
         <p className="credential-notice">{t.keyStorage}</p>
         {status && (
           <p role="status" className="success-text">
-            {status}
+            {t[status]}
           </p>
         )}
         <div className="modal-actions">
@@ -1730,7 +1736,7 @@ function SettingsModal({
                 try {
                   await save({ removeKey: true });
                   setKey('');
-                  setStatus(t.keyRemoved);
+                  setStatus('keyRemoved');
                 } catch (e) {
                   onError(e instanceof Error ? e.message : t.error);
                 }

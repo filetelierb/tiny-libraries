@@ -2,19 +2,22 @@
 
 ## Visual language
 
-A warm ivory workspace, near-white paper surfaces, dark blue-gray text, deep teal actions and a restrained amber accent. The reading surface remains quiet; controls are compact and reveal supporting panels on demand. Media sits on a dark blue-green stage. No global header: the resource tab strip is the workspace's top edge.
+A formal academic workspace with warm ivory backgrounds, near-white paper, dark blue-gray text and deep teal actions. Serif typography runs through the catalog, reading surface, study tools and dialogs. Amber identifies folders. Media sits on a dark blue-green stage. No global header: the resource tab strip is the workspace's top edge.
 
 ## Tokens and primitives
 
-`src/design/tokens.css` is the source of truth. Use semantic colors, 4px spacing increments, 0.7rem base radius, thin borders, soft paper shadows, system sans-serif typography and monospaced locators. Bundle no remote fonts. Primary teal is reserved for actions, selection and links; amber identifies folders and highlights.
+`src/design/tokens.css` is the source of truth. Use semantic colors, 4px spacing increments, thin borders and soft shadows confined to floating controls and overlays. Use the system Times New Roman/Times serif stack: 16px body, 14px controls, 12px secondary labels, and 17px long-form reading text. Locators and code use the monospace token. Bundle no remote fonts. Primary teal is reserved for actions, selection and links.
+
+Buttons use outlined pill shapes; reader actions share one capsule with a separate focus action. Resource tabs have rounded paper tops. Reviewed files use a teal outline check-circle. Context menus use leading outline icons, soft amber hover states and a clear grouping rule. Reading surfaces remain plain, without a decorative grid or promotional empty-state slogan.
 
 Primitives: Button (default/primary/ghost/danger), IconButton with required accessible label, Badge, Empty, and native-dialog Modal with focus containment and Escape support. Feature components consume tokens rather than hardcode additional palettes.
 
 ## Layout and interaction
 
-- Desktop: optional 300px library, flexible viewer, optional 350px study panel. Resource tabs remain scrollable; split view has two equal columns.
+- Desktop: independently pinned library and study panels with persisted, bounded widths. Separators support pointer and keyboard resizing. Resource tabs remain scrollable; split view has two equal columns.
 - Tablet/mobile: panels become dismissible overlays, controls remain at least 40px high, inputs 16px, split view stacks vertically.
 - Active file/tab/panel state is explicit. Use teal backgrounds for selection and text plus icons for statuses; color alone must never carry meaning.
+- Study tools share one horizontal text-tab strip. Overflow scrolls; arrows and Home/End move selection and focus. All eight tools remain available. Empty reading space offers file exploration and the study panel; sample material is available under Add files.
 - Keyboard-visible focus uses a 2px ring. Respect reduced motion. Long filenames truncate visually while retaining titles and accessible names.
 - Dialogs communicate local persistence and remote AI use. First launch offers a credential form and an option to explore the library without running AI.
 - English and Spanish strings share a typed dictionary; language persists and updates the document language.
