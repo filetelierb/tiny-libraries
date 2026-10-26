@@ -244,6 +244,7 @@ export type ConceptSource = {
   sourceVersion: number;
   segmentIds: string[];
   location?: import('./annotations').SourceLocation;
+  endSeconds?: number;
 };
 export type Concept = {
   id: string;

@@ -8,6 +8,7 @@ export const conceptSourceSchema = z.object({
   sourceVersion: z.number().int().positive(),
   segmentIds: z.array(z.string().min(1).max(240)).max(100),
   location: locationSchema.optional(),
+  endSeconds: z.number().nonnegative().optional(),
 });
 const nameSchema = z.string().trim().min(1).max(200);
 export const glossarySenseSchema = z.object({
@@ -74,6 +75,7 @@ export function sameSource(a: ConceptSource, b: ConceptSource) {
   return (
     a.sourceId === b.sourceId &&
     a.sourceVersion === b.sourceVersion &&
+    a.endSeconds === b.endSeconds &&
     [...a.segmentIds].sort().join('|') === [...b.segmentIds].sort().join('|') &&
     JSON.stringify(a.location || {}) === JSON.stringify(b.location || {})
   );

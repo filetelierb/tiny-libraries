@@ -64,6 +64,7 @@ function Relation({
 }
 export function GlossaryPanel({
   catalog,
+  focusRequest,
   source,
   openSourceIds,
   t,
@@ -73,6 +74,7 @@ export function GlossaryPanel({
   onError,
 }: {
   catalog: Catalog;
+  focusRequest: { id: string; nonce: string } | null;
   source: Source | null;
   openSourceIds: string[];
   t: T;
@@ -214,6 +216,9 @@ export function GlossaryPanel({
       setVisited((v) => [id, ...v.filter((old) => old !== id)].slice(0, 20));
     });
   };
+  useEffect(() => {
+    if (focusRequest) void open(focusRequest.id);
+  }, [focusRequest?.nonce]);
   const back = () => {
     if (trail.length) {
       const id = trail.at(-1)!;

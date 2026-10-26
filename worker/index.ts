@@ -18,10 +18,11 @@ import {
   type Attempt,
 } from '../shared/domain';
 export { ProcessingJob } from './jobs';
-import { runAssistant, bridgedFetch, gradeShortAnswer } from './meta';
+import { runAssistant, bridgedFetch, gradeShortAnswer, analyzeConcepts } from './meta';
+import { conceptSuggestionsRoute } from './concept-suggestions';
 import { conversationRoute, conversationSnapshot } from './conversations';
 import { annotationRoute, AnnotationError } from './annotations';
-import { glossaryRoute, glossarySnapshot, ingestGeneratedConcept, GlossaryError } from './glossary';
+import { glossaryRoute, glossarySnapshot, GlossaryError } from './glossary';
 import {
   changeDirectory,
   ensureDirectories,
@@ -296,13 +297,6 @@ export class Library extends DurableObject<Env> {
           const file = await this.ctx.storage.get<Source>(`file:${id}`);
           if (!file || file.version !== value.sourceVersion)
             throw new ApiError('Source version changed', 409);
-          for (const term of value.synthesis.glossary) {
-            await ingestGeneratedConcept(this.ctx.storage, term.term, term.definition, {
-              sourceId: id,
-              sourceVersion: value.sourceVersion,
-              segmentIds: term.segmentIds,
-            });
-          }
           await this.ctx.storage.put(`learning:${id}`, value);
           return json({ ok: true });
         }
@@ -410,6 +404,20 @@ export class Library extends DurableObject<Env> {
         settings: () => this.settings(),
       });
       if (conversationResponse) return conversationResponse;
+      const suggestionsResponse = await conceptSuggestionsRoute({
+        request,
+        storage: this.ctx.storage,
+        executionId: this.executionId,
+        body: () => boundedJson(request),
+        settings: () => this.settings(),
+        start: (task) => this.ctx.waitUntil(task),
+        analyze: async (learning, known, locale, model) => {
+          const key = await this.ctx.storage.get<string>('apiKey');
+          if (!key) throw new ApiError('Add a Meta API key in Settings', 409);
+          return analyzeConcepts(key, model, learning, known, locale, bridgedFetch(this.env));
+        },
+      });
+      if (suggestionsResponse) return suggestionsResponse;
       const glossaryResponse = await glossaryRoute(request, this.ctx.storage, () =>
         boundedJson(request),
       );

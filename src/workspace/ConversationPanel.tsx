@@ -57,7 +57,7 @@ export function ConversationPanel({
   t: T;
   treeActions: TreeActions;
   annotate: (content: string, sourceIds: string[], context?: QuestionContext) => void;
-  questionRequest: { id: string; context: QuestionContext } | null;
+  questionRequest: { id: string; context: QuestionContext; prompt?: string } | null;
   consumeQuestion: () => void;
   onError: (message: string) => void;
   changed: () => Promise<unknown>;
@@ -230,7 +230,7 @@ function ConversationThread({
   t: T;
   treeActions: TreeActions;
   annotate: (content: string, sourceIds: string[], context?: QuestionContext) => void;
-  questionRequest: { id: string; context: QuestionContext } | null;
+  questionRequest: { id: string; context: QuestionContext; prompt?: string } | null;
   consumeQuestion: () => void;
   receive: (conversation: Conversation) => Promise<void>;
   onError: (message: string) => void;
@@ -257,6 +257,8 @@ function ConversationThread({
   useEffect(() => {
     if (!questionRequest) return;
     changeContext(questionRequest.context);
+    if (questionRequest.prompt)
+      changeDraft(`${draftRef.current ? `${draftRef.current}\n\n` : ''}${questionRequest.prompt}`);
     consumeQuestion();
     composer.current?.focus();
   }, [questionRequest?.id]);

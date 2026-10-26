@@ -35,6 +35,7 @@ import {
   ArrowLeftRight,
   FolderOpen,
   Pencil,
+  Lightbulb,
 } from 'lucide-react';
 import {
   type Catalog,
@@ -89,6 +90,7 @@ import { useBookmarks } from './bookmarks/useBookmarks';
 import { BookmarkEditor, type BookmarkIntent } from './bookmarks/BookmarkEditor';
 import { BookmarksPanel, type BookmarkFilter } from './bookmarks/BookmarksPanel';
 import { GlossaryPanel } from './glossary/GlossaryPanel';
+import { ResourceConceptSuggestions } from './glossary/ResourceConceptSuggestions';
 const AnnotationEditor = lazy(() => import('./annotations/AnnotationEditor'));
 import { sessionPreview, type QuestionContext } from '../shared/conversations';
 import { ActionMenu } from './design/ActionMenu';
@@ -106,6 +108,8 @@ export function App() {
     [locale, setLocale] = useState<Locale>(() => localGet('tl:locale', 'en') as Locale),
     [session, setSession] = useState<StudySession | null>(null);
   const [annotationRequest, setAnnotationRequest] = useState<AnnotationRequest | null>(null);
+  const [conceptSuggestionsOpen, setConceptSuggestionsOpen] = useState(false);
+  const [glossaryFocus, setGlossaryFocus] = useState<{ id: string; nonce: string } | null>(null);
   const [annotationTick, setAnnotationTick] = useState(0);
   const [bookmarkTick, setBookmarkTick] = useState(0);
   const [bookmarkIntent, setBookmarkIntent] = useState<BookmarkIntent | null>(null);
@@ -116,6 +120,7 @@ export function App() {
   const [questionRequest, setQuestionRequest] = useState<{
     id: string;
     context: QuestionContext;
+    prompt?: string;
   } | null>(null);
   const [selection, setSelection] = useState<{ sourceId: string; location: SourceLocation } | null>(
     null,
@@ -817,6 +822,12 @@ export function App() {
                   >
                     <Pencil />
                   </IconButton>
+                  <IconButton
+                    label={t.conceptSuggestions}
+                    onClick={() => setConceptSuggestionsOpen(true)}
+                  >
+                    <Lightbulb />
+                  </IconButton>
                   <IconButton label={t.askTutor} onClick={() => askAbout(active)}>
                     <MessageSquare />
                   </IconButton>
@@ -1044,6 +1055,43 @@ export function App() {
                   );
                 }}
               </SplitWorkspace>
+              <ResourceConceptSuggestions
+                key={`${active.id}:${active.version}`}
+                source={active}
+                preparedAt={learning?.createdAt || ''}
+                location={resourceLocation(active)}
+                open={conceptSuggestionsOpen}
+                setOpen={setConceptSuggestionsOpen}
+                catalog={catalog}
+                t={t}
+                changed={refresh}
+                prepare={() => void run(prepare)}
+                navigate={(id, location) => {
+                  setConceptSuggestionsOpen(false);
+                  navigateAnnotation(id, location, t.conceptSuggestions);
+                }}
+                followup={(prompt, location) => {
+                  setConceptSuggestionsOpen(false);
+                  setQuestionRequest({
+                    id: crypto.randomUUID(),
+                    context: {
+                      sourceId: active.id,
+                      sourceVersion: active.version,
+                      sourceName: active.name,
+                      location,
+                    },
+                    prompt,
+                  });
+                  setRight(true);
+                  setTab('assistant');
+                }}
+                openConcept={(id) => {
+                  setConceptSuggestionsOpen(false);
+                  setGlossaryFocus({ id, nonce: crypto.randomUUID() });
+                  setRight(true);
+                  setTab('glossary');
+                }}
+              />
             </div>
           </>
         )}
@@ -1113,6 +1161,7 @@ export function App() {
         >
           <div hidden={tab !== 'glossary'} className="glossary-host">
             <GlossaryPanel
+              focusRequest={glossaryFocus}
               catalog={catalog}
               source={active}
               openSourceIds={resources.resourceTabs.flatMap((tab) => tab.sources)}

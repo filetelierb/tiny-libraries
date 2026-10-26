@@ -55,7 +55,7 @@ const revisionSummary = (value: GlossaryEntry) => ({
   updatedAt: value.updatedAt || null,
 });
 
-async function resolveEntry(tx: Store, id: string) {
+export async function resolveEntry(tx: Store, id: string) {
   const seen = new Set<string>();
   for (;;) {
     if (seen.has(id)) throw new GlossaryError('A concept merge contains a cycle', 409);
@@ -66,7 +66,7 @@ async function resolveEntry(tx: Store, id: string) {
   }
 }
 
-async function writeEntry(tx: Store, value: GlossaryEntry, previous?: GlossaryEntry) {
+export async function writeEntry(tx: Store, value: GlossaryEntry, previous?: GlossaryEntry) {
   if (new TextEncoder().encode(JSON.stringify(value)).byteLength > 120000)
     throw new GlossaryError(
       'This concept is too large. Shorten definitions or source excerpts.',
