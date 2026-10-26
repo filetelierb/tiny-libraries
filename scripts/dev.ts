@@ -58,14 +58,19 @@ const runtime = spawn(
       PATH: [join(root, 'node_modules/.bin'), process.env.PATH].join(delimiter),
     },
     stdio: 'inherit',
+    // The dev supervisor handles SIGINT and drains its own child node.
+    detached: process.platform !== 'win32',
   },
 );
+let stopping = false;
 const stop = () => {
-  runtime.kill('SIGTERM');
-  bridge.close();
+  if (stopping) return;
+  stopping = true;
+  console.log('Stopping the local runtime; waiting for accepted work and durable storage.');
+  runtime.kill('SIGINT');
 };
-process.once('SIGINT', stop);
-process.once('SIGTERM', stop);
+process.on('SIGINT', stop);
+process.on('SIGTERM', stop);
 runtime.on('error', () => {
   console.error('celld is unavailable. Install it from https://celld.dev and retry.');
   bridge.close();
@@ -73,6 +78,6 @@ runtime.on('error', () => {
 });
 runtime.on('exit', (code) => {
   bridge.close();
-  process.exitCode = code || 0;
+  process.exitCode = stopping ? 0 : (code ?? 1);
 });
 console.log('Tailored Library: http://127.0.0.1:9876 — local files, optional Meta inference.');

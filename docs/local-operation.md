@@ -23,7 +23,7 @@ On first launch, add a Meta key or choose **Explore without AI**. Settings lets 
 
 ## Persistence contract
 
-Normal **Ctrl+C → `npm start`** retains your data. There is no automatic reset on start.
+Normal **Ctrl+C → `npm start`** retains your data. Wait for the launcher to finish its graceful shutdown before restarting. There is no automatic reset on start.
 
 | Location              | Contents                                                                                                                                                                                                                                                                   | Retained after stop/start                  |
 | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |

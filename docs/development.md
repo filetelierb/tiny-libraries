@@ -67,3 +67,8 @@ Record actual implementation and validation as it lands. Commit dates remain act
 - An authored three-page PDF with mixed portrait/landscape sizes passed browser checks for continuous scroll, page limits, native text selection, fit modes, 390px layout, viewport resizing and reload. A second document retained an independent 50% setting while the first restored fit-page/page two.
 - Fixed responsive page tracking to use visible page coverage and retain the current page when the viewport changes. Bundled fonts, character maps, decoders, worker and licenses are served locally; the optional Vite UI proxies these assets to the local runtime.
 - All 48 tests, type checks and production build passed. Selection-linked study actions and persisted page drawing remain separate reader work.
+
+### Runtime shutdown
+
+- Fixed a shutdown race that could leave the local celld node listening after its development supervisor exited. The launcher now sends the supervisor its graceful interrupt, isolates its process group, and keeps the companion available until the supervisor finishes. Repeated shutdown signals are idempotent.
+- Verified Ctrl+C exits cleanly and releases both local ports. The following launch retained all eight original hashes, session/directory metadata, conversations and configured credential status.
