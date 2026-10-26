@@ -21,6 +21,7 @@ import {
 } from '../shared/domain';
 export { ProcessingJob } from './jobs';
 import { runAssistant, bridgedFetch, gradeShortAnswer } from './meta';
+import { conversationRoute, conversationSnapshot } from './conversations';
 import {
   changeDirectory,
   ensureDirectories,
@@ -82,6 +83,7 @@ async function boundedJson(request: Request) {
   return JSON.parse(new TextDecoder().decode(data));
 }
 export class Library extends DurableObject<Env> {
+  readonly executionId = crypto.randomUUID();
   async directorySnapshot(storage: Pick<DurableObjectStorage, 'list' | 'put'> = this.ctx.storage) {
     const [fileEntries, directoryEntries] = await Promise.all([
       storage.list<Source>({ prefix: 'file:' }),
@@ -130,6 +132,7 @@ export class Library extends DurableObject<Env> {
           files,
           directories,
           sessions: [...sessions.values()].map((value) => sessionSchema.parse(value)),
+          conversations: await conversationSnapshot(this.ctx.storage, [...sessions.values()]),
           attempts: [...attempts.values()],
           concepts: [...concepts.values()],
           settings: await this.settings(),
@@ -432,6 +435,15 @@ export class Library extends DurableObject<Env> {
           ),
         );
       }
+      const conversationResponse = await conversationRoute({
+        request,
+        env: this.env,
+        storage: this.ctx.storage,
+        executionId: this.executionId,
+        body: () => boundedJson(request),
+        settings: () => this.settings(),
+      });
+      if (conversationResponse) return conversationResponse;
       throw new ApiError('Not found', 404);
     } catch (error) {
       if (error instanceof ApiError || error instanceof DirectoryError)

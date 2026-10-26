@@ -323,16 +323,25 @@ export async function runAssistant(
   model: string,
   prompt: string,
   history: Array<{ role: 'user' | 'assistant'; content: string }>,
-  learning: Learning,
+  learning: Learning | Learning[] | null,
   review: ReturnType<typeof reviewSummary>,
   transport: MetaFetch = fetch,
 ) {
+  const materials = Array.isArray(learning) ? learning : learning ? [learning] : [];
+  const segments = materials.flatMap((material) =>
+    material.segments.map((segment) => ({
+      ...segment,
+      ...(Array.isArray(learning)
+        ? { id: `${material.sourceId}:${segment.id}`, sourceId: material.sourceId }
+        : {}),
+    })),
+  );
   const tools = [
     {
       type: 'function',
       function: {
         name: 'read_segments',
-        description: 'Read source evidence from this selected file only.',
+        description: 'Read evidence from the explicitly selected references only.',
         parameters: {
           type: 'object',
           properties: { ids: { type: 'array', items: { type: 'string' }, maxItems: 12 } },
@@ -345,7 +354,7 @@ export async function runAssistant(
       type: 'function',
       function: {
         name: 'practice_summary',
-        description: 'Read deterministic statistics of actual recorded practice for this file.',
+        description: 'Read deterministic statistics of recorded practice for selected references.',
         parameters: { type: 'object', properties: {}, additionalProperties: false },
       },
     },
@@ -353,7 +362,7 @@ export async function runAssistant(
       type: 'function',
       function: {
         name: 'list_concepts',
-        description: 'Read the evidence-linked glossary for this file.',
+        description: 'Read the evidence-linked glossary for selected references.',
         parameters: { type: 'object', properties: {}, additionalProperties: false },
       },
     },
@@ -361,7 +370,7 @@ export async function runAssistant(
   const messages: Message[] = [
     {
       role: 'system',
-      content: `${safety} You are the library study assistant. Answer in the user's language. Cite evidence as [segment-id]. Use tools before making source-specific claims. Available segment index: ${JSON.stringify(learning.segments.map((s) => ({ id: s.id, preview: s.text.slice(0, 100) })))}.`,
+      content: `${safety} You are the library study tutor. Answer in the user's language. Cite evidence as [segment-id], copying the entire id exactly. Use tools before making source-specific claims. Only the explicitly selected references are available. If none are selected, help with general study questions and clearly explain that you cannot see library files. Available segment index: ${JSON.stringify(segments.map((s) => ({ id: s.id, preview: s.text.slice(0, 100) })))}.`,
     },
     ...history,
     { role: 'user', content: prompt },
@@ -382,9 +391,20 @@ export async function runAssistant(
         const { ids } = z
           .object({ ids: z.array(z.string()).max(12) })
           .parse(JSON.parse(call.function.arguments));
-        output = learning.segments.filter((s) => ids.includes(s.id));
+        output = segments.filter((s) => ids.includes(s.id));
       } else if (call.function.name === 'practice_summary') output = review;
-      else if (call.function.name === 'list_concepts') output = learning.synthesis.glossary;
+      else if (call.function.name === 'list_concepts')
+        output = materials.flatMap((material) =>
+          material.synthesis.glossary.map((term) => ({
+            ...term,
+            ...(Array.isArray(learning)
+              ? {
+                  sourceId: material.sourceId,
+                  segmentIds: term.segmentIds.map((id) => `${material.sourceId}:${id}`),
+                }
+              : {}),
+          })),
+        );
       else output = { error: 'Tool is not permitted' };
       used.push(call.function.name);
       messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(output) });

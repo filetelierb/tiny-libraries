@@ -46,3 +46,10 @@ Record actual implementation and validation as it lands. Commit dates remain act
 - Notes, draft text, bookmarks and tutor actions target the focused source. A 4.5-second audio bookmark and a zero-position document bookmark retained their own source IDs. A live tutor reply used `read_segments`, cited its requested source and remained attached to it after focus/directory changes.
 - All 38 tests, type checks, production build and diff checks passed. An actual runtime stop/start retained directories, file hashes, independent split ratios/focus, notes, bookmarks, positions, saved tutor history and configured credential status.
 - Browser file attachment automation was unavailable under the existing Chrome extension permissions. Destination picker behavior was checked in the browser; actual upload transport, stable directory identity after rename, exact bytes, invalid paths and concurrent duplicate creation were verified through the local API.
+
+### Tutor conversations and session controls
+
+- Added independent durable conversations within sessions, explicit persistent source references, file mentions, title editing, source-linked Markdown replies and browser-retained drafts. Existing saved histories receive stable conversation identities without duplicating their messages.
+- Live Meta/browser checks verified source-free study help, grounded source reads, clickable evidence, reference add/remove, keyboard mention selection, conversation creation/history switching and session renaming. A completed request ID returned the same two-message result; a parallel turn was rejected and a title edit made during generation survived.
+- All 43 tests, type checks and production build passed. Full runtime stop/start retained five conversations/eight messages, sessions, directories, original file hashes and configured credential status. The browser restored the selected conversation and its unsent draft.
+- Split entry and restoration now hide/unpin side panels while preserving widths, with explicit drawer reopening and pin controls.

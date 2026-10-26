@@ -31,7 +31,7 @@ Normal **Ctrl+C → `npm start`** retains your data. There is no automatic reset
 | `.local/processing/`  | Original working copies, normalized chunks, normalization manifests, optional code proposals                                                                                                                                                                               | Yes                                        |
 | `.local/bridge-token` | Random local companion credential                                                                                                                                                                                                                                          | Yes                                        |
 | `.dev.vars`           | Companion credential passed to celld; no Meta key is written here by the UI                                                                                                                                                                                                | Yes                                        |
-| Browser local storage | Selected session, onboarding preference, selected interface preferences and cached conversation display history                                                                                                                                                            | Yes in the same browser profile and origin |
+| Browser local storage | Selected session, onboarding preference, selected interface preferences and selected conversation and unsent drafts                                                                                                                                                        | Yes in the same browser profile and origin |
 
 All these paths are ignored by Git. A normal update or build does not remove them. `.local` and `.celld` have owner-only directory permissions when launched by the app. The saved Meta key is local plaintext storage, not an encrypted keychain; protect the machine and backups. The app is single-user and binds to loopback. Do not expose it to a network without adding authentication.
 
@@ -51,7 +51,7 @@ Use **New folder** at the root or **Create subfolder** from a folder's `+` menu.
 
 **Archive** hides a directory and its descendants from the active tree and pickers. Restoring it preserves each file's individual archive choice. **Delete** asks for confirmation and moves the item or subtree to **Trash**; restore it there. This version does not automatically purge originals or study history. Restore an archived/trashed parent before writing into its descendants.
 
-Each split tab saves its width ratio and selected source. Drag its central divider, use arrow keys (Shift for larger steps), Home/End for limits, or double-click/press Enter for equal widths. The shared toolbar follows the clicked/focused pane; **Tools target** also selects the owner explicitly. Notes, bookmarks, tutor responses and reader positions remain tied to source identity. On narrow screens, select one full-width source; hidden media pauses.
+Entering or restoring a split tab hides and unpins both side panels while preserving their widths; reopen them as drawers or pin them explicitly. Each split tab saves its width ratio and selected source. Drag its central divider, use arrow keys (Shift for larger steps), Home/End for limits, or double-click/press Enter for equal widths. The shared toolbar follows the clicked/focused pane; **Tools target** also selects the owner explicitly. Notes, bookmarks, tutor responses and reader positions remain tied to source identity. On narrow screens, select one full-width source; hidden media pauses.
 
 Directory records, Trash/archive state and split preferences live in celld. Tree expansion/scroll, side-panel preferences and unsaved source-specific note drafts are browser-local and follow the same browser profile and origin.
 
@@ -66,3 +66,11 @@ npm run smoke -- --verify
 ```
 
 The smoke test creates a small authored fixture and a verification session. It checks actual celld data and original-file hashes across restart. Unit tests mock Meta network responses explicitly; they do not claim real-model quality. See `docs/development.md` for live-inference status and unfinished scope.
+
+## Tutor conversations
+
+Use **Start conversation** without opening a file for general study help. Inside a session, the history button lists conversations; **+** creates another without changing resource tabs. Each conversation has its own name, messages, references and unsent draft. Use a session row’s menu to rename the session. Session previews show the resource and message count.
+
+**Persistent references** controls which prepared files the tutor can access. Add/remove files through the shared library picker or type **@** to mention a file. Changing resource tabs does not change references. Requests use the reference selection captured when sent, so edits made while a reply runs affect the next request. Source citations open the relevant file and quoted evidence. A conversation without references cannot read library files.
+
+Messages and references live in celld. Drafts and the selected conversation live in browser storage for the current origin. Switching conversations or sessions, reloading the browser, and stopping/restarting the app retain them in that profile. Completed request IDs return their recorded reply on retry. Requests interrupted before completion may need an explicit retry; no exactly-once provider-charge guarantee is made.

@@ -10,6 +10,13 @@ export const READER_MIN = 360;
 export const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
 
+export function panelsForSplit(preferences: PanelPreferences): PanelPreferences {
+  return {
+    left: { ...preferences.left, open: false, pinned: false },
+    right: { ...preferences.right, open: false, pinned: false },
+  };
+}
+
 export function readPanelPreferences(raw: string | null, viewport: number): PanelPreferences {
   let data: Partial<PanelPreferences> = {};
   try {

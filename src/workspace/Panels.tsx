@@ -6,6 +6,7 @@ import {
   PANEL_STORAGE_KEY,
   readPanelPreferences,
   resolvePanels,
+  panelsForSplit,
   type Side,
 } from './layout';
 
@@ -87,7 +88,11 @@ export function usePanels() {
   const drawer =
     (['left', 'right'] as const).find((side) => effective[side].open && !resolved[side].docked) ||
     null;
-  return { preferences, effective, resolved, narrow, drawer, open, pin, resize };
+  const enterSplit = () => {
+    setMobileOpen(null);
+    setPreferences(panelsForSplit);
+  };
+  return { preferences, effective, resolved, narrow, drawer, open, pin, resize, enterSplit };
 }
 
 export function useDrawerFocus(

@@ -1,5 +1,30 @@
 import type { Locale } from '../shared/domain';
 const en = {
+  conversation: 'Conversation',
+  mentionSource: 'Mention a library file',
+  messages: 'messages',
+  conversationHistory: 'Conversations in this session',
+  backToConversation: 'Back to conversation',
+  newConversation: 'New conversation in this session',
+  renameConversation: 'Rename conversation',
+  searchConversations: 'Search conversations…',
+  noMessages: 'No messages yet',
+  startConversation: 'Start conversation',
+  startConversationBody:
+    'Start a conversation with your tutor. Add references when you want to discuss library material.',
+  references: 'Persistent references',
+  removeReference: 'Remove reference',
+  missingReference: 'Unavailable reference',
+  referencesNotice:
+    'Only these references are available to the tutor. Changing open tabs does not change them. Prepare a file before asking about it.',
+  generalTutorNotice:
+    'No library references are attached. You can ask general study questions or attach prepared files.',
+  referenceLimit: 'A conversation can use up to 20 references.',
+  evidenceUnavailable:
+    'This source location is unavailable. Restore the source or prepare it again.',
+  sessionOptions: 'Session options',
+  renameSession: 'Rename session',
+  sessionNameLimit: 'Use a session name of 160 characters or fewer.',
   needsReview: 'Needs review',
   reviewDefinition: 'Review definition',
   acceptDefinition: 'Use proposed definition',
@@ -178,7 +203,6 @@ const en = {
   quiz: 'Mini quiz',
   originalSource: 'Open original source',
   clear: 'Clear',
-  renameSession: 'Rename session',
   emptySession: 'Untitled session',
   showTranscript: 'Transcript',
   demoNotice: 'Authored example. No model output is simulated.',
@@ -209,6 +233,30 @@ const en = {
 };
 type Dictionary = typeof en;
 const es: Dictionary = {
+  conversation: 'Conversación',
+  mentionSource: 'Mencionar un archivo de la biblioteca',
+  messages: 'mensajes',
+  conversationHistory: 'Conversaciones de esta sesión',
+  backToConversation: 'Volver a la conversación',
+  newConversation: 'Nueva conversación en esta sesión',
+  renameConversation: 'Renombrar conversación',
+  searchConversations: 'Buscar conversaciones…',
+  noMessages: 'Aún no hay mensajes',
+  startConversation: 'Iniciar conversación',
+  startConversationBody:
+    'Inicia una conversación con el tutor. Añade referencias para hablar sobre material de la biblioteca.',
+  references: 'Referencias permanentes',
+  removeReference: 'Quitar referencia',
+  missingReference: 'Referencia no disponible',
+  referencesNotice:
+    'El tutor solo puede consultar estas referencias. Cambiar de pestaña no las modifica. Prepara cada archivo antes de preguntar sobre él.',
+  generalTutorNotice:
+    'No hay referencias adjuntas. Puedes hacer preguntas generales de estudio o adjuntar archivos preparados.',
+  referenceLimit: 'Cada conversación admite hasta 20 referencias.',
+  evidenceUnavailable:
+    'Esta ubicación no está disponible. Restaura la fuente o vuelve a prepararla.',
+  sessionOptions: 'Opciones de sesión',
+  sessionNameLimit: 'Usa un nombre de sesión de hasta 160 caracteres.',
   needsReview: 'Pendiente de revisión',
   reviewDefinition: 'Revisar definición',
   acceptDefinition: 'Usar definición propuesta',

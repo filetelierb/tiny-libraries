@@ -472,6 +472,133 @@ hr {
   font-size: var(--font-size-small);
   color: var(--muted-text);
 }
+.session-entry {
+  display: flex;
+  align-items: center;
+  border-radius: 7px;
+}
+.session-entry.active {
+  background: var(--muted);
+}
+.session-entry .session-row {
+  min-width: 0;
+  flex: 1;
+}
+.session-row > span > span,
+.session-row small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.session-entry > button {
+  flex-shrink: 0;
+}
+.conversation-heading {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 10px;
+}
+.conversation-heading > strong {
+  min-width: 0;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.conversation-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 10px;
+}
+.conversation-history > input {
+  margin: 12px 0;
+  width: 100%;
+}
+.conversation-row {
+  width: 100%;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.conversation-row.active {
+  background: var(--muted);
+}
+.conversation-row span,
+.conversation-row strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  white-space: nowrap;
+}
+.conversation-row small {
+  color: var(--muted-text);
+}
+.context-tray {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.context-tray > span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding-left: 8px;
+}
+.context-tray > span > span {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.evidence-link {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.mention-list {
+  width: 100%;
+  max-height: 200px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--background);
+}
+.mention-list button {
+  display: block;
+  width: 100%;
+  padding: 9px;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.mention-list [aria-selected='true'] {
+  background: var(--muted);
+}
+.chat-message pre {
+  overflow-x: auto;
+  padding: 10px;
+  background: var(--muted);
+}
+.chat-message table {
+  border-collapse: collapse;
+  display: block;
+  overflow-x: auto;
+}
+.chat-message th,
+.chat-message td {
+  border: 1px solid var(--border);
+  padding: 6px;
+}
+.chat-message :is(p, ul, ol, pre, table) + :is(p, ul, ol, pre, table) {
+  margin-top: 12px;
+}
 .sidebar-foot {
   display: flex;
   align-items: center;

@@ -16,7 +16,27 @@ import {
   visibleWorkspace,
 } from '../src/workspace/tabs';
 import { splitLimits } from '../src/workspace/SplitWorkspace';
-import { readPanelPreferences, resolvePanels, PANEL_MIN } from '../src/workspace/layout';
+import {
+  readPanelPreferences,
+  resolvePanels,
+  PANEL_MIN,
+  panelsForSplit,
+} from '../src/workspace/layout';
+
+test('split entry hides and unpins panels while retaining widths for explicit reopening', () => {
+  const original = readPanelPreferences(null, 1440);
+  const preferences = panelsForSplit(original);
+  for (const side of ['left', 'right'] as const) {
+    assert.equal(preferences[side].open, false);
+    assert.equal(preferences[side].pinned, false);
+    assert.equal(preferences[side].width, original[side].width);
+  }
+  assert.equal(
+    resolvePanels({ ...preferences, right: { ...preferences.right, open: true } }, 1440).right
+      .docked,
+    false,
+  );
+});
 
 const saved: StudySession = sessionSchema.parse({
   id: '8a302f95-695a-4f56-8de6-3c159bd6b81d',

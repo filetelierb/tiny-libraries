@@ -79,10 +79,12 @@ import { StudyTabs, type StudyTab } from './workspace/StudyTabs';
 import { DirectoryTree, type TreeActions } from './workspace/DirectoryTree';
 import { SplitWorkspace } from './workspace/SplitWorkspace';
 import { UploadForm } from './workspace/UploadForm';
+import { ConversationPanel } from './workspace/ConversationPanel';
+import { sessionPreview } from '../shared/conversations';
+import { ActionMenu } from './design/ActionMenu';
 import { containsPath, directoryName, sourceState, type CatalogView } from '../shared/directories';
 
 const localGet = (key: string, fallback: string) => localStorage.getItem(key) || fallback;
-type ChatMessage = { role: 'user' | 'assistant'; content: string; tools?: string[] };
 type DirectoryDialog =
   | { action: 'create'; parentPath: string }
   | { action: 'rename'; directory: Directory }
@@ -104,6 +106,7 @@ export function App() {
     [tab, setTab] = useState<StudyTab>('chapters'),
     [query, setQuery] = useState(''),
     [catalogView, setCatalogView] = useState<CatalogView>('files');
+  const [renamingSession, setRenamingSession] = useState<StudySession | null>(null);
   const [directoryDialog, setDirectoryDialog] = useState<DirectoryDialog | null>(null);
   const [uploadDirectoryId, setUploadDirectoryId] = useState<string | null>(null);
   const [returnToSplit, setReturnToSplit] = useState(false);
@@ -149,6 +152,9 @@ export function App() {
   const activeResourceTab = resources.resourceTabs.find(
     (item) => item.id === resources.activeTabId,
   );
+  useEffect(() => {
+    if (activeResourceTab?.sources.length === 2) panels.enterSplit();
+  }, [session?.id, activeResourceTab?.id]);
   const primary = catalog?.files.find((file) => file.id === activeResourceTab?.sources[0]) || null;
   const split = catalog?.files.find((file) => file.id === activeResourceTab?.sources[1]) || null;
   const targetId =
@@ -270,7 +276,7 @@ export function App() {
   useEffect(() => {
     setLearning(null);
     setJob(null);
-    setEvidence(null);
+    setEvidence((previous) => (previous?.sourceId === active?.id ? previous : null));
     if (!active) return;
     let stopped = false;
     const load = async () => {
@@ -395,14 +401,20 @@ export function App() {
     citeFrom(active.id, segment);
   }
   function citeFrom(sourceId: string, segment: Segment) {
-    focusPane(sourceId);
+    if (!activeResourceTab?.sources.includes(sourceId)) {
+      const file = catalog?.files.find((item) => item.id === sourceId);
+      if (!file || sourceState(file, catalog?.directories || []) === 'trash') {
+        setError(t.evidenceUnavailable);
+        return;
+      }
+      openFile(file, 'retain');
+    } else focusPane(sourceId);
     setEvidence({ sourceId, segment });
     if (segment.start != null || segment.page != null) {
       setSeek({ sourceId, value: segment.start ?? segment.page ?? 0, nonce: Date.now() });
       setArtifact(false);
-    } else {
-      setTab('chapters');
     }
+    setArtifact(false);
   }
   if (!catalog || !session)
     return (
@@ -526,22 +538,39 @@ export function App() {
           </IconButton>
         </div>
         <div className="session-list">
-          {[...catalog.sessions].reverse().map((s) => (
-            <button
-              key={s.id}
-              className={`session-row ${s.id === session.id ? 'active' : ''}`}
-              onClick={() => selectSession(s)}
-            >
-              <BookOpen size={15} />
-              <span>
-                {s.name}
-                <small>
-                  {s.tabs.length} {t.files.toLowerCase()}
-                </small>
-              </span>
-              <ChevronRight size={13} />
-            </button>
-          ))}
+          {[...catalog.sessions]
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+            .map((item) => {
+              const preview = sessionPreview(item, catalog.files, catalog.conversations);
+              return (
+                <div
+                  className={`session-entry ${item.id === session.id ? 'active' : ''}`}
+                  key={item.id}
+                >
+                  <button
+                    className="session-row"
+                    aria-current={item.id === session.id ? 'true' : undefined}
+                    onClick={() => selectSession(item)}
+                  >
+                    <BookOpen size={15} />
+                    <span>
+                      <span>{item.name}</span>
+                      <small title={preview.source?.name}>
+                        {preview.source?.name || t.noOpenResources}
+                      </small>
+                      <small>
+                        {preview.count} {t.messages}
+                      </small>
+                    </span>
+                    <ChevronRight size={13} />
+                  </button>
+                  <ActionMenu
+                    label={`${t.sessionOptions}: ${item.name}`}
+                    actions={[{ label: t.renameSession, run: () => setRenamingSession(item) }]}
+                  />
+                </div>
+              );
+            })}
         </div>
         <div className="sidebar-foot">
           <span className={`connection-dot ${catalog.settings.configured ? 'connected' : ''}`} />
@@ -630,7 +659,7 @@ export function App() {
                 }}
               >
                 <MessageSquare size={18} />
-                {t.study}
+                {t.startConversation}
               </Button>
             </div>
           </Empty>
@@ -955,7 +984,19 @@ export function App() {
           aria-labelledby={`study-tab-${tab}`}
           className="study-content"
         >
-          {!active ? (
+          {tab === 'assistant' ? (
+            <ConversationPanel
+              key={session.id}
+              sessionId={session.id}
+              source={active}
+              catalog={catalog}
+              t={t}
+              onError={setError}
+              changed={refresh}
+              cite={citeFrom}
+              treeActions={treeActions}
+            />
+          ) : !active ? (
             <div className="small-empty">
               <BookOpen size={24} />
               <p>{t.noSelectionBody}</p>
@@ -1196,42 +1237,6 @@ export function App() {
                   showArtifact={() => setArtifact(active.id)}
                 />
               )}
-              {tab === 'assistant' && (
-                <Assistant
-                  key={`${session.id}-${active.id}`}
-                  source={active}
-                  session={session}
-                  t={t}
-                  learning={learning}
-                  onError={setError}
-                  update={(patch) => {
-                    const merge = (target: StudySession) => ({
-                      ...patch,
-                      ...(patch.conversations?.[active.id]
-                        ? {
-                            conversations: {
-                              ...target.conversations,
-                              [active.id]: patch.conversations[active.id],
-                            },
-                          }
-                        : {}),
-                    });
-                    if (sessionRef.current?.id === session.id)
-                      updateSession(merge(sessionRef.current));
-                    else
-                      void run(async () => {
-                        const latest = await api<Catalog>('/catalog');
-                        const target = latest.sessions.find((item) => item.id === session.id);
-                        if (target)
-                          await api(`/sessions/${target.id}`, 'PUT', {
-                            ...target,
-                            ...merge(target),
-                          });
-                        await refresh();
-                      });
-                  }}
-                />
-              )}
               {tab === 'miniapp' && <CodePanel t={t} onError={setError} />}
             </>
           )}
@@ -1340,6 +1345,29 @@ export function App() {
             </Button>
           </div>
         </Modal>
+      )}
+      {renamingSession && (
+        <TextModal
+          title={t.renameSession}
+          label={t.name}
+          initial={renamingSession.name}
+          t={t}
+          close={() => setRenamingSession(null)}
+          submit={async (name) => {
+            if (name.length > 160) throw new Error(t.sessionNameLimit);
+            await saveChain.current;
+            if (sessionRef.current?.id === renamingSession.id) {
+              updateSession({ name });
+              await saveChain.current;
+            } else {
+              const latest = await api<Catalog>('/catalog');
+              const target = latest.sessions.find((item) => item.id === renamingSession.id);
+              if (target) await api(`/sessions/${target.id}`, 'PUT', { ...target, name });
+            }
+            await refresh();
+            setRenamingSession(null);
+          }}
+        />
       )}
       {modal === 'session' && (
         <TextModal
@@ -1698,99 +1726,6 @@ function Review({
         </>
       )}
     </>
-  );
-}
-function Assistant({
-  source,
-  session,
-  t,
-  learning,
-  onError,
-  update,
-}: {
-  source: Source;
-  session: StudySession;
-  t: T;
-  learning: PublicLearning | null;
-  onError: (s: string) => void;
-  update: (value: Partial<StudySession>) => void;
-}) {
-  const storageKey = `tl:chat:${session.id}:${source.id}`;
-  const [messages, setMessages] = useState<ChatMessage[]>(() => {
-      if (session.conversations?.[source.id]) return session.conversations[source.id];
-      try {
-        return JSON.parse(localStorage.getItem(storageKey) || '[]');
-      } catch {
-        return [];
-      }
-    }),
-    [draft, setDraft] = useState(''),
-    [pending, setPending] = useState(false);
-  async function send() {
-    if (!draft.trim()) return;
-    const prompt = draft;
-    setDraft('');
-    setPending(true);
-    const next: ChatMessage[] = [...messages, { role: 'user', content: prompt }];
-    setMessages(next);
-    try {
-      const result = await api<{ text: string; tools: string[] }>(
-        `/assistant/${source.id}`,
-        'POST',
-        { prompt, history: messages.slice(-16).map(({ role, content }) => ({ role, content })) },
-      );
-      const complete: ChatMessage[] = [
-        ...next,
-        { role: 'assistant', content: result.text, tools: result.tools },
-      ];
-      setMessages(complete);
-      localStorage.setItem(storageKey, JSON.stringify(complete));
-      update({ conversations: { ...session.conversations, [source.id]: complete.slice(-100) } });
-    } catch (e) {
-      setMessages(messages);
-      setDraft(prompt);
-      onError(e instanceof Error ? e.message : t.error);
-    } finally {
-      setPending(false);
-    }
-  }
-  return (
-    <div className="assistant">
-      <p className="muted">{t.noChat}</p>
-      {messages.map((m, i) => (
-        <div className={`chat-message ${m.role}`} key={i}>
-          <p>{m.content}</p>
-          {m.tools?.length ? (
-            <small>
-              {t.toolsUsed}: {[...new Set(m.tools)].join(', ')}
-            </small>
-          ) : null}
-        </div>
-      ))}
-      {pending && (
-        <p className="muted">
-          <LoaderCircle className="spin" size={14} /> {t.thinking}
-        </p>
-      )}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          void send();
-        }}
-      >
-        <textarea
-          aria-label={t.assistant}
-          placeholder={t.chatPlaceholder}
-          disabled={!learning}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-        />
-        <Button variant="primary" disabled={!learning || pending || !draft.trim()} type="submit">
-          <ArrowUp size={15} />
-          {t.send}
-        </Button>
-      </form>
-    </div>
   );
 }
 function CodePanel({ t, onError }: { t: T; onError: (s: string) => void }) {
