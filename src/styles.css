@@ -1562,6 +1562,251 @@ body:has(.panel-resizer.resizing) {
   justify-content: center;
   padding: 30px;
 }
+.modal:has(.annotation-editor) {
+  width: min(900px, calc(100vw - 24px));
+}
+.annotation-editor > label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0;
+}
+.annotation-source,
+.annotation-card-source {
+  font-size: var(--font-size-small);
+  color: var(--muted-text);
+  overflow-wrap: anywhere;
+}
+.selected-quote,
+.annotation-card blockquote {
+  margin: 10px 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--primary);
+  color: var(--muted-text);
+  max-height: 140px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+.rich-toolbar,
+.sketch-tools,
+.table-tools,
+.annotation-scope,
+.annotation-filter,
+.annotation-card-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.rich-toolbar,
+.sketch-tools {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 5px;
+  background: var(--background);
+  margin: 8px 0;
+}
+.rich-toolbar select,
+.sketch-tools select {
+  width: auto;
+  max-width: 140px;
+  padding: 5px;
+  font-size: var(--font-size-control);
+}
+.rich-toolbar [aria-pressed='true'],
+.sketch-tools [aria-pressed='true'],
+.annotation-scope [aria-pressed='true'] {
+  background: var(--secondary);
+  color: var(--primary);
+}
+.annotation-body,
+.annotation-markdown {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  margin: 8px 0;
+  max-height: 50vh;
+  overflow: auto;
+}
+.annotation-body .tiptap {
+  min-height: 180px;
+  padding: 14px;
+  outline: none;
+  line-height: 1.65;
+}
+.annotation-body:focus-within {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.annotation-editor[aria-busy='true']
+  :is(.annotation-body, .sketch-editor, .rich-toolbar, .table-tools, .annotation-markdown) {
+  pointer-events: none;
+  opacity: 0.7;
+}
+.annotation-markdown {
+  font-family: var(--font-mono);
+  min-height: 240px;
+  width: 100%;
+}
+.annotation-body p,
+.rich-content p {
+  margin: 0 0 0.65em;
+}
+.annotation-body blockquote,
+.rich-content blockquote {
+  margin: 10px 0;
+  padding-left: 12px;
+  border-left: 3px solid var(--border);
+}
+.annotation-body pre,
+.rich-content pre {
+  overflow: auto;
+  padding: 10px;
+  background: var(--muted);
+  font-family: var(--font-mono);
+}
+.annotation-body :is(h1, h2, h3),
+.rich-content :is(h2, h3, h4) {
+  margin: 14px 0 8px;
+  line-height: 1.25;
+}
+.annotation-body :is(ul, ol),
+.rich-content :is(ul, ol) {
+  padding-left: 24px;
+}
+.annotation-body table,
+.rich-content table {
+  border-collapse: collapse;
+  width: 100%;
+  table-layout: fixed;
+  margin: 10px 0;
+}
+.annotation-body :is(th, td),
+.rich-content :is(th, td) {
+  border: 1px solid var(--border);
+  padding: 6px;
+  min-width: 50px;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.annotation-body th,
+.rich-content th {
+  background: var(--muted);
+  font-weight: 600;
+}
+.annotation-body .selectedCell {
+  background: var(--secondary);
+}
+.rich-table-scroll {
+  overflow: auto;
+}
+.annotation-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.annotation-scope {
+  margin-bottom: 12px;
+}
+.annotation-filter {
+  margin: 10px 0;
+}
+.annotation-filter > button:first-child {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.annotation-trash {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-small);
+  margin: 12px 0;
+}
+.annotation-trash input {
+  width: auto;
+}
+.annotation-card {
+  border-bottom: 1px solid var(--border);
+  padding: 16px 0;
+}
+.annotation-card > header {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.annotation-card > header small {
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--muted-text);
+}
+.annotation-card-title {
+  text-align: left;
+  font-weight: 600;
+  font-size: 17px;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.annotation-card p {
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.annotation-thumbnail {
+  display: block;
+  position: relative;
+  width: 100%;
+  margin: 10px 0;
+  max-height: 180px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.annotation-thumbnail img {
+  display: block;
+  width: 100%;
+  max-height: 180px;
+  object-fit: contain;
+}
+.annotation-card-actions {
+  margin-top: 10px;
+}
+.sketch-surface {
+  position: relative;
+  width: 100%;
+  border: 1px solid var(--border);
+  overflow: hidden;
+  background: #fff;
+}
+.sketch-surface > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  inset: 0;
+  user-select: none;
+}
+.sketch-surface > svg {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  inset: 0;
+  touch-action: none;
+  cursor: crosshair;
+}
+.annotation-capture > svg,
+.pdf-saved-markup {
+  pointer-events: none;
+}
+.pdf-saved-markup {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+}
 @media (prefers-reduced-motion: reduce) {
   .player-controls {
     transition: none;
@@ -2640,4 +2885,26 @@ body:has(.panel-resizer.resizing) {
   .tree-row .tree-menu-trigger {
     min-height: 40px;
   }
+}
+
+.annotation-rich-preview {
+  max-height: 240px;
+  overflow: hidden;
+}
+.annotation-rich-preview .rich-content {
+  font-size: var(--font-size-control);
+}
+.annotation-thumbnail .sketch-surface {
+  display: block;
+  width: 100%;
+}
+.table-tools {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.annotation-thumbnail .sketch-surface > img {
+  max-height: none;
+  object-fit: fill;
 }

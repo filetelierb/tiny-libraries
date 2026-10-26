@@ -42,12 +42,14 @@ export function ConversationPanel({
   changed,
   cite,
   treeActions,
+  annotate,
 }: {
   sessionId: string;
   source: Source | null;
   catalog: Catalog;
   t: T;
   treeActions: TreeActions;
+  annotate: (content: string, sourceIds: string[]) => void;
   onError: (message: string) => void;
   changed: () => Promise<unknown>;
   cite: (sourceId: string, segment: Segment) => void;
@@ -177,6 +179,7 @@ export function ConversationPanel({
           onError={onError}
           cite={cite}
           treeActions={treeActions}
+          annotate={annotate}
         />
       ) : (
         <div className="small-empty">
@@ -198,11 +201,13 @@ function ConversationThread({
   onError,
   cite,
   treeActions,
+  annotate,
 }: {
   conversation: Conversation;
   catalog: Catalog;
   t: T;
   treeActions: TreeActions;
+  annotate: (content: string, sourceIds: string[]) => void;
   receive: (conversation: Conversation) => Promise<void>;
   onError: (message: string) => void;
   cite: (sourceId: string, segment: Segment) => void;
@@ -405,6 +410,17 @@ function ConversationThread({
             >
               {citationMarkdown(message.content, message.sourceIds || conversation.sourceIds)}
             </Markdown>
+            {message.role === 'assistant' && (
+              <Button
+                variant="ghost"
+                onClick={() =>
+                  annotate(message.content, message.sourceIds || conversation.sourceIds)
+                }
+              >
+                <Pencil size={14} />
+                {t.saveAsAnnotation}
+              </Button>
+            )}
             {message.tools?.length ? (
               <small>
                 {t.toolsUsed}: {[...new Set(message.tools)].join(', ')}

@@ -11,6 +11,10 @@ import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import 'pdfjs-dist/web/pdf_viewer.css';
 import { ChevronLeft, ChevronRight, Minus, Plus, LoaderCircle } from 'lucide-react';
 import type { Source } from '../shared/domain';
+import type { Annotation, SourceLocation, DrawingStroke } from '../shared/annotations';
+import { listAnnotations } from './annotations/api';
+import { api } from './api';
+import { StrokeLayer } from './annotations/Sketch';
 import { boundedPage, pdfScale, readPdfZoom, type PdfZoom } from '../shared/pdf-reader';
 import { IconButton } from './design/components';
 import type { T } from './i18n';
@@ -24,8 +28,14 @@ export default function PdfViewer({
   position,
   onPosition,
   seek,
+  sessionId,
+  annotationTick,
+  onSelection,
 }: {
   source: Source;
+  sessionId: string;
+  annotationTick: number;
+  onSelection: (value: SourceLocation) => void;
   t: T;
   position: number;
   onPosition: (page: number) => void;
@@ -37,6 +47,31 @@ export default function PdfViewer({
     initialPage = useRef(Math.max(1, position || 1));
   positionCallback.current = onPosition;
   const storageKey = `tl:pdf-zoom:${source.id}:v${source.version}`;
+  const [markups, setMarkups] = useState<Annotation[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      const summaries = (await listAnnotations(sessionId, source.id)).filter(
+        (item) => !item.deleted && item.strokeCount && item.sourceVersion === source.version,
+      );
+      const values: Annotation[] = [];
+      for (let index = 0; index < summaries.length && !cancelled; index += 5)
+        values.push(
+          ...(await Promise.all(
+            summaries
+              .slice(index, index + 5)
+              .map((item) => api<Annotation>(`/annotations/${item.id}`)),
+          )),
+        );
+      if (!cancelled) setMarkups(values);
+    };
+    void load().catch(() => {});
+    const timer = setInterval(() => void load().catch(() => {}), 10000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [sessionId, source.id, source.version, annotationTick]);
   const [document, setDocument] = useState<PDFDocumentProxy | null>(null),
     [pages, setPages] = useState<Page[]>([]),
     [page, setPage] = useState(Math.max(1, position || 1)),
@@ -146,6 +181,23 @@ export default function PdfViewer({
       positionCallback.current(next);
     }
   };
+  const captureSelection = () => {
+    const selected = window.getSelection();
+    if (!selected || selected.isCollapsed) {
+      onSelection({ page });
+      return;
+    }
+    const anchor = selected.anchorNode?.parentElement?.closest<HTMLElement>('[data-pdf-page]');
+    if (
+      !anchor ||
+      !scroll.current?.contains(anchor) ||
+      !selected.focusNode ||
+      !scroll.current.contains(selected.focusNode)
+    )
+      return;
+    const quote = selected.toString().trim().slice(0, 8000);
+    if (quote) onSelection({ page: Number(anchor.dataset.pdfPage), quote });
+  };
   return (
     <div className="pdf-stage continuous-pdf">
       {error && (
@@ -159,6 +211,8 @@ export default function PdfViewer({
         aria-label={source.name}
         tabIndex={0}
         onScroll={trackPage}
+        onPointerUp={captureSelection}
+        onKeyUp={captureSelection}
       >
         {!loaded && !error && (
           <p role="status" className="pdf-loading">
@@ -175,6 +229,9 @@ export default function PdfViewer({
               scale={pdfScale(zoom, item, size)}
               scroll={scroll.current}
               t={t}
+              strokes={markups
+                .filter((markup) => markup.location.page === item.number)
+                .flatMap((markup) => markup.strokes)}
             />
           ))}
       </div>
@@ -262,8 +319,10 @@ function PdfPage({
   scale,
   scroll,
   t,
+  strokes,
 }: {
   document: PDFDocumentProxy;
+  strokes: DrawingStroke[];
   page: Page;
   scale: number;
   scroll: HTMLDivElement | null;
@@ -272,6 +331,7 @@ function PdfPage({
   const element = useRef<HTMLDivElement>(null),
     canvas = useRef<HTMLCanvasElement>(null),
     text = useRef<HTMLDivElement>(null);
+  const [rendered, setRendered] = useState(false);
   const [visible, setVisible] = useState(false),
     [error, setError] = useState(false);
   useEffect(() => {
@@ -289,6 +349,7 @@ function PdfPage({
       layer: TextLayer | undefined,
       loadedPage: PDFPageProxy | undefined;
     setError(false);
+    setRendered(false);
     const canvasElement = canvas.current,
       textElement = text.current;
     void document
@@ -316,6 +377,7 @@ function PdfPage({
           viewport,
         });
         await Promise.all([render.promise, layer.render()]);
+        if (!cancelled) setRendered(true);
       })
       .catch((error) => {
         if (!cancelled && error?.name !== 'RenderingCancelledException') setError(true);
@@ -334,6 +396,7 @@ function PdfPage({
       className="pdf-page"
       ref={element}
       data-pdf-page={page.number}
+      data-render-ready={rendered && visible}
       aria-label={`${t.page} ${page.number}`}
       style={
         {
@@ -347,6 +410,17 @@ function PdfPage({
     >
       <canvas ref={canvas} aria-hidden="true" />
       <div className="textLayer" ref={text} />
+      {strokes.length > 0 && (
+        <svg
+          className="pdf-saved-markup"
+          viewBox="0 0 1000 1000"
+          preserveAspectRatio="none"
+          role="img"
+          aria-label={t.savedDrawing}
+        >
+          <StrokeLayer strokes={strokes} />
+        </svg>
+      )}
       {error && (
         <p role="alert" className="form-error">
           {t.pdfPageError} {page.number}

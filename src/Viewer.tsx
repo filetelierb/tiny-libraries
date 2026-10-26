@@ -2,6 +2,7 @@ import { useEffect, useState, lazy, Suspense } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Source, PublicLearning, Bookmark } from '../shared/domain';
+import type { SourceLocation } from '../shared/annotations';
 import type { T } from './i18n';
 import { MediaPlayer } from './MediaPlayer';
 const PdfViewer = lazy(() => import('./PdfViewer'));
@@ -14,8 +15,14 @@ export function Viewer({
   onPosition,
   seek,
   bookmarks = [],
+  sessionId,
+  annotationTick,
+  onSelection,
 }: {
   source: Source;
+  sessionId: string;
+  annotationTick: number;
+  onSelection: (value: SourceLocation) => void;
   bookmarks?: Bookmark[];
   t: T;
   learning: PublicLearning | null;
@@ -58,6 +65,9 @@ export function Viewer({
           position={position}
           onPosition={onPosition}
           seek={seek}
+          sessionId={sessionId}
+          annotationTick={annotationTick}
+          onSelection={onSelection}
         />
       </Suspense>
     );

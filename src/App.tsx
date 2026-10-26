@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, lazy, Suspense, type CSSProperties } from 'react';
 import {
   BookOpen,
   PanelLeft,
@@ -34,6 +34,7 @@ import {
   Trash2,
   ArrowLeftRight,
   FolderOpen,
+  Pencil,
 } from 'lucide-react';
 import {
   type Catalog,
@@ -80,6 +81,11 @@ import { DirectoryTree, type TreeActions } from './workspace/DirectoryTree';
 import { SplitWorkspace } from './workspace/SplitWorkspace';
 import { UploadForm } from './workspace/UploadForm';
 import { ConversationPanel } from './workspace/ConversationPanel';
+import { AnnotationsPanel } from './annotations/AnnotationsPanel';
+import { captureSource } from './annotations/capture';
+import type { AnnotationRequest } from './annotations/AnnotationEditor';
+import type { SourceLocation } from '../shared/annotations';
+const AnnotationEditor = lazy(() => import('./annotations/AnnotationEditor'));
 import { sessionPreview } from '../shared/conversations';
 import { ActionMenu } from './design/ActionMenu';
 import { containsPath, directoryName, sourceState, type CatalogView } from '../shared/directories';
@@ -95,6 +101,11 @@ export function App() {
   const [catalog, setCatalog] = useState<Catalog | null>(null),
     [locale, setLocale] = useState<Locale>(() => localGet('tl:locale', 'en') as Locale),
     [session, setSession] = useState<StudySession | null>(null);
+  const [annotationRequest, setAnnotationRequest] = useState<AnnotationRequest | null>(null);
+  const [annotationTick, setAnnotationTick] = useState(0);
+  const [selection, setSelection] = useState<{ sourceId: string; location: SourceLocation } | null>(
+    null,
+  );
   const panels = usePanels();
   const left = panels.effective.left.open,
     right = panels.effective.right.open;
@@ -410,6 +421,49 @@ export function App() {
     restoreFile: (file) => void run(() => editFile(file, { trashed: false })),
   };
   const position = active ? session?.positions[active.id] || 0 : 0;
+  function resourceLocation(source: Source): SourceLocation {
+    if (selection?.sourceId === source.id) return selection.location;
+    const position = sessionRef.current?.positions[source.id] || 0;
+    return source.kind === 'pdf'
+      ? { page: Math.max(1, Math.round(position) || 1) }
+      : ['audio', 'video'].includes(source.kind)
+        ? { seconds: position }
+        : {};
+  }
+  async function beginAnnotation(
+    sourceId: string | null,
+    location: SourceLocation = {},
+    capture = false,
+    markdown?: string,
+    references?: string[],
+  ) {
+    const file = catalog?.files.find((file) => file.id === sourceId) || null;
+    if (sourceId && (!file || sourceState(file, catalog?.directories || []) === 'trash')) {
+      setError(t.sourceUnavailable);
+      return;
+    }
+    const image = capture && file ? await captureSource(file, location) : undefined;
+    if (capture && file && ['pdf', 'video', 'image'].includes(file.kind) && !image) {
+      setError(t.captureNotReady);
+      return;
+    }
+    setAnnotationRequest({
+      id: crypto.randomUUID(),
+      sourceId,
+      location,
+      ...(image ? { capture: image } : {}),
+      ...(markdown ? { markdown, origin: 'tutor' as const } : {}),
+      ...(references ? { references } : {}),
+    });
+  }
+  function navigateAnnotation(sourceId: string, location: SourceLocation) {
+    citeFrom(sourceId, {
+      id: 'annotation',
+      text: location.quote || '',
+      ...(location.page ? { page: location.page } : {}),
+      ...(location.seconds != null ? { start: location.seconds } : {}),
+    });
+  }
   function cite(segment: Segment) {
     if (!active) return;
     citeFrom(active.id, segment);
@@ -731,6 +785,14 @@ export function App() {
                     <StickyNote />
                   </IconButton>
                   <IconButton
+                    label={t.annotateResource}
+                    onClick={() =>
+                      void run(() => beginAnnotation(active.id, resourceLocation(active), true))
+                    }
+                  >
+                    <Pencil />
+                  </IconButton>
+                  <IconButton
                     label={t.askTutor}
                     onClick={() => {
                       setRight(true);
@@ -925,8 +987,19 @@ export function App() {
                           )}
                           t={t}
                           learning={material || null}
+                          sessionId={session.id}
+                          annotationTick={annotationTick}
+                          onSelection={(location) =>
+                            setSelection({ sourceId: source.id, location })
+                          }
                           position={session.positions[source.id] || 0}
                           onPosition={(value) => {
+                            if (source.kind === 'pdf')
+                              setSelection((current) =>
+                                current?.sourceId === source.id && current.location.page !== value
+                                  ? null
+                                  : current,
+                              );
                             if (sessionRef.current?.id === session.id)
                               updateSession({
                                 positions: { ...sessionRef.current.positions, [source.id]: value },
@@ -1012,6 +1085,35 @@ export function App() {
               changed={refresh}
               cite={citeFrom}
               treeActions={treeActions}
+              annotate={(content, ids) =>
+                void run(() =>
+                  beginAnnotation(ids.length === 1 ? ids[0] : null, {}, false, content, ids),
+                )
+              }
+            />
+          ) : tab === 'notes' ? (
+            <AnnotationsPanel
+              sessionId={session.id}
+              source={active}
+              catalog={catalog}
+              t={t}
+              tick={annotationTick}
+              actions={treeActions}
+              create={() =>
+                void run(() =>
+                  beginAnnotation(active?.id || null, active ? resourceLocation(active) : {}),
+                )
+              }
+              edit={(value) =>
+                setAnnotationRequest({
+                  id: value.id,
+                  sourceId: value.sourceId,
+                  location: value.location,
+                  initial: value,
+                })
+              }
+              navigate={navigateAnnotation}
+              onError={setError}
             />
           ) : !active ? (
             <div className="small-empty">
@@ -1119,15 +1221,6 @@ export function App() {
                     </span>
                   </button>
                 </>
-              )}
-              {tab === 'notes' && (
-                <Notes
-                  key={`${session.id}:${active.id}`}
-                  source={active}
-                  session={session}
-                  update={updateSession}
-                  t={t}
-                />
               )}
               {tab === 'bookmarks' && (
                 <>
@@ -1259,6 +1352,24 @@ export function App() {
           )}
         </div>
       </aside>
+      {annotationRequest && (
+        <Suspense fallback={<p role="status">{t.loadingAnnotations}</p>}>
+          <AnnotationEditor
+            key={annotationRequest.id}
+            request={annotationRequest}
+            sessionId={session.id}
+            source={catalog.files.find((file) => file.id === annotationRequest.sourceId) || null}
+            t={t}
+            close={() => setAnnotationRequest(null)}
+            saved={() => {
+              setAnnotationTick((value) => value + 1);
+              setAnnotationRequest(null);
+              setTab('notes');
+              setRight(true);
+            }}
+          />
+        </Suspense>
+      )}
       {modal === 'settings' && (
         <SettingsModal
           initial={catalog.settings}
@@ -1503,80 +1614,6 @@ function Citations({
         );
       })}
     </div>
-  );
-}
-function Notes({
-  source,
-  session,
-  update,
-  t,
-}: {
-  source: Source;
-  session: StudySession;
-  update: (v: Partial<StudySession>) => void;
-  t: T;
-}) {
-  const draftKey = `tl:note-draft:${session.id}:${source.id}`;
-  const [draft, setDraft] = useState(() => {
-    try {
-      return localStorage.getItem(draftKey) || '';
-    } catch {
-      return '';
-    }
-  });
-  useEffect(() => {
-    try {
-      if (draft) localStorage.setItem(draftKey, draft);
-      else localStorage.removeItem(draftKey);
-    } catch {}
-  }, [draftKey, draft]);
-  const notes = session.notes.filter((n) => n.sourceId === source.id);
-  return (
-    <>
-      <div className="section-label">{t.notes}</div>
-      <textarea
-        aria-label={t.newNote}
-        placeholder={t.notePlaceholder}
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-      />
-      <Button
-        variant="primary"
-        disabled={!draft.trim()}
-        onClick={() => {
-          update({
-            notes: [
-              ...session.notes,
-              {
-                id: crypto.randomUUID(),
-                sourceId: source.id,
-                text: draft.trim(),
-                createdAt: new Date().toISOString(),
-              },
-            ],
-          });
-          setDraft('');
-        }}
-      >
-        <Plus size={14} />
-        {t.addNote}
-      </Button>
-      {notes.map((note) => (
-        <section className="note-card" key={note.id}>
-          <div>
-            <small>{new Date(note.createdAt).toLocaleDateString()}</small>
-            <IconButton
-              label={t.remove}
-              onClick={() => update({ notes: session.notes.filter((n) => n.id !== note.id) })}
-            >
-              <X size={12} />
-            </IconButton>
-          </div>
-          <p>{note.text}</p>
-        </section>
-      ))}
-      {!notes.length && <p className="small-empty">{t.noNotes}</p>}
-    </>
   );
 }
 function Practice({
