@@ -22,12 +22,12 @@ This product must demonstrate a complete, verifiable multimodal workflow: chunk 
 
 ## Judging
 
-| Criterion | Weight | Evidence to prepare |
-| --- | --- | --- |
-| Impact | 30% | A real learner's fragmented-file problem and a clear completed task |
-| Meta AI tooling | 25% | Transcription, structured multimodal synthesis, bounded tools, evidence verification |
-| Technical execution | 20% | Durable job recovery, source/version integrity, tested calculations |
-| Demo | 25% | Working end-to-end product and clear three-minute video |
+| Criterion           | Weight | Evidence to prepare                                                                  |
+| ------------------- | ------ | ------------------------------------------------------------------------------------ |
+| Impact              | 30%    | A real learner's fragmented-file problem and a clear completed task                  |
+| Meta AI tooling     | 25%    | Transcription, structured multimodal synthesis, bounded tools, evidence verification |
+| Technical execution | 20%    | Durable job recovery, source/version integrity, tested calculations                  |
+| Demo                | 25%    | Working end-to-end product and clear three-minute video                              |
 
 Stage one is a theme/Meta-use pass/fail. Stage two scores 0–10; top five per track reach live finals using the same rubric. Judging: 5–8 November; closing: 9 November at 12:00 ET (18:00 Madrid). Community winner: 16 November.
 

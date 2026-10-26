@@ -4,8 +4,6 @@
 
 A warm ivory workspace, near-white paper surfaces, dark blue-gray text, deep teal actions and a restrained amber accent. The reading surface remains quiet; controls are compact and reveal supporting panels on demand. Media sits on a dark blue-green stage. No global header: the resource tab strip is the workspace's top edge.
 
-The visual requirements and palette predate implementation; they are not an independently novel hackathon contribution. The standalone component implementation and responsive behavior are tracked in commits.
-
 ## Tokens and primitives
 
 `src/design/tokens.css` is the source of truth. Use semantic colors, 4px spacing increments, 0.7rem base radius, thin borders, soft paper shadows, system sans-serif typography and monospaced locators. Bundle no remote fonts. Primary teal is reserved for actions, selection and links; amber identifies folders and highlights.

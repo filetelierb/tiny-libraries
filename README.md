@@ -6,6 +6,19 @@ A local, open-source workspace that turns your recordings and documents into a l
 
 English is the default interface language; Spanish is available in Settings. Files, sessions, and progress stay on your machine. AI processing sends selected material to Meta Model API. Bring your own Meta API key; add, replace, or remove it in Settings.
 
+## Run locally
+
+Install Node.js 22.13+, [celld](https://github.com/denoland/celld), and ffmpeg for audio/video. Then:
+
+```sh
+npm ci
+npm start
+```
+
+Open **http://127.0.0.1:9876**. The launcher starts the local runtime and media companion together. Stopping and starting preserves files and study data in `.celld/dev/` and `.local/`. See [local operation and backups](docs/local-operation.md) before moving or resetting data.
+
+Development remains private until the owner chooses to share the repository. Its MIT license describes the intended source distribution; it does not make private GitHub content publicly accessible.
+
 ## Project boundaries
 
 One library, saved study sessions, and a focused reading workspace. No course administration, institutional accounts, calendars, or cloud service subscription.

@@ -6,21 +6,21 @@ Import a recording and a companion document, study them side by side, navigate e
 
 ## Workspace inventory and decisions
 
-| Surface | Intended behavior | Standalone change |
-| --- | --- | --- |
-| Shell | Full-height library, collapsible file and study panels | Remove global header, breadcrumbs, dashboard and course navigation |
-| Catalog | Nested folders, normalized search, file-type icons, upload, rename | Local files with stable UUIDs; no institution-specific taxonomy |
-| Lifecycle | Archive/restore without losing notes, references or progress | Preserve identity; no permanent-delete action in initial UI |
-| Sessions | Create, name, resume, multiple saved sessions | Persist tabs, active file, split file, location and notes per session |
-| Tabs | Open, select, close, overflow, two resources side by side | Preserve selection across reload; recover when source is archived |
-| Media | Audio/video, seek, speed, captions, chapter navigation | Local range-serving and normalized chunked transcription |
-| Documents | PDF, text, Markdown, images | Local originals; page/section/image locators, clear unsupported-format errors |
-| Study tools | Notes, bookmarks, reviewed state, glossary | Explicit scope to selected files/session; no cross-course dependencies |
-| Chapters | Evidence-linked explanations and mini quizzes | Validate citation IDs and source version before publication |
-| Practice | Deterministic multiple choice, short-answer rubric, immutable attempts | Hide solutions until submission; show evidence limits in review |
-| Artifacts | Versioned comparisons, diagrams, signal explorer | Validated data specifications; no arbitrary script execution |
-| Assistant | Source-scoped explanation and tools, streamed progress | Meta model tool loop; chat supports the workflow |
-| Settings | Local credential setup, model choices, interface language | Meta key add/replace/remove; English and Spanish |
+| Surface     | Intended behavior                                                      | Standalone change                                                             |
+| ----------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Shell       | Full-height library, collapsible file and study panels                 | Remove global header, breadcrumbs, dashboard and course navigation            |
+| Catalog     | Nested folders, normalized search, file-type icons, upload, rename     | Local files with stable UUIDs; no institution-specific taxonomy               |
+| Lifecycle   | Archive/restore without losing notes, references or progress           | Preserve identity; no permanent-delete action in initial UI                   |
+| Sessions    | Create, name, resume, multiple saved sessions                          | Persist tabs, active file, split file, location and notes per session         |
+| Tabs        | Open, select, close, overflow, two resources side by side              | Preserve selection across reload; recover when source is archived             |
+| Media       | Audio/video, seek, speed, captions, chapter navigation                 | Local range-serving and normalized chunked transcription                      |
+| Documents   | PDF, text, Markdown, images                                            | Local originals; page/section/image locators, clear unsupported-format errors |
+| Study tools | Notes, bookmarks, reviewed state, glossary                             | Explicit scope to selected files/session; no cross-course dependencies        |
+| Chapters    | Evidence-linked explanations and mini quizzes                          | Validate citation IDs and source version before publication                   |
+| Practice    | Deterministic multiple choice, short-answer rubric, immutable attempts | Hide solutions until submission; show evidence limits in review               |
+| Artifacts   | Versioned comparisons, diagrams, signal explorer                       | Validated data specifications; no arbitrary script execution                  |
+| Assistant   | Source-scoped explanation and tools, streamed progress                 | Meta model tool loop; chat supports the workflow                              |
+| Settings    | Local credential setup, model choices, interface language              | Meta key add/replace/remove; English and Spanish                              |
 
 ## AI processing contract
 
