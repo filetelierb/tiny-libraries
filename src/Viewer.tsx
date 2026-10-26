@@ -78,7 +78,29 @@ export function Viewer({
       </div>
     );
   return (
-    <article className="document-reader">
+    <article
+      className="document-reader"
+      onPointerUp={(event) => {
+        const selection = window.getSelection();
+        if (
+          selection?.anchorNode &&
+          selection.focusNode &&
+          event.currentTarget.contains(selection.anchorNode) &&
+          event.currentTarget.contains(selection.focusNode)
+        )
+          onSelection({ quote: selection.toString().trim().slice(0, 8000) });
+      }}
+      onKeyUp={(event) => {
+        const selection = window.getSelection();
+        if (
+          selection?.anchorNode &&
+          selection.focusNode &&
+          event.currentTarget.contains(selection.anchorNode) &&
+          event.currentTarget.contains(selection.focusNode)
+        )
+          onSelection({ quote: selection.toString().trim().slice(0, 8000) });
+      }}
+    >
       {source.kind === 'markdown' ? (
         <Markdown remarkPlugins={[remarkGfm]}>{text}</Markdown>
       ) : (

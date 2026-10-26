@@ -11,7 +11,12 @@ import {
   X,
   Paperclip,
 } from 'lucide-react';
-import type { Conversation } from '../../shared/conversations';
+import {
+  questionContextSchema,
+  type Conversation,
+  type QuestionContext,
+  type ChatMessage,
+} from '../../shared/conversations';
 import type { Catalog, Source, Segment, PublicLearning } from '../../shared/domain';
 import { fold } from '../../shared/domain';
 import { sourceState } from '../../shared/directories';
@@ -43,13 +48,17 @@ export function ConversationPanel({
   cite,
   treeActions,
   annotate,
+  questionRequest,
+  consumeQuestion,
 }: {
   sessionId: string;
   source: Source | null;
   catalog: Catalog;
   t: T;
   treeActions: TreeActions;
-  annotate: (content: string, sourceIds: string[]) => void;
+  annotate: (content: string, sourceIds: string[], context?: QuestionContext) => void;
+  questionRequest: { id: string; context: QuestionContext } | null;
+  consumeQuestion: () => void;
   onError: (message: string) => void;
   changed: () => Promise<unknown>;
   cite: (sourceId: string, segment: Segment) => void;
@@ -99,7 +108,7 @@ export function ConversationPanel({
     try {
       const created = await api<Conversation>(`/sessions/${sessionId}/conversations`, 'POST', {
         name: `${t.conversation} ${threads.length + 1}`,
-        sourceIds: source ? [source.id] : [],
+        sourceIds: questionRequest ? [] : source ? [source.id] : [],
       });
       await receive(created);
       if (alive.current) {
@@ -112,6 +121,15 @@ export function ConversationPanel({
       if (alive.current) setCreating(false);
     }
   };
+  const handledRequest = useRef('');
+  useEffect(() => {
+    if (!questionRequest || loading) return;
+    setHistory(false);
+    if (!current && !creating && handledRequest.current !== questionRequest.id) {
+      handledRequest.current = questionRequest.id;
+      void create();
+    }
+  }, [questionRequest?.id, loading, current?.id, creating]);
   return (
     <div className="conversation-panel">
       <div className="conversation-heading">
@@ -180,6 +198,8 @@ export function ConversationPanel({
           cite={cite}
           treeActions={treeActions}
           annotate={annotate}
+          questionRequest={questionRequest}
+          consumeQuestion={consumeQuestion}
         />
       ) : (
         <div className="small-empty">
@@ -202,17 +222,44 @@ function ConversationThread({
   cite,
   treeActions,
   annotate,
+  questionRequest,
+  consumeQuestion,
 }: {
   conversation: Conversation;
   catalog: Catalog;
   t: T;
   treeActions: TreeActions;
-  annotate: (content: string, sourceIds: string[]) => void;
+  annotate: (content: string, sourceIds: string[], context?: QuestionContext) => void;
+  questionRequest: { id: string; context: QuestionContext } | null;
+  consumeQuestion: () => void;
   receive: (conversation: Conversation) => Promise<void>;
   onError: (message: string) => void;
   cite: (sourceId: string, segment: Segment) => void;
 }) {
   const draftKey = `tl:conversation-draft:${conversation.id}`;
+  const contextKey = `tl:question-context:${conversation.id}`;
+  const [context, setContext] = useState<QuestionContext | null>(() => {
+    try {
+      const value = questionContextSchema.safeParse(JSON.parse(stored(contextKey) || 'null'));
+      return value.success ? value.data : null;
+    } catch {
+      return null;
+    }
+  });
+  const contextRef = useRef(context),
+    composer = useRef<HTMLTextAreaElement>(null);
+  contextRef.current = context;
+  const changeContext = (value: QuestionContext | null) => {
+    contextRef.current = value;
+    setContext(value);
+    store(contextKey, value ? JSON.stringify(value) : '');
+  };
+  useEffect(() => {
+    if (!questionRequest) return;
+    changeContext(questionRequest.context);
+    consumeQuestion();
+    composer.current?.focus();
+  }, [questionRequest?.id]);
   const [draft, setDraft] = useState(() => stored(draftKey)),
     [pending, setPending] = useState(false),
     [running, setRunning] = useState(false),
@@ -278,7 +325,16 @@ function ConversationThread({
       return false;
     }
   };
-  const resolve = async (sourceId: string, segmentId: string) => {
+  const resolve = async (sourceId: string, segmentId: string, question?: QuestionContext) => {
+    if (question?.sourceId === sourceId && segmentId === 'selected-passage') {
+      cite(sourceId, {
+        id: segmentId,
+        text: question.location.quote || '',
+        ...(question.location.page ? { page: question.location.page } : {}),
+        ...(question.location.seconds != null ? { start: question.location.seconds } : {}),
+      });
+      return;
+    }
     try {
       const learning = await api<PublicLearning | null>(`/learning/${sourceId}`);
       const segment = learning?.segments.find((item) => item.id === segmentId);
@@ -308,17 +364,28 @@ function ConversationThread({
         ? `[${segmentId}](#evidence/${sourceId}/${encodeURIComponent(segmentId)})`
         : text;
     });
+  const contextFor = (message: (typeof conversation.messages)[number]) =>
+    message.context ||
+    (message.requestId
+      ? conversation.messages.find(
+          (item) => item.role === 'user' && item.requestId === message.requestId,
+        )?.context
+      : undefined);
   async function send() {
-    const text = draftRef.current.trim();
+    const text = draftRef.current.trim(),
+      question = contextRef.current || undefined;
+    const fingerprint = JSON.stringify({ prompt: text, context: question });
     if (!text || pending || running) return;
     const retryKey = `tl:conversation-request:${conversation.id}`;
-    let previous: { prompt?: string; requestId?: string } = {};
+    let previous: { prompt?: string; requestId?: string; fingerprint?: string } = {};
     try {
       previous = JSON.parse(stored(retryKey) || '{}');
     } catch {}
     const requestId =
-      previous.prompt === text && previous.requestId ? previous.requestId : crypto.randomUUID();
-    store(retryKey, JSON.stringify({ prompt: text, requestId }));
+      previous.fingerprint === fingerprint && previous.requestId
+        ? previous.requestId
+        : crypto.randomUUID();
+    store(retryKey, JSON.stringify({ prompt: text, context: question, fingerprint, requestId }));
     setPending(true);
     setPrompt(text);
     changeDraft('');
@@ -326,12 +393,18 @@ function ConversationThread({
       const next = await api<Conversation>(`/conversations/${conversation.id}/turns`, 'POST', {
         prompt: text,
         requestId,
+        ...(question ? { context: question } : {}),
       });
       await receive(next);
       store(retryKey, '');
+      if (JSON.stringify(contextRef.current || undefined) === JSON.stringify(question))
+        changeContext(null);
     } catch (error) {
       // Do not overwrite a new draft typed while this reply was running.
-      if (!stored(draftKey)) {
+      if (
+        !stored(draftKey) &&
+        JSON.stringify(contextRef.current || undefined) === JSON.stringify(question)
+      ) {
         store(draftKey, text);
         if (alive.current) setDraft(text);
       }
@@ -380,7 +453,11 @@ function ConversationThread({
         })}
       </div>
       <p className="muted">
-        {conversation.sourceIds.length ? t.referencesNotice : t.generalTutorNotice}
+        {conversation.sourceIds.length
+          ? t.referencesNotice
+          : context
+            ? t.questionContextNotice
+            : t.generalTutorNotice}
       </p>
       <div className="conversation-messages" aria-live="polite" aria-relevant="additions text">
         {conversation.messages.map((message, index) => (
@@ -388,6 +465,25 @@ function ConversationThread({
             className={`chat-message ${message.role}`}
             key={`${message.requestId || 'history'}-${index}`}
           >
+            {message.role === 'user' && message.context && (
+              <div className="message-question-context">
+                <button
+                  onClick={() =>
+                    void resolve(message.context!.sourceId, 'selected-passage', message.context)
+                  }
+                >
+                  {message.context.sourceName}
+                  {message.context.location.page
+                    ? ` · ${t.page} ${message.context.location.page}`
+                    : message.context.location.seconds != null
+                      ? ` · ${Math.floor(message.context.location.seconds / 60)}:${String(Math.floor(message.context.location.seconds % 60)).padStart(2, '0')}`
+                      : ''}
+                </button>
+                {message.context.location.quote && (
+                  <blockquote>{message.context.location.quote}</blockquote>
+                )}
+              </div>
+            )}
             <Markdown
               remarkPlugins={[remarkGfm]}
               components={{
@@ -396,7 +492,9 @@ function ConversationThread({
                   return match ? (
                     <button
                       className="evidence-link"
-                      onClick={() => void resolve(match[1], decodeURIComponent(match[2]))}
+                      onClick={() =>
+                        void resolve(match[1], decodeURIComponent(match[2]), contextFor(message))
+                      }
                     >
                       {children}
                     </button>
@@ -414,7 +512,11 @@ function ConversationThread({
               <Button
                 variant="ghost"
                 onClick={() =>
-                  annotate(message.content, message.sourceIds || conversation.sourceIds)
+                  annotate(
+                    message.content,
+                    message.sourceIds || conversation.sourceIds,
+                    contextFor(message),
+                  )
                 }
               >
                 <Pencil size={14} />
@@ -450,7 +552,28 @@ function ConversationThread({
           void send();
         }}
       >
+        {context && (
+          <div className="question-context" aria-label={t.questionContext}>
+            <div>
+              <strong>{t.questionContext}</strong>
+              <IconButton label={t.removeQuestionContext} onClick={() => changeContext(null)}>
+                <X />
+              </IconButton>
+            </div>
+            <span>
+              {context.sourceName}
+              {context.location.page
+                ? ` · ${t.page} ${context.location.page}`
+                : context.location.seconds != null
+                  ? ` · ${Math.floor(context.location.seconds / 60)}:${String(Math.floor(context.location.seconds % 60)).padStart(2, '0')}`
+                  : ''}
+            </span>
+            {context.location.quote && <blockquote>{context.location.quote}</blockquote>}
+            <small>{t.questionContextNotice}</small>
+          </div>
+        )}
         <textarea
+          ref={composer}
           aria-label={t.assistant}
           placeholder={t.chatPlaceholder}
           maxLength={8000}

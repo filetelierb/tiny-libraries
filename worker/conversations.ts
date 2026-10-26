@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   conversationSchema,
+  questionContextSchema,
   migrateConversations,
   type Conversation,
 } from '../shared/conversations';
@@ -123,7 +124,11 @@ export async function conversationRoute({
   }
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
   const input = z
-    .object({ prompt: z.string().trim().min(1).max(8000), requestId: z.string().uuid() })
+    .object({
+      prompt: z.string().trim().min(1).max(8000),
+      requestId: z.string().uuid(),
+      context: questionContextSchema.optional(),
+    })
     .parse(await body());
   const runKey = `conversation-run:${conversation.id}`;
   const reservation = await storage.transaction(async (transaction) => {
@@ -156,6 +161,13 @@ export async function conversationRoute({
       409,
     );
   try {
+    if (new TextEncoder().encode(JSON.stringify(reservation.current)).length > 80000)
+      return json(
+        {
+          error: 'This conversation is full. Start a new conversation to keep this history intact.',
+        },
+        409,
+      );
     const apiKey = await storage.get<string>('apiKey');
     if (!apiKey) return json({ error: 'Add a Meta API key in Settings' }, 409);
     const directories = [...(await storage.list<Directory>({ prefix: 'directory:' })).values()];
@@ -165,12 +177,50 @@ export async function conversationRoute({
       if (!source || sourceState(source, directories) === 'trash')
         return json({ error: 'Restore or remove a deleted reference before sending' }, 409);
       const learning = await storage.get<Learning>(`learning:${id}`);
+      if (
+        (!learning || learning.sourceVersion !== source.version) &&
+        input.context?.sourceId === id &&
+        input.context.location.quote
+      )
+        continue;
       if (!learning || learning.sourceVersion !== source.version)
         return json({ error: `Prepare the reference first: ${source.name}` }, 409);
       materials.push(learning);
     }
+    let context = input.context;
+    const sourceIds = [...reservation.current.sourceIds];
+    if (context) {
+      const source = await storage.get<Source>(`file:${context.sourceId}`);
+      if (
+        !source ||
+        sourceState(source, directories) === 'trash' ||
+        source.version !== context.sourceVersion
+      )
+        return json(
+          { error: 'The question source changed or is unavailable. Select the passage again.' },
+          409,
+        );
+      context = { ...context, sourceName: source.name };
+      if (!sourceIds.includes(source.id)) {
+        if (sourceIds.length >= 20)
+          return json(
+            { error: 'Remove a reference before attaching another question source (20 maximum)' },
+            409,
+          );
+        sourceIds.push(source.id);
+      }
+      if (!materials.some((material) => material.sourceId === source.id)) {
+        const learning = await storage.get<Learning>(`learning:${source.id}`);
+        if (learning?.sourceVersion === source.version) materials.push(learning);
+        else if (!context.location.quote)
+          return json(
+            { error: `Select a passage or prepare this source first: ${source.name}` },
+            409,
+          );
+      }
+    }
     const attempts = [...(await storage.list<Attempt>({ prefix: 'attempt:' })).values()].filter(
-      (attempt) => reservation.current.sourceIds.includes(attempt.sourceId),
+      (attempt) => sourceIds.includes(attempt.sourceId),
     );
     const result = await runAssistant(
       apiKey,
@@ -180,6 +230,7 @@ export async function conversationRoute({
       materials,
       reviewSummary(attempts),
       bridgedFetch(env),
+      context,
     );
     const completed = await storage.transaction(async (transaction) => {
       const current = (await transaction.get<Conversation>(key))!;
@@ -193,21 +244,31 @@ export async function conversationRoute({
             role: 'user',
             content: input.prompt,
             requestId: input.requestId,
-            sourceIds: reservation.current.sourceIds,
+            sourceIds,
+            ...(context ? { context } : {}),
           },
           {
             role: 'assistant',
             content: result.text,
             tools: result.tools,
             requestId: input.requestId,
-            sourceIds: reservation.current.sourceIds,
+            sourceIds,
           },
         ],
       });
+      if (new TextEncoder().encode(JSON.stringify(next)).length > 120000) return null;
       await transaction.put(key, next);
       return next;
     });
-    return json(completed);
+    return completed
+      ? json(completed)
+      : json(
+          {
+            error:
+              'This reply is too large for the conversation. Start a new conversation or ask a shorter question; existing history is intact.',
+          },
+          409,
+        );
   } finally {
     await storage.transaction(async (transaction) => {
       const pending = await transaction.get<{ requestId: string }>(runKey);

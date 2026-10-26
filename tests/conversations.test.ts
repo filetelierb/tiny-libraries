@@ -1,7 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { sessionSchema, type Learning } from '../shared/domain';
-import { conversationSchema, migrateConversations, sessionPreview } from '../shared/conversations';
+import {
+  conversationSchema,
+  migrateConversations,
+  sessionPreview,
+  questionContextSchema,
+} from '../shared/conversations';
 import { runAssistant } from '../worker/meta';
 
 const session = sessionSchema.parse({
@@ -127,4 +132,91 @@ test('source-free tutor has no access to library segments', async () => {
     },
   );
   assert.equal(result.text, 'General study help');
+});
+
+test('selected passage context retains its source identity and bounds without changing persistent references', () => {
+  const [conversation] = migrateConversations(session);
+  const context = questionContextSchema.parse({
+    sourceId: '31c90f6e-93ee-4018-87ab-03964476cb22',
+    sourceVersion: 2,
+    sourceName: 'Reading.pdf',
+    location: { page: 7, quote: 'Selected passage' },
+  });
+  const value = conversationSchema.parse({
+    ...conversation,
+    messages: [...conversation.messages, { role: 'user', content: 'Explain this', context }],
+  });
+  assert.deepEqual(value.sourceIds, conversation.sourceIds);
+  assert.deepEqual(value.messages.at(-1)?.context, context);
+  assert.equal(
+    questionContextSchema.safeParse({ ...context, location: { quote: 'x'.repeat(8001) } }).success,
+    false,
+  );
+  assert.equal(questionContextSchema.safeParse({ ...context, sourceVersion: 0 }).success, false);
+});
+
+test('one-question passage is readable through a scoped tool while other file evidence remains unavailable', async () => {
+  const context = questionContextSchema.parse({
+    sourceId: '31c90f6e-93ee-4018-87ab-03964476cb22',
+    sourceVersion: 1,
+    sourceName: 'Reading.pdf',
+    location: { page: 2, quote: 'An 8 Hz signal requires more than 16 samples per second.' },
+  });
+  let calls = 0;
+  const result = await runAssistant(
+    'placeholder',
+    'model',
+    'Explain the limit',
+    [{ role: 'user', content: 'Earlier question', context }],
+    [],
+    { count: 0, correct: 0, percent: 0, needsPractice: [], evidence: 'Recorded attempts only' },
+    async (_url, options) => {
+      const body = JSON.parse(options.body as string);
+      if (++calls === 1) {
+        assert.match(
+          body.messages[0].content,
+          /31c90f6e-93ee-4018-87ab-03964476cb22:selected-passage/,
+        );
+        assert.match(body.messages.at(-1).content, /Reading.pdf/);
+        assert.match(body.messages[1].content, /Earlier question/);
+        assert.deepEqual(Object.keys(body.messages[1]).sort(), ['content', 'role']);
+        return Response.json({
+          choices: [
+            {
+              message: {
+                tool_calls: [
+                  {
+                    id: 'call',
+                    type: 'function',
+                    function: {
+                      name: 'read_segments',
+                      arguments: JSON.stringify({
+                        ids: [`${context.sourceId}:selected-passage`, 'another-file:section-1'],
+                      }),
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        });
+      }
+      const evidence = JSON.parse(
+        body.messages.find((item: { role: string }) => item.role === 'tool').content,
+      );
+      assert.equal(evidence.length, 1);
+      assert.equal(evidence[0].text, context.location.quote);
+      assert.equal(evidence[0].page, 2);
+      return Response.json({
+        choices: [
+          {
+            message: { content: `The limit is above 16 Hz [${context.sourceId}:selected-passage]` },
+          },
+        ],
+      });
+    },
+    context,
+  );
+  assert.match(result.text, /above 16 Hz/);
+  assert.deepEqual(result.tools, ['read_segments']);
 });

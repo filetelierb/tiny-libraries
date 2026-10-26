@@ -71,7 +71,7 @@ The smoke test creates a small authored fixture and a verification session. It c
 
 Use **Start conversation** without opening a file for general study help. Inside a session, the history button lists conversations; **+** creates another without changing resource tabs. Each conversation has its own name, messages, references and unsent draft. Use a session row’s menu to rename the session. Session previews show the resource and message count.
 
-**Persistent references** controls which prepared files the tutor can access. Add/remove files through the shared library picker or type **@** to mention a file. Changing resource tabs does not change references. Requests use the reference selection captured when sent, so edits made while a reply runs affect the next request. Source citations open the relevant file and quoted evidence. A conversation without references cannot read library files.
+**Persistent references** controls which prepared files the tutor can access. Add/remove files through the shared library picker or type **@** to mention a file. Changing resource tabs does not change references. Requests use the reference selection captured when sent, so edits made while a reply runs affect the next request. Source citations open the relevant file and quoted evidence. A conversation without references can use a passage explicitly attached to its current question; otherwise it has no source-reading tools available.
 
 Messages and references live in celld. Drafts and the selected conversation live in browser storage for the current origin. Switching conversations or sessions, reloading the browser, and stopping/restarting the app retain them in that profile. Completed request IDs return their recorded reply on retry. Requests interrupted before completion may need an explicit retry; no exactly-once provider-charge guarantee is made.
 
@@ -88,3 +88,13 @@ Video controls hide after three seconds of inactivity during playback. Pointer m
 PDFs open in a continuous page stack with selectable text. The bottom toolbar shows the actual page total and bounds page navigation. Choose **Fit width**, **Fit page**, or 25–300% zoom. Zoom preferences belong to the document; the selected page belongs to the study session. Resizing the reader retains the selected page.
 
 The PDF worker, fonts and decoders are bundled locally. Opening a PDF needs no Meta key or remote viewer. The original remains available through Download.
+
+## Annotations and selected passages
+
+Use **Annotate resource** to write a formatted note and draw on a local PDF-page, video-frame or image capture. The editor supports Markdown, headings, emphasis, lists, links, code and tables. Pen/highlighter strokes, erasing, undo and clear remain editable after saving. PDF drawings appear over their saved page. Captures and originals are separate local objects.
+
+Annotations belong to a study session and keep their source identity, page/time and selected quote. **Current resource** and **All resources** filter saved annotations in that session; the resource filter uses the library tree. Read, edit, jump to source, or move an annotation to Trash and restore it. Revision checks reject stale edits from another window. Existing text notes remain available through automatic migration.
+
+Select PDF or document text and choose **Ask tutor** to attach a removable **For this question** context. Its source and quote stay fixed if you change the reader's active tab. A selected passage can be discussed without preparing the entire file. Without a quote, prepare the source first. Persistent conversation references remain unchanged. The exchange records its source/page/time and citations; **Save as annotation** opens an editable note with that context.
+
+Unsent text and question context stay in browser storage. Saved annotations, captures and completed exchanges stay in celld across restart. Large conversations ask you to start another conversation before exceeding a local storage record's size; existing history remains intact.

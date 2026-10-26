@@ -72,3 +72,9 @@ Record actual implementation and validation as it lands. Commit dates remain act
 
 - Fixed a shutdown race that could leave the local celld node listening after its development supervisor exited. The launcher now sends the supervisor its graceful interrupt, isolates its process group, and keeps the companion available until the supervisor finishes. Repeated shutdown signals are idempotent.
 - Verified Ctrl+C exits cleanly and releases both local ports. The following launch retained all eight original hashes, session/directory metadata, conversations and configured credential status.
+
+### Source annotations and question context
+
+Added independent revisioned annotations, structured rich text, local PNG captures, editable drawing strokes and PDF overlays. Existing text notes migrate with stable identities. Current/all-resource filters, source jumps, tutor-response conversion and recoverable annotation deletion are available in the study panel.
+
+Verification: 54 tests, TypeScript and production build pass. Browser checks covered rich Markdown/table/list/link editing, saved page and video-frame captures, drawing undo, source filtering and Trash/restore. A clean runtime stop/start retained nine annotation records, three PNG hashes and eight original-file hashes. Real Meta calls answered selected PDF passages with scoped citations, both alongside persistent references and with none; the reference lists stayed unchanged. API checks rejected stale source context and preserved idempotent completed request replay. Advanced drawing/attachment tools and broader accessibility checks remain in progress.

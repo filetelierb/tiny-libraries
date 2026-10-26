@@ -92,6 +92,10 @@ const en = {
   selectedText: 'Selected text',
   captureNotReady: 'Wait for the page or frame to finish rendering, then try again.',
   saveAsAnnotation: 'Save as annotation',
+  questionContext: 'For this question',
+  removeQuestionContext: 'Remove question context',
+  questionContextNotice:
+    'Included for this question only. Persistent references stay as listed above.',
   conversation: 'Conversation',
   mentionSource: 'Mention a library file',
   messages: 'messages',
@@ -108,7 +112,7 @@ const en = {
   removeReference: 'Remove reference',
   missingReference: 'Unavailable reference',
   referencesNotice:
-    'Only these references are available to the tutor. Changing open tabs does not change them. Prepare a file before asking about it.',
+    'These references stay available across questions. Changing open tabs does not change them. Prepare each reference before asking about it.',
   generalTutorNotice:
     'No library references are attached. You can ask general study questions or attach prepared files.',
   referenceLimit: 'A conversation can use up to 20 references.',
@@ -420,6 +424,10 @@ const es: Dictionary = {
   captureNotReady:
     'Espera a que la página o el fotograma termine de cargarse e inténtalo de nuevo.',
   saveAsAnnotation: 'Guardar como anotación',
+  questionContext: 'Para esta pregunta',
+  removeQuestionContext: 'Quitar contexto de la pregunta',
+  questionContextNotice:
+    'Se incluye solo en esta pregunta. Las referencias permanentes se mantienen como se muestran arriba.',
   conversation: 'Conversación',
   mentionSource: 'Mencionar un archivo de la biblioteca',
   messages: 'mensajes',
@@ -436,7 +444,7 @@ const es: Dictionary = {
   removeReference: 'Quitar referencia',
   missingReference: 'Referencia no disponible',
   referencesNotice:
-    'El tutor solo puede consultar estas referencias. Cambiar de pestaña no las modifica. Prepara cada archivo antes de preguntar sobre él.',
+    'Estas referencias están disponibles en todas las preguntas. Cambiar de pestaña no las modifica. Prepara cada referencia antes de preguntar sobre ella.',
   generalTutorNotice:
     'No hay referencias adjuntas. Puedes hacer preguntas generales de estudio o adjuntar archivos preparados.',
   referenceLimit: 'Cada conversación admite hasta 20 referencias.',

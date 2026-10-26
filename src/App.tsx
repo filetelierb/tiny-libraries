@@ -86,7 +86,7 @@ import { captureSource } from './annotations/capture';
 import type { AnnotationRequest } from './annotations/AnnotationEditor';
 import type { SourceLocation } from '../shared/annotations';
 const AnnotationEditor = lazy(() => import('./annotations/AnnotationEditor'));
-import { sessionPreview } from '../shared/conversations';
+import { sessionPreview, type QuestionContext } from '../shared/conversations';
 import { ActionMenu } from './design/ActionMenu';
 import { containsPath, directoryName, sourceState, type CatalogView } from '../shared/directories';
 
@@ -103,6 +103,10 @@ export function App() {
     [session, setSession] = useState<StudySession | null>(null);
   const [annotationRequest, setAnnotationRequest] = useState<AnnotationRequest | null>(null);
   const [annotationTick, setAnnotationTick] = useState(0);
+  const [questionRequest, setQuestionRequest] = useState<{
+    id: string;
+    context: QuestionContext;
+  } | null>(null);
   const [selection, setSelection] = useState<{ sourceId: string; location: SourceLocation } | null>(
     null,
   );
@@ -227,6 +231,8 @@ export function App() {
       .catch((e) => setError(e.message));
   }
   function selectSession(value: StudySession) {
+    setQuestionRequest(null);
+    setSelection(null);
     if (sessionRef.current && value.id !== sessionRef.current.id) {
       const positions = { ...sessionRef.current.positions };
       for (const pane of document.querySelectorAll<HTMLElement>('[data-source-id]')) {
@@ -429,6 +435,19 @@ export function App() {
       : ['audio', 'video'].includes(source.kind)
         ? { seconds: position }
         : {};
+  }
+  function askAbout(source: Source) {
+    setQuestionRequest({
+      id: crypto.randomUUID(),
+      context: {
+        sourceId: source.id,
+        sourceVersion: source.version,
+        sourceName: source.name,
+        location: resourceLocation(source),
+      },
+    });
+    setRight(true);
+    setTab('assistant');
   }
   async function beginAnnotation(
     sourceId: string | null,
@@ -792,13 +811,7 @@ export function App() {
                   >
                     <Pencil />
                   </IconButton>
-                  <IconButton
-                    label={t.askTutor}
-                    onClick={() => {
-                      setRight(true);
-                      setTab('assistant');
-                    }}
-                  >
+                  <IconButton label={t.askTutor} onClick={() => askAbout(active)}>
                     <MessageSquare />
                   </IconButton>
                   <IconButton label={split ? t.replaceResource : t.split} onClick={showSplitPicker}>
@@ -1085,14 +1098,31 @@ export function App() {
               changed={refresh}
               cite={citeFrom}
               treeActions={treeActions}
-              annotate={(content, ids) =>
+              questionRequest={questionRequest}
+              consumeQuestion={() => setQuestionRequest(null)}
+              annotate={(content, ids, context) => {
+                if (
+                  context &&
+                  catalog.files.find((file) => file.id === context.sourceId)?.version !==
+                    context.sourceVersion
+                ) {
+                  setError(t.sourceUnavailable);
+                  return;
+                }
                 void run(() =>
-                  beginAnnotation(ids.length === 1 ? ids[0] : null, {}, false, content, ids),
-                )
-              }
+                  beginAnnotation(
+                    context?.sourceId || (ids.length === 1 ? ids[0] : null),
+                    context?.location || {},
+                    false,
+                    content,
+                    ids,
+                  ),
+                );
+              }}
             />
           ) : tab === 'notes' ? (
             <AnnotationsPanel
+              key={session.id}
               sessionId={session.id}
               source={active}
               catalog={catalog}

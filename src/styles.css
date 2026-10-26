@@ -2908,3 +2908,41 @@ body:has(.panel-resizer.resizing) {
   max-height: none;
   object-fit: fill;
 }
+
+.question-context {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--background);
+  padding: 10px;
+  margin: 10px 0;
+  font-size: var(--font-size-control);
+}
+.question-context > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.question-context > span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.question-context blockquote,
+.message-question-context blockquote {
+  max-height: 140px;
+  overflow: auto;
+  margin: 8px 0;
+}
+.question-context small {
+  display: block;
+  color: var(--muted-text);
+}
+.message-question-context {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+  font-size: var(--font-size-small);
+}
+.message-question-context > button {
+  text-align: left;
+  color: var(--primary);
+  text-decoration: underline;
+}

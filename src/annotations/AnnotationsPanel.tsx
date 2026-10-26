@@ -69,6 +69,9 @@ export function AnnotationsPanel({
       window.removeEventListener('focus', load);
     };
   }, [sessionId, tick, refresh]);
+  useEffect(() => {
+    if (!source) setAll(true);
+  }, [source?.id]);
   const selected = all ? filter : source?.id;
   const visible = items.filter(
     (item) => item.deleted === trash && (!selected || item.sourceId === selected),
