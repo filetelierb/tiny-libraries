@@ -1,6 +1,20 @@
 import type { ResourceTab, StudySession } from '../../shared/domain';
 
 export type ResourceWorkspace = { resourceTabs: ResourceTab[]; activeTabId: string | null };
+export function visibleWorkspace(
+  state: ResourceWorkspace,
+  validSources: Set<string>,
+): ResourceWorkspace {
+  const resourceTabs = state.resourceTabs.filter((tab) =>
+    tab.sources.every((id) => validSources.has(id)),
+  );
+  return {
+    resourceTabs,
+    activeTabId: resourceTabs.some((tab) => tab.id === state.activeTabId)
+      ? state.activeTabId
+      : resourceTabs.at(-1)?.id || null,
+  };
+}
 
 /** Read older saved sessions without changing their original resource identities. */
 export function readWorkspace(session: StudySession): ResourceWorkspace {
@@ -108,5 +122,68 @@ export function unsplit(state: ResourceWorkspace): ResourceWorkspace {
   const tab = state.resourceTabs.find((tab) => tab.id === state.activeTabId);
   if (!tab || tab.sources.length < 2) return state;
   const without = closeResourceTab(state, tab.id);
-  return openResource(without, tab.sources[0], 'retain');
+  return openResource(
+    without,
+    tab.focusedSource && tab.sources.includes(tab.focusedSource)
+      ? tab.focusedSource
+      : tab.sources[0],
+    'retain',
+  );
+}
+
+export function focusSource(state: ResourceWorkspace, sourceId: string): ResourceWorkspace {
+  return {
+    ...state,
+    resourceTabs: state.resourceTabs.map((tab) =>
+      tab.id === state.activeTabId && tab.sources.includes(sourceId)
+        ? { ...tab, focusedSource: sourceId }
+        : tab,
+    ),
+  };
+}
+export function resizeSplit(state: ResourceWorkspace, ratio: number): ResourceWorkspace {
+  return {
+    ...state,
+    resourceTabs: state.resourceTabs.map((tab) =>
+      tab.id === state.activeTabId && tab.sources.length === 2
+        ? { ...tab, splitRatio: Math.max(0.2, Math.min(0.8, ratio)) }
+        : tab,
+    ),
+  };
+}
+export function swapSplit(state: ResourceWorkspace): ResourceWorkspace {
+  return {
+    ...state,
+    resourceTabs: state.resourceTabs.map((tab) =>
+      tab.id === state.activeTabId && tab.sources.length === 2
+        ? {
+            ...tab,
+            sources: [...tab.sources].reverse(),
+            focusedSource: tab.focusedSource || tab.sources[0],
+            splitRatio: 1 - (tab.splitRatio ?? 0.5),
+          }
+        : tab,
+    ),
+  };
+}
+export function replacePane(
+  state: ResourceWorkspace,
+  sourceId: string,
+  replacement: string,
+): ResourceWorkspace {
+  const current = state.resourceTabs.find((tab) => tab.id === state.activeTabId);
+  if (!current || current.sources.length !== 2 || !current.sources.includes(sourceId)) return state;
+  if (current.sources.includes(replacement)) return focusSource(state, replacement);
+  return {
+    ...state,
+    resourceTabs: state.resourceTabs.map((tab) =>
+      tab.id === current.id
+        ? {
+            ...tab,
+            sources: tab.sources.map((id) => (id === sourceId ? replacement : id)),
+            focusedSource: replacement,
+          }
+        : tab,
+    ),
+  };
 }

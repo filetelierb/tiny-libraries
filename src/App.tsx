@@ -1,19 +1,14 @@
-import { useEffect, useRef, useState, type ReactNode, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import {
   BookOpen,
   PanelLeft,
   PanelRight,
   Plus,
-  Upload,
   Settings as SettingsIcon,
   Search,
   Folder,
   FileText,
-  FileImage,
-  Film,
-  Headphones,
   Archive,
-  MoreHorizontal,
   X,
   Check,
   ChevronRight,
@@ -33,10 +28,12 @@ import {
   Code2,
   LoaderCircle,
   RotateCcw,
-  CircleCheck,
   Pin,
   PinOff,
-  PenLine,
+  FolderPlus,
+  Trash2,
+  ArrowLeftRight,
+  FolderOpen,
 } from 'lucide-react';
 import {
   type Catalog,
@@ -48,6 +45,7 @@ import {
   type Segment,
   type Job,
   type Attempt,
+  type Directory,
   MAX_FILE_BYTES,
   MAX_RESOURCE_TABS,
   kindFor,
@@ -70,14 +68,26 @@ import {
   openSplit,
   unsplit,
   type ResourceWorkspace,
+  focusSource,
+  resizeSplit,
+  swapSplit,
+  replacePane,
+  visibleWorkspace,
 } from './workspace/tabs';
 import { ResourceTabs } from './workspace/ResourceTabs';
 import { StudyTabs, type StudyTab } from './workspace/StudyTabs';
+import { DirectoryTree, type TreeActions } from './workspace/DirectoryTree';
+import { SplitWorkspace } from './workspace/SplitWorkspace';
+import { UploadForm } from './workspace/UploadForm';
+import { containsPath, directoryName, sourceState, type CatalogView } from '../shared/directories';
 
-const fileIcon = (kind: Source['kind']) =>
-  kind === 'video' ? Film : kind === 'audio' ? Headphones : kind === 'image' ? FileImage : FileText;
 const localGet = (key: string, fallback: string) => localStorage.getItem(key) || fallback;
 type ChatMessage = { role: 'user' | 'assistant'; content: string; tools?: string[] };
+type DirectoryDialog =
+  | { action: 'create'; parentPath: string }
+  | { action: 'rename'; directory: Directory }
+  | { action: 'trash'; directory: Directory }
+  | { action: 'trashFile'; file: Source };
 
 export function App() {
   const [catalog, setCatalog] = useState<Catalog | null>(null),
@@ -93,7 +103,15 @@ export function App() {
   const [focus, setFocus] = useState(false),
     [tab, setTab] = useState<StudyTab>('chapters'),
     [query, setQuery] = useState(''),
-    [archived, setArchived] = useState(false);
+    [catalogView, setCatalogView] = useState<CatalogView>('files');
+  const [directoryDialog, setDirectoryDialog] = useState<DirectoryDialog | null>(null);
+  const [uploadDirectoryId, setUploadDirectoryId] = useState<string | null>(null);
+  const [returnToSplit, setReturnToSplit] = useState(false);
+  const [splitRequest, setSplitRequest] = useState<{
+    mode: 'new' | 'replace';
+    sourceId: string;
+    tabId: string | null;
+  } | null>(null);
   const [splitQuery, setSplitQuery] = useState('');
   useDrawerFocus('left', !!catalog && !focus && panels.drawer === 'left', leftPanelRef, () =>
     setLeft(false),
@@ -108,21 +126,39 @@ export function App() {
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
     [uploadProgress, setUploadProgress] = useState<number | null>(null);
-  const [learning, setLearning] = useState<PublicLearning | null>(null),
-    [job, setJob] = useState<(Job & { segments?: Segment[] }) | null>(null),
-    [seek, setSeek] = useState<{ value: number; nonce: number } | null>(null),
-    [evidence, setEvidence] = useState<Segment | null>(null),
-    [artifact, setArtifact] = useState(false),
+  const [learningState, setLearning] = useState<PublicLearning | null>(null),
+    [jobState, setJob] = useState<(Job & { segments?: Segment[] }) | null>(null),
+    [seek, setSeek] = useState<{ sourceId: string; value: number; nonce: number } | null>(null),
+    [evidence, setEvidence] = useState<{ sourceId: string; segment: Segment } | null>(null),
+    [artifact, setArtifact] = useState<string | false>(false),
     [refreshTick, setRefreshTick] = useState(0);
   const sessionRef = useRef(session),
     saveChain = useRef(Promise.resolve()),
     t = dictionaries[locale] || dictionaries.en;
-  const active = catalog?.files.find((f) => f.id === session?.active) || null,
-    split = catalog?.files.find((f) => f.id === session?.split) || null;
-  const resources = session ? readWorkspace(session) : { resourceTabs: [], activeTabId: null };
+  const materialCache = useRef<Record<string, PublicLearning | null>>({});
+  const usable = (value: StudySession, data = catalog) =>
+    visibleWorkspace(
+      readWorkspace(value),
+      new Set(
+        (data?.files || [])
+          .filter((file) => sourceState(file, data?.directories || []) !== 'trash')
+          .map((file) => file.id),
+      ),
+    );
+  const resources = session ? usable(session) : { resourceTabs: [], activeTabId: null };
   const activeResourceTab = resources.resourceTabs.find(
     (item) => item.id === resources.activeTabId,
   );
+  const primary = catalog?.files.find((file) => file.id === activeResourceTab?.sources[0]) || null;
+  const split = catalog?.files.find((file) => file.id === activeResourceTab?.sources[1]) || null;
+  const targetId =
+    activeResourceTab?.focusedSource &&
+    activeResourceTab.sources.includes(activeResourceTab.focusedSource)
+      ? activeResourceTab.focusedSource
+      : primary?.id;
+  const active = catalog?.files.find((file) => file.id === targetId) || null;
+  const learning = learningState?.sourceId === active?.id ? learningState : null;
+  const job = jobState?.sourceId === active?.id ? jobState : null;
   const run = async (work: () => Promise<void>) => {
     setError('');
     try {
@@ -190,14 +226,14 @@ export function App() {
   }
   function openFile(file: Source, mode: 'preview' | 'retain' = 'preview') {
     if (!sessionRef.current) return;
-    commitWorkspace(openResource(readWorkspace(sessionRef.current), file.id, mode));
+    commitWorkspace(openResource(usable(sessionRef.current), file.id, mode));
     setArtifact(false);
     setSeek(null);
     if (panels.drawer === 'left') setLeft(false);
   }
   function closeFile(id: string) {
     if (!sessionRef.current) return;
-    const current = readWorkspace(sessionRef.current);
+    const current = usable(sessionRef.current);
     commitWorkspace(closeResourceTab(current, id));
     if (current.activeTabId === id) {
       setArtifact(false);
@@ -206,20 +242,30 @@ export function App() {
   }
   function selectResourceTab(id: string) {
     if (!sessionRef.current) return;
-    commitWorkspace({ ...readWorkspace(sessionRef.current), activeTabId: id });
+    commitWorkspace({ ...usable(sessionRef.current), activeTabId: id });
     setArtifact(false);
     setSeek(null);
   }
   function keepResourceTab(id: string) {
-    if (sessionRef.current) commitWorkspace(retainTab(readWorkspace(sessionRef.current), id));
+    if (sessionRef.current) commitWorkspace(retainTab(usable(sessionRef.current), id));
   }
   function closeSplit() {
-    if (sessionRef.current) commitWorkspace(unsplit(readWorkspace(sessionRef.current)));
+    if (sessionRef.current) commitWorkspace(unsplit(usable(sessionRef.current)));
     setArtifact(false);
   }
   function showSplitPicker() {
+    if (!active) return;
+    setSplitRequest({
+      mode: split ? 'replace' : 'new',
+      sourceId: active.id,
+      tabId: resources.activeTabId,
+    });
     setSplitQuery('');
     setModal('split');
+  }
+  function focusPane(sourceId: string) {
+    if (!sessionRef.current || active?.id === sourceId) return;
+    commitWorkspace(focusSource(usable(sessionRef.current), sourceId));
   }
   useEffect(() => {
     setLearning(null);
@@ -236,6 +282,7 @@ export function App() {
           ),
         ]);
         if (!stopped) {
+          materialCache.current[active.id] = material;
           setLearning(material);
           setJob(current);
         }
@@ -273,18 +320,21 @@ export function App() {
       c ? { ...c, files: c.files.map((f) => (f.id === file.id ? result : f)) } : c,
     );
   }
-  async function addFiles(files: File[], folder: string) {
+  async function addFiles(files: File[], folder: string, directoryId?: string) {
     setBusy(true);
     try {
       for (const file of files) {
         if (!kindFor(file.name)) throw new Error(`${t.unsupported}: ${file.name}`);
         if (file.size > MAX_FILE_BYTES) throw new Error(t.maxSize);
         setUploadProgress(0);
-        const source = await uploadFile(file, folder, setUploadProgress);
+        const source = await uploadFile(file, folder, setUploadProgress, directoryId);
         setCatalog((c) => (c ? { ...c, files: [...c.files, source] } : c));
         openFile(source, 'retain');
       }
-      setModal(null);
+      await saveChain.current;
+      await refresh();
+      setModal(returnToSplit ? 'split' : null);
+      setReturnToSplit(false);
     } finally {
       setBusy(false);
       setUploadProgress(null);
@@ -300,14 +350,55 @@ export function App() {
       locale === 'es' ? 'Ejemplos' : 'Examples',
     );
   }
-  const filtered = (catalog?.files || []).filter(
-    (f) => f.archived === archived && fold(`${f.name} ${f.folder}`).includes(fold(query)),
-  );
+  async function directoryMutation(
+    directory: Directory,
+    action: 'archive' | 'unarchive' | 'trash' | 'restore' | 'rename',
+    name?: string,
+  ) {
+    await api(`/directories/${directory.id}`, 'PATCH', { action, ...(name ? { name } : {}) });
+    await saveChain.current;
+    const data = await refresh();
+    if (sessionRef.current) commitWorkspace(usable(sessionRef.current, data));
+    if (splitRequest) {
+      const base = data.files.find((file) => file.id === splitRequest.sourceId);
+      if (!base || sourceState(base, data.directories) === 'trash') {
+        setSplitRequest(null);
+        setReturnToSplit(false);
+        if (modal === 'split') setModal(null);
+      }
+    }
+  }
+  function showUpload(directoryId: string | null = null) {
+    setUploadDirectoryId(directoryId);
+    setReturnToSplit((current) => modal === 'split' || (modal === 'upload' && current));
+    setModal('upload');
+  }
+  const treeActions: TreeActions = {
+    create: (parentPath) => setDirectoryDialog({ action: 'create', parentPath }),
+    renameDirectory: (directory) => setDirectoryDialog({ action: 'rename', directory }),
+    archiveDirectory: (directory, restore) =>
+      void run(() => directoryMutation(directory, restore ? 'unarchive' : 'archive')),
+    trashDirectory: (directory) => setDirectoryDialog({ action: 'trash', directory }),
+    restoreDirectory: (directory) => void run(() => directoryMutation(directory, 'restore')),
+    upload: (directory) => showUpload(directory.id),
+    renameFile: (file) => {
+      setRename(file);
+      setModal('rename');
+    },
+    archiveFile: (file, restore) => void run(() => editFile(file, { archived: !restore })),
+    trashFile: (file) => setDirectoryDialog({ action: 'trashFile', file }),
+    restoreFile: (file) => void run(() => editFile(file, { trashed: false })),
+  };
   const position = active ? session?.positions[active.id] || 0 : 0;
   function cite(segment: Segment) {
-    setEvidence(segment);
+    if (!active) return;
+    citeFrom(active.id, segment);
+  }
+  function citeFrom(sourceId: string, segment: Segment) {
+    focusPane(sourceId);
+    setEvidence({ sourceId, segment });
     if (segment.start != null || segment.page != null) {
-      setSeek({ value: segment.start ?? segment.page ?? 0, nonce: Date.now() });
+      setSeek({ sourceId, value: segment.start ?? segment.page ?? 0, nonce: Date.now() });
       setArtifact(false);
     } else {
       setTab('chapters');
@@ -370,39 +461,63 @@ export function App() {
           />
         </div>
         <div className="library-actions">
-          <Button onClick={() => setModal('upload')}>
+          <Button onClick={() => showUpload()}>
             <Plus size={15} />
             {t.upload}
           </Button>
+          <IconButton label={t.newFolder} onClick={() => treeActions.create('')}>
+            <FolderPlus />
+          </IconButton>
           <IconButton label={t.settings} onClick={() => setModal('settings')}>
             <SettingsIcon />
           </IconButton>
         </div>
         <div className="catalog-switch">
-          <button className={!archived ? 'selected' : ''} onClick={() => setArchived(false)}>
+          <button
+            className={catalogView === 'files' ? 'selected' : ''}
+            onClick={() => setCatalogView('files')}
+          >
             {t.files}
-            <span>{catalog.files.filter((f) => !f.archived).length}</span>
+            <span>
+              {catalog.files.filter((f) => sourceState(f, catalog.directories) === 'files').length}
+            </span>
           </button>
-          <button className={archived ? 'selected' : ''} onClick={() => setArchived(true)}>
+          <button
+            className={catalogView === 'archived' ? 'selected' : ''}
+            onClick={() => setCatalogView('archived')}
+          >
             <Archive size={13} />
             {t.archived}
-            <span>{catalog.files.filter((f) => f.archived).length}</span>
+            <span>
+              {
+                catalog.files.filter((f) => sourceState(f, catalog.directories) === 'archived')
+                  .length
+              }
+            </span>
+          </button>
+          <button
+            className={catalogView === 'trash' ? 'selected' : ''}
+            onClick={() => setCatalogView('trash')}
+          >
+            <Trash2 size={13} />
+            {t.trash}
+            <span>
+              {catalog.files.filter((f) => sourceState(f, catalog.directories) === 'trash').length}
+            </span>
           </button>
         </div>
         <div className="file-tree">
-          <FileTree
-            files={filtered}
+          <DirectoryTree
+            directories={catalog.directories}
+            files={catalog.files}
             t={t}
             active={active?.id}
-            onOpen={openFile}
-            onRetain={(file) => openFile(file, 'retain')}
-            onArchive={(file) => void run(() => editFile(file, { archived: !file.archived }))}
-            onRename={(file) => {
-              setRename(file);
-              setModal('rename');
-            }}
+            view={catalogView}
+            query={query}
+            chooseFile={openFile}
+            actions={treeActions}
+            storageKey="tl:tree:sidebar"
           />
-          {!filtered.length && <p className="small-empty">{query ? t.noResults : t.noFiles}</p>}
         </div>
         <div className="sessions-heading">
           <span>{t.sessions}</span>
@@ -501,7 +616,7 @@ export function App() {
               <Button
                 onClick={() => {
                   setLeft(true);
-                  if (!catalog.files.length) setModal('upload');
+                  if (!catalog.files.length) showUpload();
                 }}
               >
                 <Folder size={18} />
@@ -524,7 +639,22 @@ export function App() {
             <div className="file-toolbar">
               <div className="file-title">
                 <span>{active.folder || t.library}</span>
-                <strong title={active.name}>{active.name}</strong>
+                {split ? (
+                  <select
+                    className="pane-target"
+                    aria-label={t.toolsTarget}
+                    value={active.id}
+                    onChange={(event) => focusPane(event.target.value)}
+                  >
+                    {[primary!, split].map((source) => (
+                      <option key={source.id} value={source.id}>
+                        {source.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <strong title={active.name}>{active.name}</strong>
+                )}
               </div>
               <div className="reader-commands">
                 <div className="toolbar-actions" aria-label={t.resourceTools}>
@@ -558,11 +688,33 @@ export function App() {
                     <StickyNote />
                   </IconButton>
                   <IconButton
-                    label={split ? t.noSplit : t.split}
-                    onClick={() => (split ? closeSplit() : showSplitPicker())}
+                    label={t.askTutor}
+                    onClick={() => {
+                      setRight(true);
+                      setTab('assistant');
+                    }}
                   >
-                    <Columns2 />
+                    <MessageSquare />
                   </IconButton>
+                  <IconButton label={split ? t.replaceResource : t.split} onClick={showSplitPicker}>
+                    {split ? <FolderOpen /> : <Columns2 />}
+                  </IconButton>
+                  {split && (
+                    <IconButton
+                      label={t.swapPanes}
+                      onClick={() => {
+                        if (sessionRef.current)
+                          commitWorkspace(swapSplit(usable(sessionRef.current)));
+                      }}
+                    >
+                      <ArrowLeftRight />
+                    </IconButton>
+                  )}
+                  {split && (
+                    <IconButton label={t.noSplit} onClick={closeSplit}>
+                      <X />
+                    </IconButton>
+                  )}
                   <IconButton
                     label={active.reviewed ? t.reviewed : t.markReviewed}
                     aria-pressed={active.reviewed}
@@ -590,19 +742,6 @@ export function App() {
                 </div>
               </div>
             </div>
-            {evidence && (
-              <section className="evidence-panel" aria-label={t.sources}>
-                <div>
-                  <strong>
-                    {t.source} · {evidence.id}
-                  </strong>
-                  <IconButton label={t.close} onClick={() => setEvidence(null)}>
-                    <X />
-                  </IconButton>
-                </div>
-                <p>{evidence.text}</p>
-              </section>
-            )}
             {job && (
               <div className={`job-strip ${job.status === 'failed' ? 'failed' : ''}`} role="status">
                 {['queued', 'running', 'partial'].includes(job.status) ? (
@@ -664,75 +803,96 @@ export function App() {
               aria-labelledby={
                 activeResourceTab ? `resource-tab-${activeResourceTab.id}` : undefined
               }
-              className={`viewers ${split && !artifact ? 'split' : ''}`}
+              className="viewers"
             >
-              {artifact ? (
-                <div className="artifact-stage">
-                  <Button variant="ghost" onClick={() => setArtifact(false)}>
-                    <ArrowLeft size={14} />
-                    {t.originalSource}
-                  </Button>
-                  {learning?.synthesis.artifact ? (
-                    <GeneratedArtifact
-                      artifact={learning.synthesis.artifact}
-                      t={t}
-                      segments={learning.segments}
-                      onCite={cite}
-                      saved={session.artifacts?.[active.id]}
-                      persist={(value) =>
-                        updateSession({ artifacts: { ...session.artifacts, [active.id]: value } })
-                      }
-                    />
-                  ) : (
-                    <SignalExplorer
-                      key={active.id}
-                      t={t}
-                      storageKey={`tl:signal:${session.id}:${active.id}`}
-                      initial={session.artifacts?.[active.id]}
-                      onPersist={(value) =>
-                        updateSession({ artifacts: { ...session.artifacts, [active.id]: value } })
-                      }
-                    />
-                  )}
-                </div>
-              ) : (
-                <Viewer
-                  key={active.id}
-                  source={active}
-                  t={t}
-                  learning={learning}
-                  position={position}
-                  onPosition={(value) =>
-                    updateSession({
-                      positions: { ...sessionRef.current!.positions, [active.id]: value },
-                    })
-                  }
-                  seek={seek}
-                />
-              )}
-              {split && !artifact && (
-                <div className="split-pane">
-                  <div className="split-title">
-                    <span>{split.name}</span>
-                    <IconButton label={t.noSplit} onClick={closeSplit}>
-                      <X />
-                    </IconButton>
-                  </div>
-                  <Viewer
-                    key={split.id}
-                    source={split}
-                    t={t}
-                    learning={null}
-                    position={session.positions[split.id] || 0}
-                    onPosition={(value) =>
-                      updateSession({
-                        positions: { ...sessionRef.current!.positions, [split.id]: value },
-                      })
-                    }
-                    seek={null}
-                  />
-                </div>
-              )}
+              <SplitWorkspace
+                key={`${session.id}:${activeResourceTab?.id}`}
+                sources={[primary!, ...(split ? [split] : [])]}
+                focused={active.id}
+                ratio={activeResourceTab?.splitRatio ?? 0.5}
+                focus={focusPane}
+                resize={(ratio) => {
+                  if (sessionRef.current)
+                    commitWorkspace(resizeSplit(usable(sessionRef.current), ratio));
+                }}
+                t={t}
+              >
+                {(source) => {
+                  const material =
+                    learning?.sourceId === source.id ? learning : materialCache.current[source.id];
+                  return (
+                    <>
+                      {evidence?.sourceId === source.id && (
+                        <section className="evidence-panel" aria-label={t.sources}>
+                          <div>
+                            <strong>
+                              {t.source} · {evidence.segment.id}
+                            </strong>
+                            <IconButton label={t.close} onClick={() => setEvidence(null)}>
+                              <X />
+                            </IconButton>
+                          </div>
+                          <p>{evidence.segment.text}</p>
+                        </section>
+                      )}
+                      {artifact === source.id ? (
+                        <div className="artifact-stage">
+                          <Button variant="ghost" onClick={() => setArtifact(false)}>
+                            <ArrowLeft size={14} />
+                            {t.originalSource}
+                          </Button>
+                          {material?.synthesis.artifact ? (
+                            <GeneratedArtifact
+                              artifact={material.synthesis.artifact}
+                              t={t}
+                              segments={material.segments}
+                              onCite={(segment) => citeFrom(source.id, segment)}
+                              saved={session.artifacts?.[source.id]}
+                              persist={(value) =>
+                                updateSession({
+                                  artifacts: {
+                                    ...sessionRef.current!.artifacts,
+                                    [source.id]: value,
+                                  },
+                                })
+                              }
+                            />
+                          ) : (
+                            <SignalExplorer
+                              key={source.id}
+                              t={t}
+                              storageKey={`tl:signal:${session.id}:${source.id}`}
+                              initial={session.artifacts?.[source.id]}
+                              onPersist={(value) =>
+                                updateSession({
+                                  artifacts: {
+                                    ...sessionRef.current!.artifacts,
+                                    [source.id]: value,
+                                  },
+                                })
+                              }
+                            />
+                          )}
+                        </div>
+                      ) : (
+                        <Viewer
+                          source={source}
+                          t={t}
+                          learning={material || null}
+                          position={session.positions[source.id] || 0}
+                          onPosition={(value) => {
+                            if (sessionRef.current?.id === session.id)
+                              updateSession({
+                                positions: { ...sessionRef.current.positions, [source.id]: value },
+                              });
+                          }}
+                          seek={seek?.sourceId === source.id ? seek : null}
+                        />
+                      )}
+                    </>
+                  );
+                }}
+              </SplitWorkspace>
             </div>
           </>
         )}
@@ -783,6 +943,12 @@ export function App() {
           </div>
         </div>
         <StudyTabs value={tab} change={setTab} t={t} />
+        {active && (
+          <div className="study-resource" aria-label={t.activeResource}>
+            <FileText size={15} />
+            <span title={active.name}>{active.name}</span>
+          </div>
+        )}
         <div
           id="study-content"
           role="tabpanel"
@@ -883,7 +1049,7 @@ export function App() {
                       ))}
                     </div>
                   )}
-                  <button className="artifact-link" onClick={() => setArtifact(true)}>
+                  <button className="artifact-link" onClick={() => setArtifact(active.id)}>
                     <span>
                       <Activity size={17} />
                       <strong>{t.artifact}</strong>
@@ -898,7 +1064,7 @@ export function App() {
               )}
               {tab === 'notes' && (
                 <Notes
-                  key={active.id}
+                  key={`${session.id}:${active.id}`}
                   source={active}
                   session={session}
                   update={updateSession}
@@ -914,7 +1080,11 @@ export function App() {
                       <div className="bookmark-row" key={b.id}>
                         <button
                           onClick={() => {
-                            setSeek({ value: b.seconds ?? b.page ?? 0, nonce: Date.now() });
+                            setSeek({
+                              sourceId: b.sourceId,
+                              value: b.seconds ?? b.page ?? 0,
+                              nonce: Date.now(),
+                            });
                             setArtifact(false);
                           }}
                         >
@@ -1023,7 +1193,7 @@ export function App() {
                   attempts={catalog.attempts.filter((a) => a.sourceId === active.id)}
                   t={t}
                   showPractice={() => setTab('practice')}
-                  showArtifact={() => setArtifact(true)}
+                  showArtifact={() => setArtifact(active.id)}
                 />
               )}
               {tab === 'assistant' && (
@@ -1035,13 +1205,28 @@ export function App() {
                   learning={learning}
                   onError={setError}
                   update={(patch) => {
-                    if (sessionRef.current?.id === session.id) updateSession(patch);
+                    const merge = (target: StudySession) => ({
+                      ...patch,
+                      ...(patch.conversations?.[active.id]
+                        ? {
+                            conversations: {
+                              ...target.conversations,
+                              [active.id]: patch.conversations[active.id],
+                            },
+                          }
+                        : {}),
+                    });
+                    if (sessionRef.current?.id === session.id)
+                      updateSession(merge(sessionRef.current));
                     else
                       void run(async () => {
                         const latest = await api<Catalog>('/catalog');
                         const target = latest.sessions.find((item) => item.id === session.id);
                         if (target)
-                          await api(`/sessions/${target.id}`, 'PUT', { ...target, ...patch });
+                          await api(`/sessions/${target.id}`, 'PUT', {
+                            ...target,
+                            ...merge(target),
+                          });
                         await refresh();
                       });
                   }}
@@ -1068,6 +1253,68 @@ export function App() {
           onError={setError}
         />
       )}
+      {directoryDialog &&
+        (directoryDialog.action === 'create' || directoryDialog.action === 'rename') && (
+          <TextModal
+            title={directoryDialog.action === 'create' ? t.newFolder : t.rename}
+            label={t.folderName}
+            initial={
+              directoryDialog.action === 'rename'
+                ? directoryName(directoryDialog.directory.path)
+                : ''
+            }
+            t={t}
+            close={() => setDirectoryDialog(null)}
+            submit={async (name) => {
+              if (directoryDialog.action === 'create') {
+                await api('/directories', 'POST', { parentPath: directoryDialog.parentPath, name });
+                await saveChain.current;
+                await refresh();
+              } else await directoryMutation(directoryDialog.directory, 'rename', name);
+              setDirectoryDialog(null);
+            }}
+          />
+        )}
+      {directoryDialog &&
+        (directoryDialog.action === 'trash' || directoryDialog.action === 'trashFile') && (
+          <TrashModal
+            t={t}
+            title={directoryDialog.action === 'trash' ? t.trashDirectoryTitle : t.trashFileTitle}
+            name={
+              directoryDialog.action === 'trash'
+                ? directoryDialog.directory.path
+                : directoryDialog.file.name
+            }
+            files={
+              directoryDialog.action === 'trash'
+                ? catalog.files.filter((file) =>
+                    containsPath(directoryDialog.directory.path, file.folder),
+                  ).length
+                : 1
+            }
+            folders={
+              directoryDialog.action === 'trash'
+                ? catalog.directories.filter(
+                    (directory) =>
+                      directory.id !== directoryDialog.directory.id &&
+                      containsPath(directoryDialog.directory.path, directory.path),
+                  ).length
+                : 0
+            }
+            close={() => setDirectoryDialog(null)}
+            submit={async () => {
+              if (directoryDialog.action === 'trash')
+                await directoryMutation(directoryDialog.directory, 'trash');
+              else {
+                await editFile(directoryDialog.file, { trashed: true });
+                await saveChain.current;
+                const data = await refresh();
+                if (sessionRef.current) commitWorkspace(usable(sessionRef.current, data));
+              }
+              setDirectoryDialog(null);
+            }}
+          />
+        )}
       {modal === 'upload' && (
         <Modal
           title={t.upload}
@@ -1080,7 +1327,12 @@ export function App() {
             t={t}
             busy={busy}
             progress={uploadProgress}
-            submit={(files, folder) => void run(() => addFiles(files, folder))}
+            catalog={catalog}
+            initialDirectoryId={uploadDirectoryId}
+            actions={treeActions}
+            submit={(files, folder, directoryId) =>
+              void run(() => addFiles(files, folder, directoryId))
+            }
           />
           <div className="sample-material">
             <Button variant="ghost" disabled={busy} onClick={() => void run(example)}>
@@ -1122,143 +1374,64 @@ export function App() {
         />
       )}
       {modal === 'split' && (
-        <Modal title={t.chooseSplit} close={() => setModal(null)} closeLabel={t.close}>
+        <Modal
+          title={splitRequest?.mode === 'replace' ? t.replaceResource : t.chooseSplit}
+          close={() => setModal(null)}
+          closeLabel={t.close}
+        >
           <input
             aria-label={t.search}
             placeholder={t.search}
             value={splitQuery}
             onChange={(event) => setSplitQuery(event.target.value)}
           />
-          <div className="split-picker">
-            {catalog.files
-              .filter(
-                (f) =>
-                  !f.archived &&
-                  f.id !== active?.id &&
-                  fold(`${f.name} ${f.folder}`).includes(fold(splitQuery)),
-              )
-              .map((file) => (
-                <Button
-                  key={file.id}
-                  onClick={() => {
-                    if (sessionRef.current && active)
-                      commitWorkspace(
-                        openSplit(readWorkspace(sessionRef.current), active.id, file.id),
-                      );
-                    setModal(null);
-                    setArtifact(false);
-                    setSeek(null);
-                  }}
-                >
-                  <FileText size={14} />
-                  {file.name}
-                </Button>
-              ))}
-          </div>
+          <DirectoryTree
+            mode="file"
+            directories={catalog.directories}
+            files={catalog.files.filter((file) => {
+              const original = resources.resourceTabs.find(
+                (item) => item.id === splitRequest?.tabId,
+              );
+              return splitRequest?.mode === 'replace'
+                ? !original?.sources.some((id) => id !== splitRequest.sourceId && id === file.id)
+                : file.id !== splitRequest?.sourceId;
+            })}
+            t={t}
+            query={splitQuery}
+            actions={treeActions}
+            storageKey="tl:tree:split-picker"
+            chooseFile={(file) => {
+              if (!sessionRef.current || !splitRequest) return;
+              const base = catalog.files.find((source) => source.id === splitRequest.sourceId);
+              if (!base || sourceState(base, catalog.directories) === 'trash') {
+                setModal(null);
+                return;
+              }
+              const current = usable(sessionRef.current);
+              const state =
+                splitRequest.tabId &&
+                current.resourceTabs.some((item) => item.id === splitRequest.tabId)
+                  ? { ...current, activeTabId: splitRequest.tabId }
+                  : current;
+              commitWorkspace(
+                splitRequest.mode === 'replace' &&
+                  state.resourceTabs.some(
+                    (tab) => tab.id === splitRequest.tabId && tab.sources.length === 2,
+                  )
+                  ? replacePane(state, splitRequest.sourceId, file.id)
+                  : openSplit(state, splitRequest.sourceId, file.id),
+              );
+              setModal(null);
+              setArtifact(false);
+              setSeek(null);
+            }}
+          />
         </Modal>
       )}
     </div>
   );
 }
 
-function FileTree({
-  files,
-  t,
-  active,
-  onOpen,
-  onRetain,
-  onArchive,
-  onRename,
-}: {
-  files: Source[];
-  t: T;
-  active?: string;
-  onOpen: (file: Source) => void;
-  onRetain: (file: Source) => void;
-  onArchive: (file: Source) => void;
-  onRename: (file: Source) => void;
-}) {
-  const render = (prefix: string): ReactNode => {
-    const children = files.filter((f) => f.folder === prefix),
-      folders = [
-        ...new Set(
-          files
-            .filter((f) => f.folder.startsWith(prefix ? `${prefix}/` : '') && f.folder !== prefix)
-            .map((f) => f.folder.slice(prefix ? prefix.length + 1 : 0).split('/')[0]),
-        ),
-      ]
-        .filter(Boolean)
-        .sort();
-    return (
-      <>
-        {folders.map((folder) => {
-          const path = prefix ? `${prefix}/${folder}` : folder;
-          return (
-            <details className="folder-node" key={path} open>
-              <summary>
-                <ChevronRight size={12} />
-                <Folder size={15} />
-                <span>{folder}</span>
-              </summary>
-              <div>{render(path)}</div>
-            </details>
-          );
-        })}
-        {children.map((file) => {
-          const Icon = fileIcon(file.kind);
-          return (
-            <div className={`file-row ${active === file.id ? 'active' : ''}`} key={file.id}>
-              <button
-                title={file.name}
-                onClick={() => onOpen(file)}
-                onDoubleClick={() => onRetain(file)}
-              >
-                <Icon size={15} />
-                <span>{file.name}</span>
-                {file.reviewed && (
-                  <CircleCheck className="reviewed-marker" size={17} aria-label={t.reviewed}>
-                    <title>{t.reviewed}</title>
-                  </CircleCheck>
-                )}
-              </button>
-              <details className="file-menu">
-                <summary aria-label={`${t.options}: ${file.name}`}>
-                  <MoreHorizontal size={14} />
-                </summary>
-                <div
-                  onClick={(event) => {
-                    if ((event.target as HTMLElement).closest('button'))
-                      event.currentTarget.closest('details')?.removeAttribute('open');
-                  }}
-                >
-                  <button onClick={() => onOpen(file)}>
-                    <FileText size={17} />
-                    {t.openCurrent}
-                  </button>
-                  <button onClick={() => onRetain(file)}>
-                    <Plus size={17} />
-                    {t.openSeparate}
-                  </button>
-                  <hr />
-                  <button onClick={() => onRename(file)}>
-                    <PenLine size={17} />
-                    {t.rename}
-                  </button>
-                  <button onClick={() => onArchive(file)}>
-                    {file.archived ? <RotateCcw size={17} /> : <Archive size={17} />}
-                    {file.archived ? t.restore : t.archive}
-                  </button>
-                  <small>{t.previewHint}</small>
-                </div>
-              </details>
-            </div>
-          );
-        })}
-      </>
-    );
-  };
-  return render('');
-}
 function formatPosition(seconds: number) {
   return `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
 }
@@ -1298,7 +1471,20 @@ function Notes({
   update: (v: Partial<StudySession>) => void;
   t: T;
 }) {
-  const [draft, setDraft] = useState('');
+  const draftKey = `tl:note-draft:${session.id}:${source.id}`;
+  const [draft, setDraft] = useState(() => {
+    try {
+      return localStorage.getItem(draftKey) || '';
+    } catch {
+      return '';
+    }
+  });
+  useEffect(() => {
+    try {
+      if (draft) localStorage.setItem(draftKey, draft);
+      else localStorage.removeItem(draftKey);
+    } catch {}
+  }, [draftKey, draft]);
   const notes = session.notes.filter((n) => n.sourceId === source.id);
   return (
     <>
@@ -1763,15 +1949,26 @@ function TextModal({
   initial: string;
   t: T;
   close: () => void;
-  submit: (value: string) => void;
+  submit: (value: string) => void | Promise<void>;
 }) {
-  const [value, setValue] = useState(initial);
+  const [value, setValue] = useState(initial),
+    [pending, setPending] = useState(false),
+    [error, setError] = useState('');
   return (
     <Modal title={title} close={close} closeLabel={t.close}>
       <form
-        onSubmit={(e) => {
+        onSubmit={async (e) => {
           e.preventDefault();
-          if (value.trim()) submit(value.trim());
+          if (!value.trim() || pending) return;
+          setPending(true);
+          setError('');
+          try {
+            await submit(value.trim());
+          } catch (error) {
+            setError(error instanceof Error ? error.message : t.error);
+          } finally {
+            setPending(false);
+          }
         }}
       >
         <label>
@@ -1783,8 +1980,13 @@ function TextModal({
             maxLength={240}
           />
         </label>
+        {error && (
+          <p role="alert" className="form-error">
+            {error}
+          </p>
+        )}
         <div className="modal-actions">
-          <Button variant="primary" type="submit" disabled={!value.trim()}>
+          <Button variant="primary" type="submit" disabled={!value.trim() || pending}>
             {t.save}
           </Button>
           <Button onClick={close}>{t.cancel}</Button>
@@ -1793,64 +1995,69 @@ function TextModal({
     </Modal>
   );
 }
-function UploadForm({
+
+function TrashModal({
   t,
-  busy,
-  progress,
+  title,
+  name,
+  files,
+  folders,
+  close,
   submit,
 }: {
   t: T;
-  busy: boolean;
-  progress: number | null;
-  submit: (files: File[], folder: string) => void;
+  title: string;
+  name: string;
+  files: number;
+  folders: number;
+  close: () => void;
+  submit: () => Promise<void>;
 }) {
-  const [folder, setFolder] = useState(''),
-    [files, setFiles] = useState<File[]>([]);
+  const [pending, setPending] = useState(false),
+    [error, setError] = useState('');
   return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        submit(files, folder.trim().replace(/^\/+|\/+$/g, ''));
+    <Modal
+      title={title}
+      close={() => {
+        if (!pending) close();
       }}
+      closeLabel={t.close}
     >
-      <label>
-        {t.folder}
-        <input
-          placeholder="Library / Recordings"
-          value={folder}
-          disabled={busy}
-          onChange={(e) => setFolder(e.target.value)}
-        />
-      </label>
-      <label className="upload-drop">
-        <Upload size={28} />
-        <strong>{t.chooseFile}</strong>
-        <span>PDF · MP4 · MP3 · WAV · PNG · JPG · MD · TXT</span>
-        <input
-          type="file"
-          multiple
-          aria-label={t.chooseFile}
-          disabled={busy}
-          accept=".pdf,.mp4,.webm,.mov,.mkv,.wav,.mp3,.m4a,.ogg,.flac,.png,.jpg,.jpeg,.webp,.md,.txt,.csv"
-          onChange={(e) => setFiles([...(e.target.files || [])])}
-        />
-      </label>
-      {files.map((f, i) => (
-        <p className="upload-file" key={i}>
-          <FileText size={14} />
-          {f.name}
-          <span>{(f.size / 1024 / 1024).toFixed(1)} MB</span>
-        </p>
-      ))}
-      {progress != null && <progress max={100} value={progress} aria-label={t.progress} />}
-      <p className="muted">
-        {t.maxSize} {t.noKeyNeeded}
+      <p>
+        <strong>{name}</strong>
       </p>
+      <p>{t.trashExplanation}</p>
+      <p className="muted">
+        {t.affectedItems.replace('{files}', String(files)).replace('{folders}', String(folders))}
+      </p>
+      {error && (
+        <p role="alert" className="form-error">
+          {error}
+        </p>
+      )}
       <div className="modal-actions">
-        <Button type="submit" variant="primary" disabled={!files.length || busy}>
-          {busy ? <LoaderCircle className="spin" size={14} /> : <Upload size={14} />} {t.upload}
+        <Button
+          variant="danger"
+          disabled={pending}
+          onClick={async () => {
+            setPending(true);
+            setError('');
+            try {
+              await submit();
+            } catch (error) {
+              setError(error instanceof Error ? error.message : t.error);
+            } finally {
+              setPending(false);
+            }
+          }}
+        >
+          <Trash2 size={17} />
+          {t.moveToTrash}
+        </Button>
+        <Button disabled={pending} onClick={close}>
+          {t.cancel}
         </Button>
       </div>
-    </form>
+    </Modal>
   );
 }

@@ -63,8 +63,14 @@ export function Modal({
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
-    ref.current?.showModal();
-    return () => ref.current?.close();
+    const dialog = ref.current;
+    const previous = document.activeElement as HTMLElement | null;
+    dialog?.showModal();
+    return () => {
+      dialog?.close();
+      if (previous?.isConnected && previous.getClientRects().length)
+        previous.focus({ preventScroll: true });
+    };
   }, []);
   return (
     <dialog

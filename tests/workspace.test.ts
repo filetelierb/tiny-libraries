@@ -9,7 +9,13 @@ import {
   retainTab,
   workspacePatch,
   unsplit,
+  focusSource,
+  resizeSplit,
+  swapSplit,
+  replacePane,
+  visibleWorkspace,
 } from '../src/workspace/tabs';
+import { splitLimits } from '../src/workspace/SplitWorkspace';
 import { readPanelPreferences, resolvePanels, PANEL_MIN } from '../src/workspace/layout';
 
 const saved: StudySession = sessionSchema.parse({
@@ -141,5 +147,55 @@ test('saved resource workspaces reject duplicate tab IDs, duplicate split source
   );
   assert.throws(() =>
     sessionSchema.parse({ ...saved, resourceTabs: [{ ...tab, sources: ['same', 'same'] }] }),
+  );
+});
+
+test('split focus and width survive serialization independently for each pair', () => {
+  let state = resizeSplit(focusSource(readWorkspace(saved), 'slides'), 0.65);
+  const first = state.activeTabId;
+  state = openSplit(state, 'notes', 'recording');
+  state = resizeSplit(focusSource(state, 'recording'), 0.35);
+  const second = state.activeTabId;
+  const restored = readWorkspace(
+    sessionSchema.parse(JSON.parse(JSON.stringify({ ...saved, ...workspacePatch(state) }))),
+  );
+  assert.equal(restored.resourceTabs.find((tab) => tab.id === first)?.splitRatio, 0.65);
+  assert.equal(restored.resourceTabs.find((tab) => tab.id === first)?.focusedSource, 'slides');
+  assert.equal(restored.resourceTabs.find((tab) => tab.id === second)?.splitRatio, 0.35);
+  assert.equal(restored.resourceTabs.find((tab) => tab.id === second)?.focusedSource, 'recording');
+  assert.equal(workspacePatch(restored).active, 'notes');
+});
+test('swapping preserves source focus and its allocated space; replacing targets the chosen pane', () => {
+  let state = resizeSplit(focusSource(readWorkspace(saved), 'slides'), 0.7);
+  state = swapSplit(state);
+  let tab = state.resourceTabs.find((tab) => tab.id === state.activeTabId)!;
+  assert.deepEqual(tab.sources, ['slides', 'recording']);
+  assert.equal(tab.focusedSource, 'slides');
+  assert.ok(Math.abs(tab.splitRatio! - 0.3) < 0.0001);
+  state = replacePane(state, 'recording', 'new-document');
+  tab = state.resourceTabs.find((tab) => tab.id === state.activeTabId)!;
+  assert.deepEqual(tab.sources, ['slides', 'new-document']);
+  assert.equal(tab.focusedSource, 'new-document');
+  assert.equal(workspacePatch(unsplit(state)).active, 'new-document');
+});
+test('trashed resources leave visible tab workspaces without removing source study history', () => {
+  const state = visibleWorkspace(readWorkspace(saved), new Set(['slides', 'notes']));
+  assert.ok(state.resourceTabs.every((tab) => !tab.sources.includes('recording')));
+  assert.deepEqual(saved.positions, { recording: 37.5, slides: 4 });
+  assert.equal(saved.notes[0].sourceId, 'recording');
+});
+test('split limits always leave visible panes and invalid focused source is rejected', () => {
+  for (const width of [361, 800, 1440, 3000]) {
+    const limits = splitLimits(width);
+    assert.ok(limits.min >= 0.2 && limits.min <= 0.25);
+    assert.equal(limits.max, 1 - limits.min);
+  }
+  assert.throws(() =>
+    sessionSchema.parse({
+      ...saved,
+      resourceTabs: [
+        { id: 'one', sources: ['recording', 'slides'], preview: false, focusedSource: 'outside' },
+      ],
+    }),
   );
 });

@@ -14,10 +14,12 @@ Primitives: Button (default/primary/ghost/danger), IconButton with required acce
 
 ## Layout and interaction
 
-- Desktop: independently pinned library and study panels with persisted, bounded widths. Separators support pointer and keyboard resizing. Resource tabs remain scrollable; split view has two equal columns.
-- Tablet/mobile: panels become dismissible overlays, controls remain at least 40px high, inputs 16px, split view stacks vertically.
+- Desktop: independently pinned library and study panels with persisted, bounded widths. Separators support pointer and keyboard resizing. Resource tabs remain scrollable; each split tab saves its own ratio and focused source.
+- Below 1024px, a split-source selector shows one mounted viewer at full width and pauses hidden media. Side panels become dismissible overlays; inputs remain 16px.
 - Active file/tab/panel state is explicit. Use teal backgrounds for selection and text plus icons for statuses; color alone must never carry meaning.
 - Study tools share one horizontal text-tab strip. Overflow scrolls; arrows and Home/End move selection and focus. All eight tools remain available. Empty reading space offers file exploration and the study panel; sample material is available under Add files.
+- The shared reader toolbar names its target source. Clicking/focusing a pane or using the target selector changes its bookmark, note, tutor, reviewed and download actions. Pane focus never changes the other source's position.
+- One directory tree serves catalog management, resource selection and upload destinations. Empty folders persist. Menu surfaces sit outside the scrolling tree, stay within viewport bounds, support arrow/Home/End navigation and return focus on Escape.
 - Keyboard-visible focus uses a 2px ring. Respect reduced motion. Long filenames truncate visually while retaining titles and accessible names.
 - Dialogs communicate local persistence and remote AI use. First launch offers a credential form and an option to explore the library without running AI.
 - English and Spanish strings share a typed dictionary; language persists and updates the document language.

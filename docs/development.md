@@ -37,3 +37,12 @@ Record actual implementation and validation as it lands. Commit dates remain act
 - Multi-user access and network exposure are outside the current local-only implementation.
 - Generated-code execution, sandbox isolation, explicit miniapp publishing and a persistent published release remain conditional follow-up work. Muse Code SDK integration is present, but its live session path is unverified because the matching CLI is not installed.
 - Final submission eligibility, public visibility, contributor listing, demo video and portal submission remain outstanding event tasks. Repository visibility stays private until the owner explicitly requests sharing.
+
+### Directory and split workspace increment
+
+- Added durable empty directories, nested creation, atomic subtree rename, inherited archive state and recoverable Trash. A shared directory tree serves the catalog, resource picker and upload destinations.
+- Context menus escape scrolling bounds, retain keyboard/focus behavior inside nested dialogs, and remain clickable beside overlay scrollbars. Tree collapse state and a 121px scroll offset survived reload, including a hidden mobile drawer.
+- Split tabs save independent ratios and focused sources. Pointer/keyboard resizing, equal-width reset, swapping, targeted replacement and narrow-screen source selection were verified. Hidden authored audio paused when switching panes.
+- Notes, draft text, bookmarks and tutor actions target the focused source. A 4.5-second audio bookmark and a zero-position document bookmark retained their own source IDs. A live tutor reply used `read_segments`, cited its requested source and remained attached to it after focus/directory changes.
+- All 38 tests, type checks, production build and diff checks passed. An actual runtime stop/start retained directories, file hashes, independent split ratios/focus, notes, bookmarks, positions, saved tutor history and configured credential status.
+- Browser file attachment automation was unavailable under the existing Chrome extension permissions. Destination picker behavior was checked in the browser; actual upload transport, stable directory identity after rename, exact bytes, invalid paths and concurrent duplicate creation were verified through the local API.

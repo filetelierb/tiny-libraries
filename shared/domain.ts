@@ -13,10 +13,19 @@ export const sourceSchema = z.object({
   mime: z.string(),
   size: z.number().int().nonnegative(),
   archived: z.boolean(),
+  trashed: z.boolean().optional(),
   reviewed: z.boolean(),
   createdAt: z.string(),
 });
 export type Source = z.infer<typeof sourceSchema>;
+export const directorySchema = z.object({
+  id: z.string().uuid(),
+  path: z.string().min(1).max(240),
+  archived: z.boolean(),
+  trashed: z.boolean(),
+  createdAt: z.string(),
+});
+export type Directory = z.infer<typeof directorySchema>;
 export const segmentSchema = z.object({
   id: z.string().min(1),
   text: z.string(),
@@ -122,15 +131,19 @@ export type Bookmark = {
 };
 export type Note = { id: string; sourceId: string; text: string; createdAt: string };
 export const MAX_RESOURCE_TABS = 100;
-export const resourceTabSchema = z.object({
-  id: z.string().min(1).max(200),
-  sources: z
-    .array(z.string().min(1).max(200))
-    .min(1)
-    .max(2)
-    .refine((values) => new Set(values).size === values.length),
-  preview: z.boolean(),
-});
+export const resourceTabSchema = z
+  .object({
+    id: z.string().min(1).max(200),
+    sources: z
+      .array(z.string().min(1).max(200))
+      .min(1)
+      .max(2)
+      .refine((values) => new Set(values).size === values.length),
+    preview: z.boolean(),
+    focusedSource: z.string().optional(),
+    splitRatio: z.number().min(0.2).max(0.8).optional(),
+  })
+  .refine((tab) => !tab.focusedSource || tab.sources.includes(tab.focusedSource));
 export type ResourceTab = z.infer<typeof resourceTabSchema>;
 export const sessionSchema = z.object({
   id: z.string().uuid(),
@@ -238,6 +251,7 @@ export type Concept = {
 };
 export type Catalog = {
   files: Source[];
+  directories: Directory[];
   sessions: StudySession[];
   attempts: Attempt[];
   concepts: Concept[];

@@ -45,6 +45,16 @@ Do **not** use `celld dev --clean`, delete `.celld`, or run a cleanup command if
 
 The repository alone is not a backup of your library. No user documents, transcripts or keys are pushed to GitHub.
 
+## Directories and split workspaces
+
+Use **New folder** at the root or **Create subfolder** from a folder's `+` menu. The same tree and folder actions are available in resource pickers and upload destinations. Empty folders persist. Renaming a parent changes descendant paths while preserving directory/file identities and saved study links. A selected upload destination follows its directory identity through a rename.
+
+**Archive** hides a directory and its descendants from the active tree and pickers. Restoring it preserves each file's individual archive choice. **Delete** asks for confirmation and moves the item or subtree to **Trash**; restore it there. This version does not automatically purge originals or study history. Restore an archived/trashed parent before writing into its descendants.
+
+Each split tab saves its width ratio and selected source. Drag its central divider, use arrow keys (Shift for larger steps), Home/End for limits, or double-click/press Enter for equal widths. The shared toolbar follows the clicked/focused pane; **Tools target** also selects the owner explicitly. Notes, bookmarks, tutor responses and reader positions remain tied to source identity. On narrow screens, select one full-width source; hidden media pauses.
+
+Directory records, Trash/archive state and split preferences live in celld. Tree expansion/scroll, side-panel preferences and unsaved source-specific note drafts are browser-local and follow the same browser profile and origin.
+
 ## Verification
 
 ```sh

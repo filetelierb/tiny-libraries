@@ -5,12 +5,14 @@ import {
   kindFor,
   localeSchema,
   sessionSchema,
+  sourceSchema,
   publicLearning,
   reviewSummary,
   fold,
   mergeConcept,
   type Concept,
   type Source,
+  type Directory,
   type Catalog,
   type Settings,
   type StudySession,
@@ -19,6 +21,14 @@ import {
 } from '../shared/domain';
 export { ProcessingJob } from './jobs';
 import { runAssistant, bridgedFetch, gradeShortAnswer } from './meta';
+import {
+  changeDirectory,
+  ensureDirectories,
+  normalizePath,
+  assertWritableDirectory,
+  directoryState,
+  DirectoryError,
+} from '../shared/directories';
 
 const json = (value: unknown, status = 200) =>
   Response.json(value, {
@@ -72,6 +82,28 @@ async function boundedJson(request: Request) {
   return JSON.parse(new TextDecoder().decode(data));
 }
 export class Library extends DurableObject<Env> {
+  async directorySnapshot(storage: Pick<DurableObjectStorage, 'list' | 'put'> = this.ctx.storage) {
+    const [fileEntries, directoryEntries] = await Promise.all([
+      storage.list<Source>({ prefix: 'file:' }),
+      storage.list<Directory>({ prefix: 'directory:' }),
+    ]);
+    const files = [...fileEntries.values()].map((file) => ({
+        ...file,
+        folder: normalizePath(file.folder),
+      })),
+      existing = [...directoryEntries.values()];
+    for (const file of files)
+      if (fileEntries.get(`file:${file.id}`)?.folder !== file.folder)
+        await storage.put(`file:${file.id}`, file);
+    const directories = ensureDirectories(
+      existing,
+      files.map((file) => file.folder),
+    );
+    const known = new Set(existing.map((directory) => directory.id));
+    for (const directory of directories)
+      if (!known.has(directory.id)) await storage.put(`directory:${directory.id}`, directory);
+    return { files, directories };
+  }
   async settings(): Promise<Settings> {
     const key = await this.ctx.storage.get<string>('apiKey');
     return {
@@ -88,17 +120,68 @@ export class Library extends DurableObject<Env> {
       if (path === '/internal/key')
         return json({ key: (await this.ctx.storage.get<string>('apiKey')) || null });
       if (path === '/api/catalog') {
-        const files = await this.ctx.storage.list<Source>({ prefix: 'file:' });
+        const { files, directories } = await this.ctx.storage.transaction((storage) =>
+          this.directorySnapshot(storage),
+        );
         const sessions = await this.ctx.storage.list<StudySession>({ prefix: 'session:' });
         const attempts = await this.ctx.storage.list<Attempt>({ prefix: 'attempt:' });
         const concepts = await this.ctx.storage.list<Concept>({ prefix: 'concept:' });
         return json({
-          files: [...files.values()],
+          files,
+          directories,
           sessions: [...sessions.values()].map((value) => sessionSchema.parse(value)),
           attempts: [...attempts.values()],
           concepts: [...concepts.values()],
           settings: await this.settings(),
         } satisfies Catalog);
+      }
+      if (path === '/internal/destination' && request.method === 'POST') {
+        const data = z
+          .object({ folder: z.string(), directoryId: z.string().uuid().optional() })
+          .parse(await boundedJson(request));
+        const { directories } = await this.directorySnapshot();
+        const directory = data.directoryId
+          ? directories.find((entry) => entry.id === data.directoryId)
+          : null;
+        if (data.directoryId && !directory) throw new ApiError('Directory not found', 404);
+        const folder = directory?.path ?? normalizePath(data.folder);
+        assertWritableDirectory(folder, directories);
+        return json({ folder });
+      }
+      const directoryMatch = path.match(/^\/api\/directories\/([a-f0-9-]+)$/);
+      if (
+        (path === '/api/directories' && request.method === 'POST') ||
+        (directoryMatch && request.method === 'PATCH')
+      ) {
+        const input = directoryMatch
+          ? z
+              .discriminatedUnion('action', [
+                z.object({ action: z.literal('rename'), name: z.string() }),
+                z.object({ action: z.enum(['archive', 'unarchive', 'trash', 'restore']) }),
+              ])
+              .parse(await boundedJson(request))
+          : z
+              .object({ parentPath: z.string().default(''), name: z.string() })
+              .parse(await boundedJson(request));
+        const value = await this.ctx.storage.transaction(async (storage) => {
+          const snapshot = await this.directorySnapshot(storage);
+          const operation = directoryMatch
+            ? {
+                ...(input as
+                  | { action: 'rename'; name: string }
+                  | { action: 'archive' | 'unarchive' | 'trash' | 'restore' }),
+                id: directoryMatch[1],
+              }
+            : { ...(input as { parentPath: string; name: string }), action: 'create' as const };
+          const next = changeDirectory(snapshot.directories, snapshot.files, operation);
+          for (const directory of next.directories)
+            await storage.put(`directory:${directory.id}`, directory);
+          for (const file of next.files)
+            if (snapshot.files.find((original) => original.id === file.id) !== file)
+              await storage.put(`file:${file.id}`, file);
+          return next;
+        });
+        return json(value, directoryMatch ? 200 : 201);
       }
       if (path === '/api/settings') {
         if (request.method === 'GET') return json(await this.settings());
@@ -117,9 +200,24 @@ export class Library extends DurableObject<Env> {
         return json(await this.settings());
       }
       if (path === '/internal/file') {
-        const file = z.custom<Source>().parse(await boundedJson(request));
-        await this.ctx.storage.put(`file:${file.id}`, file);
-        return json(file);
+        const { directoryId, ...file } = sourceSchema
+          .extend({ directoryId: z.string().uuid().optional() })
+          .parse(await boundedJson(request));
+        const stored = await this.ctx.storage.transaction(async (storage) => {
+          const snapshot = await this.directorySnapshot(storage);
+          const directory = directoryId
+            ? snapshot.directories.find((entry) => entry.id === directoryId)
+            : null;
+          if (directoryId && !directory) throw new ApiError('Directory not found', 404);
+          const folder = directory?.path ?? normalizePath(file.folder);
+          assertWritableDirectory(folder, snapshot.directories);
+          for (const entry of ensureDirectories(snapshot.directories, [folder]))
+            await storage.put(`directory:${entry.id}`, entry);
+          const next = { ...file, folder };
+          await storage.put(`file:${file.id}`, next);
+          return next;
+        });
+        return json(stored);
       }
       const fileMatch = path.match(/^\/api\/files\/([a-f0-9-]+)$/);
       if (fileMatch) {
@@ -131,13 +229,29 @@ export class Library extends DurableObject<Env> {
               name: z.string().trim().min(1).max(240).optional(),
               folder: z.string().trim().max(240).optional(),
               archived: z.boolean().optional(),
+              trashed: z.boolean().optional(),
               reviewed: z.boolean().optional(),
             })
             .parse(await boundedJson(request));
           if (update.name && kindFor(update.name) !== file.kind)
             throw new ApiError('Keep the original file extension');
-          const next = { ...file, ...update };
-          await this.ctx.storage.put(`file:${file.id}`, next);
+          const next = await this.ctx.storage.transaction(async (storage) => {
+            const current = await storage.get<Source>(`file:${file.id}`);
+            if (!current) throw new ApiError('File not found', 404);
+            const { directories } = await this.directorySnapshot(storage);
+            const folder =
+              update.folder === undefined ? current.folder : normalizePath(update.folder);
+            if (update.folder !== undefined) assertWritableDirectory(folder, directories);
+            if (update.trashed === false && directoryState(folder, directories) === 'trash')
+              throw new ApiError('Restore the parent directory first', 409);
+            if (update.archived === false && directoryState(folder, directories) !== 'files')
+              throw new ApiError('Restore the parent directory first', 409);
+            for (const entry of ensureDirectories(directories, [folder]))
+              await storage.put(`directory:${entry.id}`, entry);
+            const value = { ...current, ...update, folder };
+            await storage.put(`file:${file.id}`, value);
+            return value;
+          });
           return json(next);
         }
         return json(file);
@@ -320,7 +434,8 @@ export class Library extends DurableObject<Env> {
       }
       throw new ApiError('Not found', 404);
     } catch (error) {
-      if (error instanceof ApiError) return json({ error: error.message }, error.status);
+      if (error instanceof ApiError || error instanceof DirectoryError)
+        return json({ error: error.message }, error.status);
       if (error instanceof z.ZodError || error instanceof SyntaxError)
         return json({ error: 'Invalid request' }, 400);
       throw error;
@@ -352,7 +467,12 @@ export default {
         return json({ ok: true, runtime: 'celld', version: '0.1.0' });
       if (url.pathname === '/api/files' && request.method === 'POST') {
         const name = decodeURIComponent(request.headers.get('X-File-Name') || '');
-        const folder = decodeURIComponent(request.headers.get('X-File-Folder') || '');
+        const inputFolder = decodeURIComponent(request.headers.get('X-File-Folder') || '');
+        const directoryId = request.headers.get('X-Directory-Id') || undefined;
+        const { folder } = await internal<{ folder: string }>(env, '/internal/destination', {
+          folder: inputFolder,
+          directoryId,
+        });
         const kind = kindFor(name),
           size = Number(request.headers.get('Content-Length'));
         if (!kind || !name.trim() || name.length > 240 || folder.length > 240)
@@ -375,8 +495,13 @@ export default {
         await env.FILES.put(`original/${file.id}/1`, request.body, {
           httpMetadata: { contentType: file.mime },
         });
-        await internal(env, '/internal/file', file);
-        return json(file, 201);
+        try {
+          const stored = await internal<Source>(env, '/internal/file', { ...file, directoryId });
+          return json(stored, 201);
+        } catch (error) {
+          await env.FILES.delete(`original/${file.id}/1`);
+          throw error;
+        }
       }
       const contentMatch = url.pathname.match(/^\/api\/files\/([a-f0-9-]+)\/content$/);
       if (contentMatch) {

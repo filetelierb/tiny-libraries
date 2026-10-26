@@ -12,6 +12,7 @@ export function uploadFile(
   file: File,
   folder: string,
   progress: (percent: number) => void,
+  directoryId?: string,
 ): Promise<import('../shared/domain').Source> {
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest();
@@ -19,6 +20,7 @@ export function uploadFile(
     request.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
     request.setRequestHeader('X-File-Name', encodeURIComponent(file.name));
     request.setRequestHeader('X-File-Folder', encodeURIComponent(folder));
+    if (directoryId) request.setRequestHeader('X-Directory-Id', directoryId);
     request.upload.onprogress = (e) => {
       if (e.lengthComputable) progress(Math.round((e.loaded / e.total) * 100));
     };

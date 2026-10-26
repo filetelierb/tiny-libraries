@@ -354,7 +354,7 @@ hr {
   color: var(--primary);
   background: color-mix(in oklch, var(--secondary), transparent 25%);
 }
-.file-row > button {
+.file-row > button:first-child {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -364,13 +364,13 @@ hr {
   text-align: left;
   font-size: 13px;
 }
-.file-row > button span {
+.file-row > button:first-child span {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.file-row > button svg:first-child {
+.file-row > button:first-child svg:first-child {
   color: var(--muted-text);
   width: 18px;
   height: 18px;
@@ -1742,7 +1742,7 @@ body:has(.panel-resizer.resizing) {
     width: 24px;
     min-width: 24px;
   }
-  .file-tree .file-row > button {
+  .file-tree .file-row > button:first-child {
     font-size: var(--font-size-control);
     min-height: 40px;
   }
@@ -1937,4 +1937,326 @@ body:has(.panel-resizer.resizing) {
 .glossary-proposal summary {
   cursor: pointer;
   color: var(--primary);
+}
+
+/* Shared directory navigation and bounded action surfaces. */
+.file-tree {
+  display: flex;
+  overflow: hidden;
+  padding: 2px 8px 10px;
+}
+.directory-tree {
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  scrollbar-width: thin;
+  padding-right: 12px;
+}
+.directory-tree ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.directory-node > ul {
+  margin-left: 15px;
+  padding-left: 6px;
+  border-left: 1px solid var(--border);
+}
+.tree-row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  border-radius: var(--radius-sm);
+}
+.directory-row {
+  min-height: 36px;
+  gap: 2px;
+}
+.directory-row:hover {
+  background: var(--muted);
+}
+.directory-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  text-align: left;
+  padding: 7px 2px;
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+}
+.directory-label > span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.directory-label > svg {
+  color: var(--folder);
+}
+.directory-disclosure {
+  display: grid;
+  place-items: center;
+  flex: 0 0 18px;
+  padding: 4px 0;
+  min-height: 30px;
+  color: var(--muted-text);
+}
+.directory-disclosure[aria-expanded='true'] > svg {
+  transform: rotate(90deg);
+}
+.directory-row.selected,
+.directory-root.selected {
+  background: var(--secondary);
+  color: var(--primary);
+}
+.context-directory > .directory-row {
+  color: var(--muted-text);
+}
+.tree-row .tree-menu-trigger {
+  flex: 0 0 28px;
+  min-width: 28px;
+  width: 28px;
+  min-height: 28px;
+  padding: 4px;
+  opacity: 0.7;
+}
+.tree-row .tree-menu-trigger:hover,
+.tree-row .tree-menu-trigger[aria-expanded='true'] {
+  opacity: 1;
+}
+.directory-root {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-control);
+}
+.tree-picker-actions {
+  margin: 8px 0;
+}
+.catalog-switch button {
+  min-width: 0;
+  gap: 3px;
+  padding: 10px 2px;
+}
+.catalog-switch svg {
+  display: none;
+}
+.catalog-switch span {
+  padding: 1px 5px;
+}
+.action-menu {
+  position: fixed;
+  z-index: 100;
+  width: 238px;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100dvh - 16px);
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 6px;
+  background: var(--surface);
+  color: var(--foreground);
+  box-shadow: var(--paper-shadow);
+}
+.action-menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px;
+  width: 100%;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-control);
+  text-align: left;
+  line-height: 1.4;
+}
+.action-menu button:hover,
+.action-menu button:focus-visible {
+  background: var(--accent);
+}
+.action-menu button.danger {
+  color: var(--danger);
+}
+.action-menu hr {
+  margin: 5px 0;
+}
+.destination-picker {
+  min-width: 0;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.destination-picker legend {
+  font-size: var(--font-size-control);
+  font-weight: 600;
+  padding: 0 4px;
+}
+.destination-path {
+  overflow-wrap: anywhere;
+  color: var(--primary);
+  font-size: var(--font-size-control);
+  margin: 0 0 10px;
+}
+.destination-picker .directory-tree {
+  max-height: 220px;
+  margin-top: 8px;
+}
+.modal > .directory-tree {
+  max-height: min(52vh, 420px);
+  margin-top: 14px;
+}
+.form-error {
+  color: var(--danger);
+  font-size: var(--font-size-control);
+  margin: 12px 0;
+}
+
+/* Pane identity is separate from the resource tab and the reader position. */
+.split-workspace {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  flex: 1;
+}
+.resource-pane {
+  display: flex;
+  flex-direction: column;
+  flex-basis: 0;
+  flex-shrink: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.split-workspace.paired .resource-pane {
+  border-top: 2px solid transparent;
+}
+.split-workspace.paired .resource-pane.focused {
+  border-top-color: var(--primary);
+}
+.resource-pane > .document-reader,
+.resource-pane > .media-stage,
+.resource-pane > .pdf-stage,
+.resource-pane > .image-stage,
+.resource-pane > .artifact-stage {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+.resource-pane > .evidence-panel {
+  flex-shrink: 0;
+  max-height: 150px;
+  overflow: auto;
+}
+.split-resizer {
+  display: grid;
+  place-items: center;
+  flex: 0 0 8px;
+  width: 8px;
+  cursor: col-resize;
+  touch-action: none;
+  background: var(--muted);
+}
+.split-resizer > span {
+  width: 2px;
+  height: 36px;
+  border-radius: 2px;
+  background: var(--muted-text);
+}
+.split-resizer:hover > span,
+.split-resizer:focus-visible > span {
+  background: var(--primary);
+}
+.split-resizer:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+.split-workspace.resizing,
+.split-workspace.resizing * {
+  user-select: none;
+  cursor: col-resize !important;
+}
+.split-workspace.narrow {
+  flex-direction: column;
+}
+.split-source-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 5px;
+  border-bottom: 1px solid var(--border);
+  background: var(--background);
+}
+.split-source-tabs > button {
+  min-width: 0;
+  flex: 1;
+  border-radius: var(--radius-sm);
+  padding: 7px 9px;
+  font-size: var(--font-size-control);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.split-source-tabs > button[aria-selected='true'] {
+  background: var(--secondary);
+  color: var(--primary);
+}
+.pane-target {
+  min-width: 0;
+  max-width: 100%;
+  width: auto;
+  flex: 1;
+  border: 0;
+  border-radius: 0;
+  padding: 0 2px;
+  font-size: var(--font-size-control);
+  background: transparent;
+  font-weight: 600;
+  text-overflow: ellipsis;
+}
+.reader-commands {
+  gap: 8px;
+  justify-content: space-between;
+}
+.reader-commands .toolbar-actions {
+  flex-wrap: wrap;
+  max-width: calc(100% - 42px);
+  justify-content: center;
+  margin-left: auto;
+  margin-right: auto;
+}
+.reader-commands .focus-action {
+  position: static;
+  flex-shrink: 0;
+}
+.study-resource {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--font-size-control);
+  color: var(--muted-text);
+}
+.study-resource > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 720px) {
+  .directory-row {
+    min-height: 40px;
+  }
+  .directory-disclosure {
+    min-height: 40px;
+  }
+  .tree-row .tree-menu-trigger {
+    min-height: 40px;
+  }
 }
