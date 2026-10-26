@@ -78,3 +78,11 @@ Record actual implementation and validation as it lands. Commit dates remain act
 Added independent revisioned annotations, structured rich text, local PNG captures, editable drawing strokes and PDF overlays. Existing text notes migrate with stable identities. Current/all-resource filters, source jumps, tutor-response conversion and recoverable annotation deletion are available in the study panel.
 
 Verification: 54 tests, TypeScript and production build pass. Browser checks covered rich Markdown/table/list/link editing, saved page and video-frame captures, drawing undo, source filtering and Trash/restore. A clean runtime stop/start retained nine annotation records, three PNG hashes and eight original-file hashes. Real Meta calls answered selected PDF passages with scoped citations, both alongside persistent references and with none; the reference lists stayed unchanged. API checks rejected stale source context and preserved idempotent completed request replay. Advanced drawing/attachment tools and broader accessibility checks remain in progress.
+
+### Shared source records and bookmarks
+
+File annotations now remain available across study sessions while retaining creator provenance. An inline directory filter selects open session resources with per-file counts, all/none and search. Unbound notes stay in their creator session.
+
+Added labeled personal bookmarks, edit, origin filters, count badges and recoverable Trash. Existing bookmark locators migrate with stable identities. A bounded Meta bookmark tool saves actual source-linked Suggested records on explicit requests; source/version checks and deterministic request/location identities protect writes. Annotation queries exclude bookmark records, and playback markers follow the bookmark origin filter.
+
+Browser/API/live Meta checks verified cross-session editing, source jumps, checkbox filters, personal bookmark lifecycle, a saved Meta bookmark at PDF page two and exact playback seeking to 4.5 seconds. The active file’s count remains independent of filtering. Unit tests cover mixed-kind pagination, migration, source-bounded actions and the three-location write limit.

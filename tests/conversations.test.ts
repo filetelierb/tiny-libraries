@@ -220,3 +220,147 @@ test('one-question passage is readable through a scoped tool while other file ev
   assert.match(result.text, /above 16 Hz/);
   assert.deepEqual(result.tools, ['read_segments']);
 });
+
+test('bookmark writes require an enabled action and evidence from the selected source', async () => {
+  const material: Learning = {
+    sourceId: 'selected',
+    sourceVersion: 2,
+    locale: 'en',
+    model: 'test',
+    createdAt: 'today',
+    segments: [{ id: 'part', text: 'Evidence', start: 5, end: 9 }],
+    synthesis: { title: 'Title', chapters: [], glossary: [], artifact: null },
+  };
+  const saved: unknown[] = [];
+  let calls = 0;
+  await runAssistant(
+    'placeholder',
+    'model',
+    'Bookmark this section',
+    [],
+    [material],
+    { count: 0, correct: 0, percent: 0, needsPractice: [], evidence: 'Recorded attempts only' },
+    async (_url, options) => {
+      const body = JSON.parse(options.body as string);
+      if (++calls === 1) {
+        assert.ok(
+          body.tools.some(
+            (tool: { function: { name: string } }) => tool.function.name === 'create_bookmark',
+          ),
+        );
+        return Response.json({
+          choices: [
+            {
+              message: {
+                tool_calls: ['unselected:part', 'selected:part'].map((segmentId, index) => ({
+                  id: `call-${index}`,
+                  type: 'function',
+                  function: {
+                    name: 'create_bookmark',
+                    arguments: JSON.stringify({ segmentId, label: 'Saved point' }),
+                  },
+                })),
+              },
+            },
+          ],
+        });
+      }
+      const outputs = body.messages
+        .filter((message: { role: string }) => message.role === 'tool')
+        .map((message: { content: string }) => JSON.parse(message.content));
+      assert.match(outputs[0].error, /not available/);
+      assert.equal(outputs[1].id, 'saved');
+      return Response.json({ choices: [{ message: { content: 'Saved the bookmark.' } }] });
+    },
+    undefined,
+    {
+      createBookmark: async (value) => {
+        saved.push(value);
+        return { id: 'saved' };
+      },
+    },
+  );
+  assert.equal(saved.length, 1);
+  assert.deepEqual(saved[0], {
+    sourceId: 'selected',
+    sourceVersion: 2,
+    segment: { id: 'selected:part', sourceId: 'selected', text: 'Evidence', start: 5, end: 9 },
+    label: 'Saved point',
+  });
+  await runAssistant(
+    'placeholder',
+    'model',
+    'Help',
+    [],
+    [material],
+    { count: 0, correct: 0, percent: 0, needsPractice: [], evidence: 'Recorded attempts only' },
+    async (_url, options) => {
+      const body = JSON.parse(options.body as string);
+      assert.ok(
+        !body.tools.some(
+          (tool: { function: { name: string } }) => tool.function.name === 'create_bookmark',
+        ),
+      );
+      return Response.json({ choices: [{ message: { content: 'Help' } }] });
+    },
+  );
+});
+
+test('a tutor reply cannot create more than three distinct bookmark locations', async () => {
+  const material: Learning = {
+    sourceId: 'source',
+    sourceVersion: 1,
+    locale: 'en',
+    model: 'test',
+    createdAt: 'today',
+    segments: Array.from({ length: 4 }, (_, i) => ({
+      id: `part-${i}`,
+      text: `Evidence ${i}`,
+      start: i,
+      end: i + 1,
+    })),
+    synthesis: { title: 'Title', chapters: [], glossary: [], artifact: null },
+  };
+  let calls = 0,
+    writes = 0;
+  await runAssistant(
+    'placeholder',
+    'model',
+    'Save study locations',
+    [],
+    [material],
+    { count: 0, correct: 0, percent: 0, needsPractice: [], evidence: 'Recorded attempts only' },
+    async (_url, options) => {
+      const body = JSON.parse(options.body as string);
+      if (++calls === 1)
+        return Response.json({
+          choices: [
+            {
+              message: {
+                tool_calls: material.segments.map((segment, index) => ({
+                  id: `call-${index}`,
+                  type: 'function',
+                  function: {
+                    name: 'create_bookmark',
+                    arguments: JSON.stringify({
+                      segmentId: `source:${segment.id}`,
+                      label: segment.text,
+                    }),
+                  },
+                })),
+              },
+            },
+          ],
+        });
+      const outputs = body.messages
+        .filter((message: { role: string }) => message.role === 'tool')
+        .map((message: { content: string }) => JSON.parse(message.content));
+      assert.equal(outputs.length, 4);
+      assert.match(outputs[3].error, /three/);
+      return Response.json({ choices: [{ message: { content: 'Saved three locations.' } }] });
+    },
+    undefined,
+    { createBookmark: async () => ({ id: `saved-${++writes}` }) },
+  );
+  assert.equal(writes, 3);
+});

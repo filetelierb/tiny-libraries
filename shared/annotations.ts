@@ -8,6 +8,7 @@ export const annotationQuerySchema = z.object({
     .max(MAX_RESOURCE_TABS * 2)
     .refine((ids) => new Set(ids).size === ids.length),
   includeSession: z.boolean().default(false),
+  kind: z.enum(['annotation', 'bookmark']).default('annotation'),
   after: z.string().max(512).nullable().optional(),
 });
 export type AnnotationQuery = z.infer<typeof annotationQuerySchema>;
@@ -46,14 +47,18 @@ export async function readAnnotationQueryPage(
       return { error: 'Annotation selection changed; reload its first page' };
   }
   const items: AnnotationSummary[] = [];
+  let scanned = 0;
   for (let index = start; index < prefixes.length; index++) {
     const entries = await read({
       prefix: prefixes[index],
-      limit: 100 - items.length,
+      limit: 100 - scanned,
       ...(index === start && query.after ? { startAfter: query.after } : {}),
     });
-    items.push(...entries.values());
-    if (items.length === 100) return { items, nextCursor: [...entries.keys()].at(-1)! };
+    scanned += entries.size;
+    items.push(
+      ...[...entries.values()].filter((item) => (item.kind || 'annotation') === query.kind),
+    );
+    if (scanned === 100) return { items, nextCursor: [...entries.keys()].at(-1)! };
   }
   return { items, nextCursor: null };
 }
@@ -194,6 +199,7 @@ export const drawingSchema = z
     'Drawing is too detailed; save this annotation and start another',
   );
 export const annotationInputSchema = z.object({
+  kind: z.enum(['annotation', 'bookmark']).default('annotation'),
   id: z.string().uuid(),
   sessionId: z.string().uuid(),
   sourceId: z.string().uuid().nullable(),
@@ -207,7 +213,8 @@ export const annotationInputSchema = z.object({
   expectedRevision: z.number().int().nonnegative(),
 });
 export type AnnotationInput = z.infer<typeof annotationInputSchema>;
-export type Annotation = Omit<AnnotationInput, 'expectedRevision'> & {
+export type Annotation = Omit<AnnotationInput, 'expectedRevision' | 'kind'> & {
+  kind?: 'annotation' | 'bookmark';
   revision: number;
   text: string;
   deleted: boolean;
@@ -236,16 +243,9 @@ export async function migratedAnnotations(
 ): Promise<Annotation[]> {
   return Promise.all(
     session.notes.map(async (note) => {
-      const hash = new Uint8Array(
-        await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${session.id}:${note.id}`)),
-      );
-      hash[6] = (hash[6] & 15) | 128;
-      hash[8] = (hash[8] & 63) | 128;
-      const hex = [...hash.slice(0, 16)]
-        .map((value) => value.toString(16).padStart(2, '0'))
-        .join('');
       return {
-        id: `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`,
+        id: await stableAnnotationId(`${session.id}:${note.id}`),
+        kind: 'annotation' as const,
         sessionId: session.id,
         sourceId: note.sourceId,
         sourceVersion: files.find((file) => file.id === note.sourceId)?.version || 1,
@@ -262,5 +262,44 @@ export async function migratedAnnotations(
         updatedAt: note.createdAt,
       };
     }),
+  );
+}
+
+export async function stableAnnotationId(seed: string) {
+  const hash = new Uint8Array(
+    await crypto.subtle.digest('SHA-256', new TextEncoder().encode(seed)),
+  );
+  hash[6] = (hash[6] & 15) | 128;
+  hash[8] = (hash[8] & 63) | 128;
+  const hex = [...hash.slice(0, 16)].map((value) => value.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+export async function migratedBookmarks(
+  session: StudySession,
+  files: Source[],
+): Promise<Annotation[]> {
+  return Promise.all(
+    session.bookmarks.map(async (bookmark) => ({
+      id: await stableAnnotationId(`bookmark:${session.id}:${bookmark.id}`),
+      kind: 'bookmark' as const,
+      sessionId: session.id,
+      sourceId: bookmark.sourceId,
+      sourceVersion: files.find((file) => file.id === bookmark.sourceId)?.version || 1,
+      title: bookmark.label,
+      document: plainDocument(bookmark.label),
+      text: bookmark.label,
+      location: {
+        ...(bookmark.page ? { page: bookmark.page } : {}),
+        ...(bookmark.seconds != null ? { seconds: bookmark.seconds } : {}),
+      },
+      strokes: [],
+      origin: 'manual' as const,
+      references: [bookmark.sourceId],
+      revision: 1,
+      deleted: false,
+      createdAt: session.createdAt,
+      updatedAt: session.createdAt,
+    })),
   );
 }

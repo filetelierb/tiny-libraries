@@ -6,6 +6,10 @@ import {
   annotationScopeKey,
   annotationSummary,
   migratedAnnotations,
+  migratedBookmarks,
+  stableAnnotationId,
+  plainDocument,
+  type SourceLocation,
   richText,
   type Annotation,
   type AnnotationSummary,
@@ -60,7 +64,7 @@ async function importNotes(
     ...new Uint8Array(
       await crypto.subtle.digest(
         'SHA-256',
-        new TextEncoder().encode(JSON.stringify(session.notes)),
+        new TextEncoder().encode(JSON.stringify([session.notes, session.bookmarks])),
       ),
     ),
   ]
@@ -69,7 +73,10 @@ async function importNotes(
   const migrationKey = `annotation-note-import:${sessionId}`;
   if ((await storage.get(migrationKey)) === fingerprint) return;
   const files = sources || [...(await storage.list<Source>({ prefix: 'file:' })).values()];
-  for (const annotation of await migratedAnnotations(session, files))
+  for (const annotation of [
+    ...(await migratedAnnotations(session, files)),
+    ...(await migratedBookmarks(session, files)),
+  ])
     await storage.transaction(async (tx) => {
       const key = `annotation:${annotation.id}`;
       if (!(await tx.get(key))) await saveAnnotation(tx, annotation);
@@ -131,13 +138,16 @@ export async function annotationRoute(
     const sessionId = z.string().uuid().parse(url.searchParams.get('sessionId'));
     await importNotes(storage, sessionId);
     const sourceId = url.searchParams.get('sourceId');
+    const kind = z
+      .enum(['annotation', 'bookmark'])
+      .parse(url.searchParams.get('kind') || 'annotation');
     const entries = await storage.list<AnnotationSummary>({
       prefix: `annotation-summary:${sessionId}:`,
       limit: 100,
       ...(url.searchParams.get('after') ? { startAfter: url.searchParams.get('after')! } : {}),
     });
     const annotations = [...entries.values()].filter(
-      (item) => !sourceId || item.sourceId === sourceId,
+      (item) => (!sourceId || item.sourceId === sourceId) && (item.kind || 'annotation') === kind,
     );
     return json({
       items: annotations,
@@ -260,6 +270,7 @@ export async function annotationRoute(
         current?.revision === 1 &&
         input.expectedRevision === 0 &&
         JSON.stringify([
+          current.kind || 'annotation',
           current.sessionId,
           current.sourceId,
           current.sourceVersion,
@@ -271,6 +282,7 @@ export async function annotationRoute(
           current.references,
         ]) ===
           JSON.stringify([
+            input.kind,
             input.sessionId,
             input.sourceId,
             input.sourceVersion,
@@ -290,7 +302,8 @@ export async function annotationRoute(
         );
       if (
         current &&
-        (current.sourceId !== input.sourceId ||
+        ((current.kind || 'annotation') !== input.kind ||
+          current.sourceId !== input.sourceId ||
           current.sessionId !== input.sessionId ||
           current.sourceVersion !== input.sourceVersion)
       )
@@ -336,4 +349,57 @@ export async function annotationRoute(
     return json(value);
   }
   return json({ error: 'Method not allowed' }, 405);
+}
+
+export async function createSuggestedBookmark(
+  storage: DurableObjectStorage,
+  input: {
+    sessionId: string;
+    sourceId: string;
+    sourceVersion: number;
+    label: string;
+    location: SourceLocation;
+    requestId: string;
+    segmentId: string;
+  },
+) {
+  const id = await stableAnnotationId(
+    `bookmark:${input.requestId}:${input.sourceId}:${input.segmentId}`,
+  );
+  const data = annotationInputSchema.parse({
+    id,
+    kind: 'bookmark',
+    sessionId: input.sessionId,
+    sourceId: input.sourceId,
+    sourceVersion: input.sourceVersion,
+    title: input.label,
+    document: plainDocument(input.label),
+    location: input.location,
+    strokes: [],
+    origin: 'tutor',
+    references: [input.sourceId],
+    expectedRevision: 0,
+  });
+  await requireContext(storage, data);
+  return storage.transaction(async (tx) => {
+    const existing = await tx.get<Annotation>(`annotation:${id}`);
+    if (existing)
+      return {
+        id: existing.id,
+        label: existing.title,
+        location: existing.location,
+        deleted: existing.deleted,
+      };
+    const { expectedRevision: _revision, ...record } = data;
+    const value: Annotation = {
+      ...record,
+      text: input.label,
+      revision: 1,
+      deleted: false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    await saveAnnotation(tx, value);
+    return { id: value.id, label: value.title, location: value.location, deleted: false };
+  });
 }

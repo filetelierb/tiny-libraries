@@ -98,3 +98,9 @@ File annotations are shared across study sessions by file identity and retain th
 Select PDF or document text and choose **Ask tutor** to attach a removable **For this question** context. Its source and quote stay fixed if you change the reader's active tab. A selected passage can be discussed without preparing the entire file. Without a quote, prepare the source first. Persistent conversation references remain unchanged. The exchange records its source/page/time and citations; **Save as annotation** opens an editable note with that context.
 
 Unsent text and question context stay in browser storage. Saved annotations, captures and completed exchanges stay in celld across restart. Large conversations ask you to start another conversation before exceeding a local storage record's size; existing history remains intact.
+
+## Bookmarks
+
+Use **Bookmark** in the reader toolbar or **Add bookmark** in the panel to label the current source location. File bookmarks are shared across study sessions. Edit the label, jump to the saved time/page, or move a bookmark to Trash and restore it. Existing session bookmarks are migrated automatically without changing their original session records.
+
+The panel filters **All bookmarks**, **Personal**, or **Suggested by Meta**; the same filter applies to playback markers. The navigation count shows the active file’s complete non-deleted total. Ask the tutor to bookmark a selected passage or an evidence-linked study location to create a Suggested bookmark. Its source and locator must resolve to the material available in that question. One reply can save up to three distinct locations; retry identities prevent duplicate records for the same request/location.

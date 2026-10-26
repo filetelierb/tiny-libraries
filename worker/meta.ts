@@ -328,6 +328,14 @@ export async function runAssistant(
   review: ReturnType<typeof reviewSummary>,
   transport: MetaFetch = fetch,
   context?: QuestionContext,
+  actions: {
+    createBookmark?: (value: {
+      sourceId: string;
+      sourceVersion: number;
+      segment: Segment;
+      label: string;
+    }) => Promise<unknown>;
+  } = {},
 ) {
   const materials = Array.isArray(learning) ? learning : learning ? [learning] : [];
   const segments: Array<Segment & { sourceId?: string }> = materials.flatMap((material) =>
@@ -346,7 +354,10 @@ export async function runAssistant(
       ...(context.location.page ? { page: context.location.page } : {}),
       ...(context.location.seconds != null ? { start: context.location.seconds } : {}),
     });
-  const tools = [
+  const tools: Array<{
+    type: string;
+    function: { name: string; description: string; parameters: Record<string, unknown> };
+  }> = [
     {
       type: 'function',
       function: {
@@ -377,6 +388,21 @@ export async function runAssistant(
       },
     },
   ];
+  if (actions.createBookmark)
+    tools.push({
+      type: 'function',
+      function: {
+        name: 'create_bookmark',
+        description:
+          'Save a suggested bookmark only when the user explicitly asks to bookmark, save or mark a study location. Use an available evidence segment; do not invent a source or timestamp.',
+        parameters: {
+          type: 'object',
+          properties: { segmentId: { type: 'string' }, label: { type: 'string' } },
+          required: ['segmentId', 'label'],
+          additionalProperties: false,
+        },
+      },
+    });
   const messages: Message[] = [
     {
       role: 'system',
@@ -392,6 +418,7 @@ export async function runAssistant(
     { role: 'user', content: questionContent(prompt, context) },
   ];
   const used: string[] = [];
+  const createdBookmarks = new Set<string>();
   for (let step = 0; step < 5; step++) {
     const result = completionSchema.parse(
         await metaRequest(key, 'chat/completions', { model, messages, tools }, false, transport),
@@ -421,7 +448,30 @@ export async function runAssistant(
               : {}),
           })),
         );
-      else output = { error: 'Tool is not permitted' };
+      else if (call.function.name === 'create_bookmark' && actions.createBookmark) {
+        const input = z
+          .object({ segmentId: z.string(), label: z.string().trim().min(1).max(240) })
+          .parse(JSON.parse(call.function.arguments));
+        const segment = segments.find((segment) => segment.id === input.segmentId);
+        const sourceId =
+          segment?.sourceId || (materials.length === 1 ? materials[0].sourceId : undefined);
+        const sourceVersion =
+          materials.find((material) => material.sourceId === sourceId)?.sourceVersion ||
+          (context && context.sourceId === sourceId ? context.sourceVersion : undefined);
+        if (!segment || !sourceId || !sourceVersion)
+          output = { error: 'Bookmark evidence is not available in the selected references' };
+        else if (createdBookmarks.size >= 3 && !createdBookmarks.has(segment.id))
+          output = { error: 'At most three study locations can be bookmarked per reply' };
+        else {
+          output = await actions.createBookmark({
+            sourceId,
+            sourceVersion,
+            segment,
+            label: input.label,
+          });
+          createdBookmarks.add(segment.id);
+        }
+      } else output = { error: 'Tool is not permitted' };
       used.push(call.function.name);
       messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(output) });
     }

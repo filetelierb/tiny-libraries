@@ -16,6 +16,7 @@ import {
   type Settings,
 } from '../shared/domain';
 import { runAssistant, bridgedFetch } from './meta';
+import { createSuggestedBookmark } from './annotations';
 
 export async function conversationSnapshot(
   storage: DurableObjectStorage,
@@ -231,6 +232,22 @@ export async function conversationRoute({
       reviewSummary(attempts),
       bridgedFetch(env),
       context,
+      {
+        createBookmark: ({ sourceId, sourceVersion, segment, label }) =>
+          createSuggestedBookmark(storage, {
+            sessionId: reservation.current.sessionId,
+            sourceId,
+            sourceVersion,
+            label,
+            requestId: input.requestId,
+            segmentId: segment.id,
+            location: {
+              quote: segment.text.slice(0, 8000),
+              ...(segment.page ? { page: segment.page } : {}),
+              ...(segment.start != null ? { seconds: segment.start } : {}),
+            },
+          }),
+      },
     );
     const completed = await storage.transaction(async (transaction) => {
       const current = (await transaction.get<Conversation>(key))!;

@@ -24,6 +24,7 @@ export async function queryAnnotations(
   sessionId: string,
   sourceIds: string[],
   includeSession = false,
+  kind: 'annotation' | 'bookmark' = 'annotation',
 ) {
   const items: AnnotationSummary[] = [];
   let after: string | null = null;
@@ -31,7 +32,7 @@ export async function queryAnnotations(
     const page: { items: AnnotationSummary[]; nextCursor: string | null } = await api(
       '/annotations/query',
       'POST',
-      { sessionId, sourceIds, includeSession, after },
+      { sessionId, sourceIds, includeSession, kind, after },
     );
     items.push(...page.items);
     after = page.nextCursor;

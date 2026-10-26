@@ -230,3 +230,69 @@ test('multi-resource annotation queries paginate at 100 without duplicates or wi
   );
   assert.deepEqual(none, { items: [], nextCursor: null });
 });
+
+test('bookmark migration keeps fixed source locators and distinct stable identities without changing session data', async () => {
+  const { migratedBookmarks } = await import('../shared/annotations');
+  const session = sessionSchema.parse({
+    id: sessionId,
+    name: 'Reading',
+    tabs: [sourceId],
+    active: sourceId,
+    split: null,
+    positions: {},
+    notes: [],
+    bookmarks: [{ id: 'point', sourceId, label: 'Sampling point', seconds: 12.5 }],
+    createdAt: '2026-10-26',
+  });
+  const before = JSON.stringify(session),
+    files = [{ id: sourceId, version: 1 } as Source];
+  const [first] = await migratedBookmarks(session, files),
+    [second] = await migratedBookmarks(session, files);
+  assert.deepEqual(first, second);
+  assert.equal(first.kind, 'bookmark');
+  assert.equal(first.origin, 'manual');
+  assert.deepEqual(first.location, { seconds: 12.5 });
+  assert.equal(JSON.stringify(session), before);
+  assert.ok(annotationInputSchema.safeParse({ ...first, expectedRevision: 0 }).success);
+});
+
+test('typed queries advance over full pages of another kind instead of hiding later bookmarks', async () => {
+  const { annotationScopeKey, annotationQuerySchema, readAnnotationQueryPage } =
+    await import('../shared/annotations');
+  const records = new Map(
+    Array.from({ length: 101 }, (_, index) => {
+      const item = {
+        id: `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+        sourceId,
+        sessionId,
+        kind: index === 100 ? 'bookmark' : 'annotation',
+      } as AnnotationSummary;
+      return [annotationScopeKey(item), item];
+    }),
+  );
+  const read = async ({
+    prefix,
+    limit,
+    startAfter,
+  }: {
+    prefix: string;
+    limit: number;
+    startAfter?: string;
+  }) =>
+    new Map(
+      [...records]
+        .filter(([key]) => key.startsWith(prefix) && (!startAfter || key > startAfter))
+        .sort(([a], [b]) => a.localeCompare(b))
+        .slice(0, limit),
+    );
+  const query = annotationQuerySchema.parse({ sessionId, sourceIds: [sourceId], kind: 'bookmark' }),
+    first = await readAnnotationQueryPage(query, read);
+  assert.ok(!('error' in first));
+  assert.equal(first.items.length, 0);
+  assert.ok(first.nextCursor);
+  const second = await readAnnotationQueryPage({ ...query, after: first.nextCursor }, read);
+  assert.ok(!('error' in second));
+  assert.equal(second.items.length, 1);
+  assert.equal(second.items[0].kind, 'bookmark');
+  assert.equal(second.nextCursor, null);
+});

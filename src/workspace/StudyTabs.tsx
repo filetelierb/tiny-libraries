@@ -17,10 +17,12 @@ export function StudyTabs({
   value,
   change,
   t,
+  bookmarkCount = 0,
 }: {
   value: StudyTab;
   change: (value: StudyTab) => void;
   t: T;
+  bookmarkCount?: number;
 }) {
   const strip = useRef<HTMLDivElement>(null);
   const focusAfterChange = useRef(false);
@@ -58,6 +60,7 @@ export function StudyTabs({
           }}
         >
           {t[tool]}
+          {tool === 'bookmarks' && <span className="bookmark-tab-count">{bookmarkCount}</span>}
         </button>
       ))}
     </div>

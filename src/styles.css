@@ -3038,3 +3038,54 @@ body:has(.panel-resizer.resizing) {
 .annotation-resource-filter .annotation-session-filter {
   font-size: var(--font-size-control);
 }
+
+.bookmark-tab-count {
+  margin-left: 5px;
+  font-size: 11px;
+  color: var(--muted-text);
+}
+.bookmarks-panel > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.bookmark-filter {
+  display: flex;
+  align-items: center;
+  flex-direction: row;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: var(--font-size-control);
+}
+.bookmark-filter select {
+  max-width: 75%;
+  padding: 6px;
+}
+.bookmark-card {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+.bookmark-card > div:first-child {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.bookmark-card small {
+  color: var(--muted-text);
+  font-size: var(--font-size-small);
+  margin-right: auto;
+}
+.bookmark-card > p {
+  margin: 10px 0;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.bookmark-delete-confirm {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--background);
+  padding: 8px;
+  font-size: var(--font-size-small);
+}

@@ -525,7 +525,20 @@ function ConversationThread({
             )}
             {message.tools?.length ? (
               <small>
-                {t.toolsUsed}: {[...new Set(message.tools)].join(', ')}
+                {t.toolsUsed}:{' '}
+                {[...new Set(message.tools)]
+                  .map(
+                    (tool) =>
+                      (
+                        ({
+                          read_segments: t.toolReadSegments,
+                          practice_summary: t.toolPracticeSummary,
+                          list_concepts: t.toolListConcepts,
+                          create_bookmark: t.toolCreateBookmark,
+                        }) as Record<string, string>
+                      )[tool] || t.studyTool,
+                  )
+                  .join(', ')}
               </small>
             ) : null}
           </div>

@@ -84,7 +84,10 @@ import { ConversationPanel } from './workspace/ConversationPanel';
 import { AnnotationsPanel } from './annotations/AnnotationsPanel';
 import { captureSource } from './annotations/capture';
 import type { AnnotationRequest } from './annotations/AnnotationEditor';
-import type { SourceLocation } from '../shared/annotations';
+import type { Annotation, SourceLocation } from '../shared/annotations';
+import { useBookmarks } from './bookmarks/useBookmarks';
+import { BookmarkEditor, type BookmarkIntent } from './bookmarks/BookmarkEditor';
+import { BookmarksPanel, type BookmarkFilter } from './bookmarks/BookmarksPanel';
 const AnnotationEditor = lazy(() => import('./annotations/AnnotationEditor'));
 import { sessionPreview, type QuestionContext } from '../shared/conversations';
 import { ActionMenu } from './design/ActionMenu';
@@ -103,6 +106,12 @@ export function App() {
     [session, setSession] = useState<StudySession | null>(null);
   const [annotationRequest, setAnnotationRequest] = useState<AnnotationRequest | null>(null);
   const [annotationTick, setAnnotationTick] = useState(0);
+  const [bookmarkTick, setBookmarkTick] = useState(0);
+  const [bookmarkIntent, setBookmarkIntent] = useState<BookmarkIntent | null>(null);
+  const [bookmarkFilter, setBookmarkFilter] = useState<BookmarkFilter>(() => {
+    const value = localGet('tl:bookmark-filter', 'all');
+    return value === 'manual' || value === 'tutor' ? value : 'all';
+  });
   const [questionRequest, setQuestionRequest] = useState<{
     id: string;
     context: QuestionContext;
@@ -178,6 +187,13 @@ export function App() {
       ? activeResourceTab.focusedSource
       : primary?.id;
   const active = catalog?.files.find((file) => file.id === targetId) || null;
+  const savedBookmarks = useBookmarks(
+    session?.id,
+    resources.resourceTabs.flatMap((tab) => tab.sources),
+    bookmarkTick,
+    setError,
+  );
+  const activeBookmarks = savedBookmarks.filter((item) => item.sourceId === active?.id);
   const learning = learningState?.sourceId === active?.id ? learningState : null;
   const job = jobState?.sourceId === active?.id ? jobState : null;
   const run = async (work: () => Promise<void>) => {
@@ -191,6 +207,7 @@ export function App() {
   async function refresh() {
     const value = await api<Catalog>('/catalog');
     setCatalog(value);
+    setBookmarkTick((value) => value + 1);
     return value;
   }
   useEffect(() => {
@@ -777,19 +794,7 @@ export function App() {
                   <IconButton
                     label={t.addBookmark}
                     onClick={() =>
-                      updateSession({
-                        bookmarks: [
-                          ...session.bookmarks,
-                          {
-                            id: crypto.randomUUID(),
-                            sourceId: active.id,
-                            label: active.name,
-                            ...(active.kind === 'pdf'
-                              ? { page: Math.max(1, position || 1) }
-                              : { seconds: position }),
-                          },
-                        ],
-                      })
+                      setBookmarkIntent({ source: active, location: resourceLocation(active) })
                     }
                   >
                     <Bookmark />
@@ -995,9 +1000,22 @@ export function App() {
                       ) : (
                         <Viewer
                           source={source}
-                          bookmarks={session.bookmarks.filter(
-                            (bookmark) => bookmark.sourceId === source.id,
-                          )}
+                          bookmarks={savedBookmarks
+                            .filter(
+                              (bookmark) =>
+                                bookmark.sourceId === source.id &&
+                                !bookmark.deleted &&
+                                (bookmarkFilter === 'all' || bookmark.origin === bookmarkFilter),
+                            )
+                            .map((bookmark) => ({
+                              id: bookmark.id,
+                              sourceId: source.id,
+                              label: bookmark.title,
+                              ...(bookmark.location.page ? { page: bookmark.location.page } : {}),
+                              ...(bookmark.location.seconds != null
+                                ? { seconds: bookmark.location.seconds }
+                                : {}),
+                            }))}
                           t={t}
                           learning={material || null}
                           sessionId={session.id}
@@ -1074,7 +1092,12 @@ export function App() {
             </IconButton>
           </div>
         </div>
-        <StudyTabs value={tab} change={setTab} t={t} />
+        <StudyTabs
+          value={tab}
+          change={setTab}
+          t={t}
+          bookmarkCount={activeBookmarks.filter((bookmark) => !bookmark.deleted).length}
+        />
         {active && (
           <div className="study-resource" aria-label={t.activeResource}>
             <FileText size={15} />
@@ -1254,46 +1277,34 @@ export function App() {
                 </>
               )}
               {tab === 'bookmarks' && (
-                <>
-                  <div className="section-label">{t.bookmarks}</div>
-                  {session.bookmarks
-                    .filter((b) => b.sourceId === active.id)
-                    .map((b) => (
-                      <div className="bookmark-row" key={b.id}>
-                        <button
-                          onClick={() => {
-                            setSeek({
-                              sourceId: b.sourceId,
-                              value: b.seconds ?? b.page ?? 0,
-                              nonce: Date.now(),
-                            });
-                            setArtifact(false);
-                          }}
-                        >
-                          <Bookmark size={14} />
-                          <span>
-                            {b.label}
-                            <small>
-                              {b.page ? `${t.page} ${b.page}` : formatPosition(b.seconds || 0)}
-                            </small>
-                          </span>
-                        </button>
-                        <IconButton
-                          label={t.remove}
-                          onClick={() =>
-                            updateSession({
-                              bookmarks: session.bookmarks.filter((v) => v.id !== b.id),
-                            })
-                          }
-                        >
-                          <X size={12} />
-                        </IconButton>
-                      </div>
-                    ))}
-                  {!session.bookmarks.some((b) => b.sourceId === active.id) && (
-                    <p className="small-empty">{t.noBookmarks}</p>
-                  )}
-                </>
+                <BookmarksPanel
+                  items={activeBookmarks}
+                  filter={bookmarkFilter}
+                  changeFilter={(value) => {
+                    setBookmarkFilter(value);
+                    localStorage.setItem('tl:bookmark-filter', value);
+                  }}
+                  t={t}
+                  create={() =>
+                    setBookmarkIntent({ source: active, location: resourceLocation(active) })
+                  }
+                  edit={(item) =>
+                    void run(async () => {
+                      const initial = await api<Annotation>(`/annotations/${item.id}`);
+                      setBookmarkIntent({ source: active, location: initial.location, initial });
+                    })
+                  }
+                  navigate={(item) => navigateAnnotation(item.sourceId!, item.location)}
+                  remove={async (item) => {
+                    await run(async () => {
+                      await api(`/annotations/${item.id}`, 'PATCH', {
+                        deleted: !item.deleted,
+                        expectedRevision: item.revision,
+                      });
+                      setBookmarkTick((value) => value + 1);
+                    });
+                  }}
+                />
               )}
               {tab === 'glossary' && (
                 <>
@@ -1383,6 +1394,20 @@ export function App() {
           )}
         </div>
       </aside>
+      {bookmarkIntent && (
+        <BookmarkEditor
+          intent={bookmarkIntent}
+          sessionId={session.id}
+          t={t}
+          close={() => setBookmarkIntent(null)}
+          saved={() => {
+            setBookmarkIntent(null);
+            setBookmarkTick((value) => value + 1);
+            setRight(true);
+            setTab('bookmarks');
+          }}
+        />
+      )}
       {annotationRequest && (
         <Suspense fallback={<p role="status">{t.loadingAnnotations}</p>}>
           <AnnotationEditor
