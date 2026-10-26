@@ -1,125 +1,1712 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { BookOpen, PanelLeft, PanelRight, Plus, Upload, Settings as SettingsIcon, Search, Folder, FileText, FileImage, Film, Headphones, Archive, MoreHorizontal, X, Check, ChevronRight, Sparkles, Bookmark, StickyNote, List, GraduationCap, MessageSquare, Activity, Columns2, Maximize2, Minimize2, Download, ArrowUp, ArrowLeft, CircleHelp, Code2, LoaderCircle, RotateCcw, LibraryBig } from 'lucide-react';
-import { type Catalog, type Source, type StudySession, type Settings, type Locale, type PublicLearning, type Segment, type Job, type Attempt, MAX_FILE_BYTES, kindFor, fold, reviewSummary } from '../shared/domain';
+import {
+  BookOpen,
+  PanelLeft,
+  PanelRight,
+  Plus,
+  Upload,
+  Settings as SettingsIcon,
+  Search,
+  Folder,
+  FileText,
+  FileImage,
+  Film,
+  Headphones,
+  Archive,
+  MoreHorizontal,
+  X,
+  Check,
+  ChevronRight,
+  Sparkles,
+  Bookmark,
+  StickyNote,
+  List,
+  GraduationCap,
+  MessageSquare,
+  Activity,
+  Columns2,
+  Maximize2,
+  Minimize2,
+  Download,
+  ArrowUp,
+  ArrowLeft,
+  CircleHelp,
+  Code2,
+  LoaderCircle,
+  RotateCcw,
+  LibraryBig,
+} from 'lucide-react';
+import {
+  type Catalog,
+  type Source,
+  type StudySession,
+  type Settings,
+  type Locale,
+  type PublicLearning,
+  type Segment,
+  type Job,
+  type Attempt,
+  MAX_FILE_BYTES,
+  kindFor,
+  fold,
+  reviewSummary,
+} from '../shared/domain';
 import { api, uploadFile } from './api';
 import { dictionaries, type T } from './i18n';
 import { Badge, Button, Empty, IconButton, Modal } from './design/components';
 import { Viewer } from './Viewer';
+import { GeneratedArtifact } from './GeneratedArtifact';
 import { SignalExplorer } from './SignalExplorer';
 
-const fileIcon=(kind:Source['kind'])=>kind==='video'?Film:kind==='audio'?Headphones:kind==='image'?FileImage:FileText;
-const localGet=(key:string,fallback:string)=>localStorage.getItem(key)||fallback;
-type StudyTab='chapters'|'notes'|'bookmarks'|'glossary'|'practice'|'review'|'assistant'|'miniapp';
-type ChatMessage={role:'user'|'assistant';content:string;tools?:string[]};
+const fileIcon = (kind: Source['kind']) =>
+  kind === 'video' ? Film : kind === 'audio' ? Headphones : kind === 'image' ? FileImage : FileText;
+const localGet = (key: string, fallback: string) => localStorage.getItem(key) || fallback;
+type StudyTab =
+  'chapters' | 'notes' | 'bookmarks' | 'glossary' | 'practice' | 'review' | 'assistant' | 'miniapp';
+type ChatMessage = { role: 'user' | 'assistant'; content: string; tools?: string[] };
 
-export function App(){
-  const [catalog,setCatalog]=useState<Catalog|null>(null),[locale,setLocale]=useState<Locale>(()=>localGet('tl:locale','en') as Locale),[session,setSession]=useState<StudySession|null>(null);
-  const [left,setLeft]=useState(true),[right,setRight]=useState(true),[focus,setFocus]=useState(false),[tab,setTab]=useState<StudyTab>('chapters'),[query,setQuery]=useState(''),[archived,setArchived]=useState(false);
-  const [modal,setModal]=useState<'settings'|'upload'|'session'|'rename'|'split'|null>(null),[rename,setRename]=useState<Source|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[uploadProgress,setUploadProgress]=useState<number|null>(null);
-  const [learning,setLearning]=useState<PublicLearning|null>(null),[job,setJob]=useState<(Job&{segments?:Segment[]})|null>(null),[seek,setSeek]=useState<{value:number;nonce:number}|null>(null),[artifact,setArtifact]=useState(false),[refreshTick,setRefreshTick]=useState(0);
-  const sessionRef=useRef(session),saveChain=useRef(Promise.resolve()),t=dictionaries[locale]||dictionaries.en;
-  const active=catalog?.files.find(f=>f.id===session?.active)||null,split=catalog?.files.find(f=>f.id===session?.split)||null;
-  const run=async(work:()=>Promise<void>)=>{setError('');try{await work();}catch(e){setError(e instanceof Error?e.message:t.error);}};
-  async function refresh(){const value=await api<Catalog>('/catalog');setCatalog(value);return value;}
-  useEffect(()=>{document.documentElement.lang=locale;localStorage.setItem('tl:locale',locale);},[locale]);
-  useEffect(()=>{void run(async()=>{
-    const data=await refresh();setLocale(data.settings.locale);
-    let selected=data.sessions.find(s=>s.id===localGet('tl:session',''))||data.sessions[0];
-    if(!selected){selected=await api<StudySession>('/sessions','POST',{name:dictionaries[data.settings.locale].sessionName});setCatalog(c=>c?{...c,sessions:[...c.sessions,selected]}:c);}
-    setSession(selected);sessionRef.current=selected;
-    if(!data.settings.configured&&!localStorage.getItem('tl:explored'))setModal('settings');
-  });},[]);
-  function updateSession(update:Partial<StudySession>){
-    if(!sessionRef.current)return;
-    const value={...sessionRef.current,...update};sessionRef.current=value;setSession(value);
-    setCatalog(c=>c?{...c,sessions:c.sessions.map(s=>s.id===value.id?value:s)}:c);
-    saveChain.current=saveChain.current.catch(()=>{}).then(async()=>{await api(`/sessions/${value.id}`,'PUT',value);}).catch(e=>setError(e.message));
+export function App() {
+  const [catalog, setCatalog] = useState<Catalog | null>(null),
+    [locale, setLocale] = useState<Locale>(() => localGet('tl:locale', 'en') as Locale),
+    [session, setSession] = useState<StudySession | null>(null);
+  const [left, setLeft] = useState(() => window.innerWidth >= 1000),
+    [right, setRight] = useState(() => window.innerWidth >= 1150),
+    [focus, setFocus] = useState(false),
+    [tab, setTab] = useState<StudyTab>('chapters'),
+    [query, setQuery] = useState(''),
+    [archived, setArchived] = useState(false);
+  const [modal, setModal] = useState<'settings' | 'upload' | 'session' | 'rename' | 'split' | null>(
+      null,
+    ),
+    [rename, setRename] = useState<Source | null>(null),
+    [error, setError] = useState(''),
+    [busy, setBusy] = useState(false),
+    [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [learning, setLearning] = useState<PublicLearning | null>(null),
+    [job, setJob] = useState<(Job & { segments?: Segment[] }) | null>(null),
+    [seek, setSeek] = useState<{ value: number; nonce: number } | null>(null),
+    [evidence, setEvidence] = useState<Segment | null>(null),
+    [artifact, setArtifact] = useState(false),
+    [refreshTick, setRefreshTick] = useState(0);
+  const sessionRef = useRef(session),
+    saveChain = useRef(Promise.resolve()),
+    t = dictionaries[locale] || dictionaries.en;
+  const active = catalog?.files.find((f) => f.id === session?.active) || null,
+    split = catalog?.files.find((f) => f.id === session?.split) || null;
+  const run = async (work: () => Promise<void>) => {
+    setError('');
+    try {
+      await work();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t.error);
+    }
+  };
+  async function refresh() {
+    const value = await api<Catalog>('/catalog');
+    setCatalog(value);
+    return value;
   }
-  function selectSession(value:StudySession){sessionRef.current=value;setSession(value);localStorage.setItem('tl:session',value.id);setArtifact(false);setLearning(null);setSeek(null);}
-  function openFile(file:Source){if(!sessionRef.current)return;const current=sessionRef.current;updateSession({tabs:current.tabs.includes(file.id)?current.tabs:[...current.tabs,file.id],active:file.id});setArtifact(false);setSeek(null);if(window.innerWidth<800)setLeft(false);}
-  function closeFile(id:string){if(!sessionRef.current)return;const current=sessionRef.current,tabs=current.tabs.filter(x=>x!==id);updateSession({tabs,active:current.active===id?tabs.at(-1)||null:current.active,split:current.split===id?null:current.split});}
-  useEffect(()=>{
-    setLearning(null);setJob(null);if(!active)return;let stopped=false;
-    const load=async()=>{try{const [material,current]=await Promise.all([api<PublicLearning|null>(`/learning/${active.id}`),api<(Job&{segments?:Segment[]})|null>(`/jobs/${active.id}-v${active.version}-${locale}`)]);if(!stopped){setLearning(material);setJob(current);}}catch(e){if(!stopped)setError(e instanceof Error?e.message:t.error);}};
-    void load();const timer=setInterval(()=>{void load();},2500);return()=>{stopped=true;clearInterval(timer);};
-  },[active?.id,locale,refreshTick]);
-  async function prepare(){if(!active)return;if(!catalog?.settings.configured){setModal('settings');return;}setBusy(true);try{const current=await api<Job>('/jobs','POST',{sourceId:active.id,locale});setJob(current);setRefreshTick(v=>v+1);}finally{setBusy(false);}}
-  async function editFile(file:Source,update:Partial<Source>){const result=await api<Source>(`/files/${file.id}`,'PATCH',update);setCatalog(c=>c?{...c,files:c.files.map(f=>f.id===file.id?result:f)}:c);}
-  async function addFiles(files:File[],folder:string){
-    setBusy(true);try{for(const file of files){if(!kindFor(file.name))throw new Error(`${t.unsupported}: ${file.name}`);if(file.size>MAX_FILE_BYTES)throw new Error(t.maxSize);setUploadProgress(0);const source=await uploadFile(file,folder,setUploadProgress);setCatalog(c=>c?{...c,files:[...c.files,source]}:c);openFile(source);}setModal(null);}finally{setBusy(false);setUploadProgress(null);}
+  useEffect(() => {
+    document.documentElement.lang = locale;
+    localStorage.setItem('tl:locale', locale);
+  }, [locale]);
+  useEffect(() => {
+    void run(async () => {
+      const data = await refresh();
+      setLocale(data.settings.locale);
+      let selected =
+        data.sessions.find((s) => s.id === localGet('tl:session', '')) || data.sessions[0];
+      if (!selected) {
+        selected = await api<StudySession>('/sessions', 'POST', {
+          name: dictionaries[data.settings.locale].sessionName,
+        });
+        setCatalog((c) => (c ? { ...c, sessions: [...c.sessions, selected] } : c));
+      }
+      setSession(selected);
+      sessionRef.current = selected;
+      localStorage.setItem('tl:session', selected.id);
+      if (!data.settings.configured && !localStorage.getItem('tl:explored')) setModal('settings');
+    });
+  }, []);
+  function updateSession(update: Partial<StudySession>) {
+    if (!sessionRef.current) return;
+    const value = { ...sessionRef.current, ...update };
+    sessionRef.current = value;
+    setSession(value);
+    setCatalog((c) =>
+      c ? { ...c, sessions: c.sessions.map((s) => (s.id === value.id ? value : s)) } : c,
+    );
+    saveChain.current = saveChain.current
+      .catch(() => {})
+      .then(async () => {
+        await api(`/sessions/${value.id}`, 'PUT', value);
+      })
+      .catch((e) => setError(e.message));
   }
-  async function example(){
-    const text=locale==='es'?'# Muestreo y señales\n\nUna señal continua se representa con muestras discretas. La frecuencia de muestreo indica cuántas muestras se toman cada segundo.\n\n## El límite de Nyquist\n\nPara representar una frecuencia de 8 Hz se necesita una frecuencia de muestreo superior a 16 Hz. Si se toman 12 muestras por segundo, la señal puede confundirse con una de 4 Hz: ese fenómeno se llama aliasing.\n\n## Explora\n\nAbre el explorador de señales y cambia las frecuencias. Los puntos ámbar son muestras; la curva verde es la señal original. Este ejemplo es sintético y no representa datos clínicos.':'# Sampling and signals\n\nA continuous signal can be represented with discrete samples. The sampling frequency tells us how many samples are collected each second.\n\n## The Nyquist limit\n\nTo represent an 8 Hz signal, the sampling frequency must exceed 16 Hz. At 12 samples per second, that signal can appear to be 4 Hz. This ambiguity is called aliasing.\n\n## Explore it\n\nOpen the signal explorer and change the frequencies. Amber points are samples; the teal curve is the original signal. This authored example is synthetic and contains no clinical data.';
-    await addFiles([new File([text],`${t.example}.md`,{type:'text/markdown'})],locale==='es'?'Ejemplos':'Examples');
+  function selectSession(value: StudySession) {
+    sessionRef.current = value;
+    setSession(value);
+    localStorage.setItem('tl:session', value.id);
+    setArtifact(false);
+    setLearning(null);
+    setSeek(null);
   }
-  const filtered=(catalog?.files||[]).filter(f=>f.archived===archived&&fold(`${f.name} ${f.folder}`).includes(fold(query)));
-  const position=active?session?.positions[active.id]||0:0;
-  function cite(segment:Segment){if(segment.start!=null||segment.page!=null){setSeek({value:segment.start??segment.page??0,nonce:Date.now()});setArtifact(false);}else{setTab('chapters');} }
-  if(!catalog||!session)return <div className="loading"><BookOpen/><p>{error||t.loading}</p>{error&&<Button onClick={()=>location.reload()}>{t.retry}</Button>}</div>;
-  return <div className={`app ${focus?'focus':''}`}>
-    {left&&!focus&&<><aside className="library-panel"><div className="brand"><span className="brand-mark"><BookOpen size={20}/></span><div><strong>Tailored Library</strong><span>{t.local}</span></div><IconButton label={t.hideFiles} onClick={()=>setLeft(false)}><PanelLeft/></IconButton></div>
-      <div className="library-search"><Search size={15}/><input aria-label={t.search} placeholder={t.search} value={query} onChange={e=>setQuery(e.target.value)}/></div>
-      <div className="library-actions"><Button variant="primary" onClick={()=>setModal('upload')}><Plus size={15}/>{t.upload}</Button><IconButton label={t.settings} onClick={()=>setModal('settings')}><SettingsIcon/></IconButton></div>
-      <div className="catalog-switch"><button className={!archived?'selected':''} onClick={()=>setArchived(false)}>{t.files}<span>{catalog.files.filter(f=>!f.archived).length}</span></button><button className={archived?'selected':''} onClick={()=>setArchived(true)}><Archive size={13}/>{t.archived}<span>{catalog.files.filter(f=>f.archived).length}</span></button></div>
-      <div className="file-tree"><FileTree files={filtered} t={t} active={active?.id} onOpen={openFile} onArchive={file=>void run(()=>editFile(file,{archived:!file.archived}))} onRename={file=>{setRename(file);setModal('rename');}}/>{!filtered.length&&<p className="small-empty">{query?t.noResults:t.noFiles}</p>}</div>
-      <div className="sessions-heading"><span>{t.sessions}</span><IconButton label={t.newSession} onClick={()=>setModal('session')}><Plus/></IconButton></div><div className="session-list">{[...catalog.sessions].reverse().map(s=><button key={s.id} className={`session-row ${s.id===session.id?'active':''}`} onClick={()=>selectSession(s)}><BookOpen size={15}/><span>{s.name}<small>{s.tabs.length} {t.files.toLowerCase()}</small></span><ChevronRight size={13}/></button>)}</div>
-      <div className="sidebar-foot"><span className={`connection-dot ${catalog.settings.configured?'connected':''}`}/><button onClick={()=>setModal('settings')}>{catalog.settings.configured?t.configured:t.notConfigured}</button><span className="language-pill">{locale.toUpperCase()}</span></div>
-    </aside><button className="panel-backdrop" aria-label={t.close} onClick={()=>setLeft(false)}/></>}
-    <main className="workspace"><div className="resource-tabs"><IconButton label={left?t.hideFiles:t.openFiles} onClick={()=>setLeft(v=>!v)}><PanelLeft/></IconButton><div role="tablist" aria-label={t.files} className="tab-list">{session.tabs.map(id=>catalog.files.find(f=>f.id===id)).filter((f):f is Source=>!!f).map(file=>{const Icon=fileIcon(file.kind);return <div className={`resource-tab ${active?.id===file.id?'active':''}`} key={file.id}><button role="tab" aria-selected={active?.id===file.id} title={file.name} onClick={()=>openFile(file)}><Icon size={14}/><span>{file.name}</span></button><IconButton label={`${t.close} ${file.name}`} onClick={()=>closeFile(file.id)}><X size={12}/></IconButton></div>;})}</div><IconButton label={t.newSession} onClick={()=>setModal('session')}><Plus/></IconButton><IconButton label={t.study} aria-expanded={right} onClick={()=>setRight(v=>!v)}><PanelRight/></IconButton></div>
-      {error&&<div role="alert" className="error-bar"><CircleHelp size={16}/><span>{error}</span><IconButton label={t.close} onClick={()=>setError('')}><X/></IconButton></div>}
-      {!active?<Empty icon={<LibraryBig/>} title={catalog.files.length?t.noSelection:t.welcome} description={catalog.files.length?t.noSelectionBody:t.welcomeBody}><div className="welcome-actions"><Button variant="primary" onClick={()=>setModal('upload')}><Upload size={16}/>{t.upload}</Button><Button onClick={()=>void run(example)}>{t.addDemo}<ChevronRight size={14}/></Button></div><span className="eyebrow">{t.intro}</span></Empty>:<>
-        <div className="file-toolbar"><div className="file-title"><span>{active.folder||t.library}</span><strong title={active.name}>{active.name}</strong></div><div className="toolbar-actions"><IconButton label={t.addBookmark} onClick={()=>updateSession({bookmarks:[...session.bookmarks,{id:crypto.randomUUID(),sourceId:active.id,label:active.name,...(active.kind==='pdf'?{page:Math.max(1,position||1)}:{seconds:position})}]})}><Bookmark/></IconButton><IconButton label={t.notes} onClick={()=>{setRight(true);setTab('notes');}}><StickyNote/></IconButton><IconButton label={split?t.noSplit:t.split} onClick={()=>split?updateSession({split:null}):setModal('split')}><Columns2/></IconButton><IconButton label={active.reviewed?t.reviewed:t.markReviewed} aria-pressed={active.reviewed} onClick={()=>void run(()=>editFile(active,{reviewed:!active.reviewed}))}><Check/></IconButton><a className="button icon-button button-ghost" href={`/api/files/${active.id}/content`} download={active.name} title={t.download} aria-label={t.download}><Download size={16}/></a><IconButton label={focus?t.unfocus:t.focus} onClick={()=>setFocus(v=>!v)}>{focus?<Minimize2/>:<Maximize2/>}</IconButton></div></div>
-        {job&&<div className={`job-strip ${job.status==='failed'?'failed':''}`} role="status">{['queued','running','partial'].includes(job.status)?<LoaderCircle className="spin" size={14}/>:<Check size={14}/>}<span>{t[({queued:'jobQueued',running:'jobRunning',partial:'jobPartial',completed:'jobCompleted',failed:'jobFailed',cancelled:'jobCancelled'} as const)[job.status]]} · {t[job.stage]}{job.totalChunks>0?` · ${job.completedChunks}/${job.totalChunks}`:''}</span>{job.error&&<span>{job.error}</span>}{['failed','cancelled'].includes(job.status)?<Button variant="ghost" onClick={()=>void run(async()=>{await api(`/jobs/${job.id}`,'POST');setRefreshTick(v=>v+1);})}>{t.retry}</Button>:job.status!=='completed'&&<Button variant="ghost" onClick={()=>void run(async()=>{await api(`/jobs/${job.id}`,'DELETE');setRefreshTick(v=>v+1);})}>{t.cancel}</Button>}</div>}
-        <div className={`viewers ${split&&!artifact?'split':''}`}>
-          {artifact?<div className="artifact-stage"><Button variant="ghost" onClick={()=>setArtifact(false)}><ArrowLeft size={14}/>{t.originalSource}</Button><SignalExplorer key={active.id} t={t} storageKey={`tl:signal:${session.id}:${active.id}`}/></div>:<Viewer key={active.id} source={active} t={t} learning={learning} position={position} onPosition={value=>updateSession({positions:{...sessionRef.current!.positions,[active.id]:value}})} seek={seek}/>}
-          {split&&!artifact&&<div className="split-pane"><div className="split-title"><span>{split.name}</span><IconButton label={t.noSplit} onClick={()=>updateSession({split:null})}><X/></IconButton></div><Viewer key={split.id} source={split} t={t} learning={null} position={session.positions[split.id]||0} onPosition={value=>updateSession({positions:{...sessionRef.current!.positions,[split.id]:value}})} seek={null}/></div>}
+  function openFile(file: Source) {
+    if (!sessionRef.current) return;
+    const current = sessionRef.current;
+    updateSession({
+      tabs: current.tabs.includes(file.id) ? current.tabs : [...current.tabs, file.id],
+      active: file.id,
+    });
+    setArtifact(false);
+    setSeek(null);
+    if (window.innerWidth < 800) setLeft(false);
+  }
+  function closeFile(id: string) {
+    if (!sessionRef.current) return;
+    const current = sessionRef.current,
+      tabs = current.tabs.filter((x) => x !== id);
+    updateSession({
+      tabs,
+      active: current.active === id ? tabs.at(-1) || null : current.active,
+      split: current.split === id ? null : current.split,
+    });
+  }
+  useEffect(() => {
+    setLearning(null);
+    setJob(null);
+    setEvidence(null);
+    if (!active) return;
+    let stopped = false;
+    const load = async () => {
+      try {
+        const [material, current] = await Promise.all([
+          api<PublicLearning | null>(`/learning/${active.id}`),
+          api<(Job & { segments?: Segment[] }) | null>(
+            `/jobs/${active.id}-v${active.version}-${locale}`,
+          ),
+        ]);
+        if (!stopped) {
+          setLearning(material);
+          setJob(current);
+        }
+      } catch (e) {
+        if (!stopped) setError(e instanceof Error ? e.message : t.error);
+      }
+    };
+    void load();
+    const timer = setInterval(() => {
+      void load();
+    }, 2500);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
+  }, [active?.id, locale, refreshTick]);
+  async function prepare() {
+    if (!active) return;
+    if (!catalog?.settings.configured) {
+      setModal('settings');
+      return;
+    }
+    setBusy(true);
+    try {
+      const current = await api<Job>('/jobs', 'POST', { sourceId: active.id, locale });
+      setJob(current);
+      setRefreshTick((v) => v + 1);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function editFile(file: Source, update: Partial<Source>) {
+    const result = await api<Source>(`/files/${file.id}`, 'PATCH', update);
+    setCatalog((c) =>
+      c ? { ...c, files: c.files.map((f) => (f.id === file.id ? result : f)) } : c,
+    );
+  }
+  async function addFiles(files: File[], folder: string) {
+    setBusy(true);
+    try {
+      for (const file of files) {
+        if (!kindFor(file.name)) throw new Error(`${t.unsupported}: ${file.name}`);
+        if (file.size > MAX_FILE_BYTES) throw new Error(t.maxSize);
+        setUploadProgress(0);
+        const source = await uploadFile(file, folder, setUploadProgress);
+        setCatalog((c) => (c ? { ...c, files: [...c.files, source] } : c));
+        openFile(source);
+      }
+      setModal(null);
+    } finally {
+      setBusy(false);
+      setUploadProgress(null);
+    }
+  }
+  async function example() {
+    const text =
+      locale === 'es'
+        ? '# Muestreo y señales\n\nUna señal continua se representa con muestras discretas. La frecuencia de muestreo indica cuántas muestras se toman cada segundo.\n\n## El límite de Nyquist\n\nPara representar una frecuencia de 8 Hz se necesita una frecuencia de muestreo superior a 16 Hz. Si se toman 12 muestras por segundo, la señal puede confundirse con una de 4 Hz: ese fenómeno se llama aliasing.\n\n## Explora\n\nAbre el explorador de señales y cambia las frecuencias. Los puntos ámbar son muestras; la curva verde es la señal original. Este ejemplo es sintético y no representa datos clínicos.'
+        : '# Sampling and signals\n\nA continuous signal can be represented with discrete samples. The sampling frequency tells us how many samples are collected each second.\n\n## The Nyquist limit\n\nTo represent an 8 Hz signal, the sampling frequency must exceed 16 Hz. At 12 samples per second, that signal can appear to be 4 Hz. This ambiguity is called aliasing.\n\n## Explore it\n\nOpen the signal explorer and change the frequencies. Amber points are samples; the teal curve is the original signal. This authored example is synthetic and contains no clinical data.';
+    await addFiles(
+      [new File([text], `${t.example}.md`, { type: 'text/markdown' })],
+      locale === 'es' ? 'Ejemplos' : 'Examples',
+    );
+  }
+  const filtered = (catalog?.files || []).filter(
+    (f) => f.archived === archived && fold(`${f.name} ${f.folder}`).includes(fold(query)),
+  );
+  const position = active ? session?.positions[active.id] || 0 : 0;
+  function cite(segment: Segment) {
+    setEvidence(segment);
+    if (segment.start != null || segment.page != null) {
+      setSeek({ value: segment.start ?? segment.page ?? 0, nonce: Date.now() });
+      setArtifact(false);
+    } else {
+      setTab('chapters');
+    }
+  }
+  if (!catalog || !session)
+    return (
+      <div className="loading">
+        <BookOpen />
+        <p>{error || t.loading}</p>
+        {error && <Button onClick={() => location.reload()}>{t.retry}</Button>}
+      </div>
+    );
+  return (
+    <div className={`app ${focus ? 'focus' : ''}`}>
+      {left && !focus && (
+        <>
+          <aside className="library-panel">
+            <div className="brand">
+              <span className="brand-mark">
+                <BookOpen size={20} />
+              </span>
+              <div>
+                <strong>Tailored Library</strong>
+                <span>{t.local}</span>
+              </div>
+              <IconButton label={t.hideFiles} onClick={() => setLeft(false)}>
+                <PanelLeft />
+              </IconButton>
+            </div>
+            <div className="library-search">
+              <Search size={15} />
+              <input
+                aria-label={t.search}
+                placeholder={t.search}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </div>
+            <div className="library-actions">
+              <Button variant="primary" onClick={() => setModal('upload')}>
+                <Plus size={15} />
+                {t.upload}
+              </Button>
+              <IconButton label={t.settings} onClick={() => setModal('settings')}>
+                <SettingsIcon />
+              </IconButton>
+            </div>
+            <div className="catalog-switch">
+              <button className={!archived ? 'selected' : ''} onClick={() => setArchived(false)}>
+                {t.files}
+                <span>{catalog.files.filter((f) => !f.archived).length}</span>
+              </button>
+              <button className={archived ? 'selected' : ''} onClick={() => setArchived(true)}>
+                <Archive size={13} />
+                {t.archived}
+                <span>{catalog.files.filter((f) => f.archived).length}</span>
+              </button>
+            </div>
+            <div className="file-tree">
+              <FileTree
+                files={filtered}
+                t={t}
+                active={active?.id}
+                onOpen={openFile}
+                onArchive={(file) => void run(() => editFile(file, { archived: !file.archived }))}
+                onRename={(file) => {
+                  setRename(file);
+                  setModal('rename');
+                }}
+              />
+              {!filtered.length && <p className="small-empty">{query ? t.noResults : t.noFiles}</p>}
+            </div>
+            <div className="sessions-heading">
+              <span>{t.sessions}</span>
+              <IconButton label={t.newSession} onClick={() => setModal('session')}>
+                <Plus />
+              </IconButton>
+            </div>
+            <div className="session-list">
+              {[...catalog.sessions].reverse().map((s) => (
+                <button
+                  key={s.id}
+                  className={`session-row ${s.id === session.id ? 'active' : ''}`}
+                  onClick={() => selectSession(s)}
+                >
+                  <BookOpen size={15} />
+                  <span>
+                    {s.name}
+                    <small>
+                      {s.tabs.length} {t.files.toLowerCase()}
+                    </small>
+                  </span>
+                  <ChevronRight size={13} />
+                </button>
+              ))}
+            </div>
+            <div className="sidebar-foot">
+              <span
+                className={`connection-dot ${catalog.settings.configured ? 'connected' : ''}`}
+              />
+              <button onClick={() => setModal('settings')}>
+                {catalog.settings.configured ? t.configured : t.notConfigured}
+              </button>
+              <span className="language-pill">{locale.toUpperCase()}</span>
+            </div>
+          </aside>
+          <button className="panel-backdrop" aria-label={t.close} onClick={() => setLeft(false)} />
+        </>
+      )}
+      <main className="workspace">
+        <div className="resource-tabs">
+          <IconButton label={left ? t.hideFiles : t.openFiles} onClick={() => setLeft((v) => !v)}>
+            <PanelLeft />
+          </IconButton>
+          <div role="tablist" aria-label={t.files} className="tab-list">
+            {session.tabs
+              .map((id) => catalog.files.find((f) => f.id === id))
+              .filter((f): f is Source => !!f)
+              .map((file) => {
+                const Icon = fileIcon(file.kind);
+                return (
+                  <div
+                    className={`resource-tab ${active?.id === file.id ? 'active' : ''}`}
+                    key={file.id}
+                  >
+                    <button
+                      role="tab"
+                      aria-selected={active?.id === file.id}
+                      title={file.name}
+                      onClick={() => openFile(file)}
+                    >
+                      <Icon size={14} />
+                      <span>{file.name}</span>
+                    </button>
+                    <IconButton
+                      label={`${t.close} ${file.name}`}
+                      onClick={() => closeFile(file.id)}
+                    >
+                      <X size={12} />
+                    </IconButton>
+                  </div>
+                );
+              })}
+          </div>
+          <IconButton label={t.newSession} onClick={() => setModal('session')}>
+            <Plus />
+          </IconButton>
+          <IconButton label={t.study} aria-expanded={right} onClick={() => setRight((v) => !v)}>
+            <PanelRight />
+          </IconButton>
         </div>
-      </>}
-      <div className="workspace-foot"><span>{session.name}</span><span><span className="connection-dot connected"/>{t.local}</span></div>
-    </main>
-    {right&&!focus&&<><button className="study-backdrop" aria-label={t.close} onClick={()=>setRight(false)}/><aside className="study-panel"><div className="study-heading"><span><Sparkles size={15}/>{t.study}</span><IconButton label={t.close} onClick={()=>setRight(false)}><X/></IconButton></div><div className="study-tabs" role="tablist" aria-label={t.study}>{([['chapters',List],['notes',StickyNote],['bookmarks',Bookmark],['glossary',BookOpen],['practice',GraduationCap],['review',Activity],['assistant',MessageSquare],['miniapp',Code2]] as const).map(([name,Icon])=><button key={name} role="tab" aria-selected={tab===name} className={tab===name?'active':''} onClick={()=>setTab(name)} title={t[name]}><Icon size={14}/><span>{t[name]}</span></button>)}</div>
-      <div className="study-content">{!active?<div className="small-empty"><BookOpen size={24}/><p>{t.noSelectionBody}</p></div>:<>
-        {tab==='chapters'&&<><div className="section-label">{t.chapters}{learning&&<Badge>{learning.synthesis.chapters.length}</Badge>}</div>{!learning?<div className="prepare-card"><div className="prepare-symbol"><Sparkles/></div><h3>{t.process}</h3><p>{t.noChapters}</p><Button variant="primary" disabled={busy||!!job&&['queued','running','partial'].includes(job.status)} onClick={()=>void run(prepare)}>{busy?<LoaderCircle className="spin" size={14}/>:<Sparkles size={14}/>} {t.process}</Button><small>{t.processingNotice}</small></div>:learning.synthesis.chapters.map((chapter,i)=><section className="chapter-card" key={chapter.id}><button className="chapter-title" onClick={()=>{const segment=learning.segments.find(s=>s.id===chapter.segmentIds[0]);if(segment)cite(segment);}}><span>{String(i+1).padStart(2,'0')}</span><strong>{chapter.title}</strong></button><p>{chapter.summary}</p><Citations ids={chapter.segmentIds} segments={learning.segments} onCite={cite} t={t}/><Button variant="ghost" onClick={()=>setTab('practice')}><GraduationCap size={13}/>{t.quiz}</Button></section>)}
-          {job?.segments?.length&&!learning?<details className="transcript"><summary>{t.showTranscript}</summary>{job.segments.map(s=><button key={s.id} onClick={()=>cite(s)}>{s.start!=null&&<span>{formatPosition(s.start)}</span>}{s.text}</button>)}</details>:null}
-          {['video','audio'].includes(active.kind)&&job&&job.completedChunks>0&&<div className="caption-downloads">{(['original','translated'] as const).map(track=><div key={track}><span>{t[track]}</span>{['vtt','srt'].map(format=><a key={format} href={`/api/captions/${active.id}/${track}.${format}`} download={`${active.name}.${track}.${format}`}>{format.toUpperCase()}</a>)}</div>)}</div>}
-          <button className="artifact-link" onClick={()=>setArtifact(true)}><span><Activity size={17}/><strong>{t.artifact}</strong></span><p>{t.artifactBody}</p><span className="text-link">{t.open}<ChevronRight size={13}/></span></button></>}
-        {tab==='notes'&&<Notes key={active.id} source={active} session={session} update={updateSession} t={t}/>}
-        {tab==='bookmarks'&&<><div className="section-label">{t.bookmarks}</div>{session.bookmarks.filter(b=>b.sourceId===active.id).map(b=><div className="bookmark-row" key={b.id}><button onClick={()=>{setSeek({value:b.seconds??b.page??0,nonce:Date.now()});setArtifact(false);}}><Bookmark size={14}/><span>{b.label}<small>{b.page?`${t.page} ${b.page}`:formatPosition(b.seconds||0)}</small></span></button><IconButton label={t.remove} onClick={()=>updateSession({bookmarks:session.bookmarks.filter(v=>v.id!==b.id)})}><X size={12}/></IconButton></div>)}{!session.bookmarks.some(b=>b.sourceId===active.id)&&<p className="small-empty">{t.noBookmarks}</p>}</>}
-        {tab==='glossary'&&<><div className="section-label">{t.glossary}</div>{learning?.synthesis.glossary.map(concept=><section className="glossary-card" key={concept.term}><h3>{concept.term}</h3><p>{concept.definition}</p><Citations ids={concept.segmentIds} segments={learning.segments} onCite={cite} t={t}/></section>)}{!learning&&<p className="small-empty">{t.noConcepts}</p>}</>}
-        {tab==='practice'&&<Practice key={`${active.id}-${learning?.createdAt}`} source={active} learning={learning} t={t} onAttempt={attempt=>setCatalog(c=>c?{...c,attempts:[...c.attempts,attempt]}:c)} onError={setError} onCite={cite}/>}
-        {tab==='review'&&<Review attempts={catalog.attempts.filter(a=>a.sourceId===active.id)} t={t} showPractice={()=>setTab('practice')} showArtifact={()=>setArtifact(true)}/>}
-        {tab==='assistant'&&<Assistant key={`${session.id}-${active.id}`} source={active} session={session} t={t} learning={learning} onError={setError}/>}
-        {tab==='miniapp'&&<CodePanel t={t} onError={setError}/>}
-      </>}</div></aside></>}
-    {modal==='settings'&&<SettingsModal initial={catalog.settings} t={t} close={()=>{localStorage.setItem('tl:explored','yes');setModal(null);}} save={async value=>{const settings=await api<Settings>('/settings','POST',value);setLocale(settings.locale);setCatalog(c=>c?{...c,settings}:c);}} onError={setError}/>}
-    {modal==='upload'&&<Modal title={t.upload} close={()=>{if(!busy)setModal(null);}} closeLabel={t.close}><UploadForm t={t} busy={busy} progress={uploadProgress} submit={(files,folder)=>void run(()=>addFiles(files,folder))}/></Modal>}
-    {modal==='session'&&<TextModal title={t.newSession} label={t.name} initial={`${t.sessionName} ${catalog.sessions.length+1}`} t={t} close={()=>setModal(null)} submit={value=>void run(async()=>{const created=await api<StudySession>('/sessions','POST',{name:value});setCatalog(c=>c?{...c,sessions:[...c.sessions,created]}:c);selectSession(created);setModal(null);})}/>}
-    {modal==='rename'&&rename&&<TextModal title={t.rename} label={t.filename} initial={rename.name} t={t} close={()=>setModal(null)} submit={value=>void run(async()=>{await editFile(rename,{name:value});setModal(null);})}/>}
-    {modal==='split'&&<Modal title={t.chooseSplit} close={()=>setModal(null)} closeLabel={t.close}><div className="split-picker">{catalog.files.filter(f=>!f.archived&&f.id!==active?.id).map(file=><Button key={file.id} onClick={()=>{updateSession({split:file.id});setModal(null);}}><FileText size={14}/>{file.name}</Button>)}</div></Modal>}
-  </div>;
+        {error && (
+          <div role="alert" className="error-bar">
+            <CircleHelp size={16} />
+            <span>{error}</span>
+            <IconButton label={t.close} onClick={() => setError('')}>
+              <X />
+            </IconButton>
+          </div>
+        )}
+        {!active ? (
+          <Empty
+            icon={<LibraryBig />}
+            title={catalog.files.length ? t.noSelection : t.welcome}
+            description={catalog.files.length ? t.noSelectionBody : t.welcomeBody}
+          >
+            <div className="welcome-actions">
+              <Button variant="primary" onClick={() => setModal('upload')}>
+                <Upload size={16} />
+                {t.upload}
+              </Button>
+              <Button onClick={() => void run(example)}>
+                {t.addDemo}
+                <ChevronRight size={14} />
+              </Button>
+            </div>
+            <span className="eyebrow">{t.intro}</span>
+          </Empty>
+        ) : (
+          <>
+            <div className="file-toolbar">
+              <div className="file-title">
+                <span>{active.folder || t.library}</span>
+                <strong title={active.name}>{active.name}</strong>
+              </div>
+              <div className="toolbar-actions">
+                <IconButton
+                  label={t.addBookmark}
+                  onClick={() =>
+                    updateSession({
+                      bookmarks: [
+                        ...session.bookmarks,
+                        {
+                          id: crypto.randomUUID(),
+                          sourceId: active.id,
+                          label: active.name,
+                          ...(active.kind === 'pdf'
+                            ? { page: Math.max(1, position || 1) }
+                            : { seconds: position }),
+                        },
+                      ],
+                    })
+                  }
+                >
+                  <Bookmark />
+                </IconButton>
+                <IconButton
+                  label={t.notes}
+                  onClick={() => {
+                    setRight(true);
+                    setTab('notes');
+                  }}
+                >
+                  <StickyNote />
+                </IconButton>
+                <IconButton
+                  label={split ? t.noSplit : t.split}
+                  onClick={() => (split ? updateSession({ split: null }) : setModal('split'))}
+                >
+                  <Columns2 />
+                </IconButton>
+                <IconButton
+                  label={active.reviewed ? t.reviewed : t.markReviewed}
+                  aria-pressed={active.reviewed}
+                  onClick={() => void run(() => editFile(active, { reviewed: !active.reviewed }))}
+                >
+                  <Check />
+                </IconButton>
+                <a
+                  className="button icon-button button-ghost"
+                  href={`/api/files/${active.id}/content`}
+                  download={active.name}
+                  title={t.download}
+                  aria-label={t.download}
+                >
+                  <Download size={16} />
+                </a>
+                <IconButton label={focus ? t.unfocus : t.focus} onClick={() => setFocus((v) => !v)}>
+                  {focus ? <Minimize2 /> : <Maximize2 />}
+                </IconButton>
+              </div>
+            </div>
+            {evidence && (
+              <section className="evidence-panel" aria-label={t.sources}>
+                <div>
+                  <strong>
+                    {t.source} · {evidence.id}
+                  </strong>
+                  <IconButton label={t.close} onClick={() => setEvidence(null)}>
+                    <X />
+                  </IconButton>
+                </div>
+                <p>{evidence.text}</p>
+              </section>
+            )}
+            {job && (
+              <div className={`job-strip ${job.status === 'failed' ? 'failed' : ''}`} role="status">
+                {['queued', 'running', 'partial'].includes(job.status) ? (
+                  <LoaderCircle className="spin" size={14} />
+                ) : (
+                  <Check size={14} />
+                )}
+                <span>
+                  {
+                    t[
+                      (
+                        {
+                          queued: 'jobQueued',
+                          running: 'jobRunning',
+                          partial: 'jobPartial',
+                          completed: 'jobCompleted',
+                          failed: 'jobFailed',
+                          cancelled: 'jobCancelled',
+                        } as const
+                      )[job.status]
+                    ]
+                  }{' '}
+                  · {t[job.stage]}
+                  {job.totalChunks > 0 ? ` · ${job.completedChunks}/${job.totalChunks}` : ''}
+                </span>
+                {job.error && <span>{job.error}</span>}
+                {['failed', 'cancelled'].includes(job.status) ? (
+                  <Button
+                    variant="ghost"
+                    onClick={() =>
+                      void run(async () => {
+                        await api(`/jobs/${job.id}`, 'POST');
+                        setRefreshTick((v) => v + 1);
+                      })
+                    }
+                  >
+                    {t.retry}
+                  </Button>
+                ) : (
+                  job.status !== 'completed' && (
+                    <Button
+                      variant="ghost"
+                      onClick={() =>
+                        void run(async () => {
+                          await api(`/jobs/${job.id}`, 'DELETE');
+                          setRefreshTick((v) => v + 1);
+                        })
+                      }
+                    >
+                      {t.cancel}
+                    </Button>
+                  )
+                )}
+              </div>
+            )}
+            <div className={`viewers ${split && !artifact ? 'split' : ''}`}>
+              {artifact ? (
+                <div className="artifact-stage">
+                  <Button variant="ghost" onClick={() => setArtifact(false)}>
+                    <ArrowLeft size={14} />
+                    {t.originalSource}
+                  </Button>
+                  {learning?.synthesis.artifact ? (
+                    <GeneratedArtifact
+                      artifact={learning.synthesis.artifact}
+                      t={t}
+                      segments={learning.segments}
+                      onCite={cite}
+                      saved={session.artifacts?.[active.id]}
+                      persist={(value) =>
+                        updateSession({ artifacts: { ...session.artifacts, [active.id]: value } })
+                      }
+                    />
+                  ) : (
+                    <SignalExplorer
+                      key={active.id}
+                      t={t}
+                      storageKey={`tl:signal:${session.id}:${active.id}`}
+                      initial={session.artifacts?.[active.id]}
+                      onPersist={(value) =>
+                        updateSession({ artifacts: { ...session.artifacts, [active.id]: value } })
+                      }
+                    />
+                  )}
+                </div>
+              ) : (
+                <Viewer
+                  key={active.id}
+                  source={active}
+                  t={t}
+                  learning={learning}
+                  position={position}
+                  onPosition={(value) =>
+                    updateSession({
+                      positions: { ...sessionRef.current!.positions, [active.id]: value },
+                    })
+                  }
+                  seek={seek}
+                />
+              )}
+              {split && !artifact && (
+                <div className="split-pane">
+                  <div className="split-title">
+                    <span>{split.name}</span>
+                    <IconButton label={t.noSplit} onClick={() => updateSession({ split: null })}>
+                      <X />
+                    </IconButton>
+                  </div>
+                  <Viewer
+                    key={split.id}
+                    source={split}
+                    t={t}
+                    learning={null}
+                    position={session.positions[split.id] || 0}
+                    onPosition={(value) =>
+                      updateSession({
+                        positions: { ...sessionRef.current!.positions, [split.id]: value },
+                      })
+                    }
+                    seek={null}
+                  />
+                </div>
+              )}
+            </div>
+          </>
+        )}
+        <div className="workspace-foot">
+          <span>{session.name}</span>
+          <span>
+            <span className="connection-dot connected" />
+            {t.local}
+          </span>
+        </div>
+      </main>
+      {right && !focus && (
+        <>
+          <button className="study-backdrop" aria-label={t.close} onClick={() => setRight(false)} />
+          <aside className="study-panel">
+            <div className="study-heading">
+              <span>
+                <Sparkles size={15} />
+                {t.study}
+              </span>
+              <IconButton label={t.close} onClick={() => setRight(false)}>
+                <X />
+              </IconButton>
+            </div>
+            <div className="study-tabs" role="tablist" aria-label={t.study}>
+              {(
+                [
+                  ['chapters', List],
+                  ['notes', StickyNote],
+                  ['bookmarks', Bookmark],
+                  ['glossary', BookOpen],
+                  ['practice', GraduationCap],
+                  ['review', Activity],
+                  ['assistant', MessageSquare],
+                  ['miniapp', Code2],
+                ] as const
+              ).map(([name, Icon]) => (
+                <button
+                  key={name}
+                  role="tab"
+                  aria-selected={tab === name}
+                  className={tab === name ? 'active' : ''}
+                  onClick={() => setTab(name)}
+                  title={t[name]}
+                >
+                  <Icon size={14} />
+                  <span>{t[name]}</span>
+                </button>
+              ))}
+            </div>
+            <div className="study-content">
+              {!active ? (
+                <div className="small-empty">
+                  <BookOpen size={24} />
+                  <p>{t.noSelectionBody}</p>
+                </div>
+              ) : (
+                <>
+                  {tab === 'chapters' && (
+                    <>
+                      <div className="section-label">
+                        {t.chapters}
+                        {learning && <Badge>{learning.synthesis.chapters.length}</Badge>}
+                      </div>
+                      {!learning ? (
+                        <div className="prepare-card">
+                          <div className="prepare-symbol">
+                            <Sparkles />
+                          </div>
+                          <h3>{t.process}</h3>
+                          <p>{t.noChapters}</p>
+                          <Button
+                            variant="primary"
+                            disabled={
+                              busy ||
+                              (!!job && ['queued', 'running', 'partial'].includes(job.status))
+                            }
+                            onClick={() => void run(prepare)}
+                          >
+                            {busy ? (
+                              <LoaderCircle className="spin" size={14} />
+                            ) : (
+                              <Sparkles size={14} />
+                            )}{' '}
+                            {t.process}
+                          </Button>
+                          <small>{t.processingNotice}</small>
+                        </div>
+                      ) : (
+                        learning.synthesis.chapters.map((chapter, i) => (
+                          <section className="chapter-card" key={chapter.id}>
+                            <button
+                              className="chapter-title"
+                              onClick={() => {
+                                const segment = learning.segments.find(
+                                  (s) => s.id === chapter.segmentIds[0],
+                                );
+                                if (segment) cite(segment);
+                              }}
+                            >
+                              <span>{String(i + 1).padStart(2, '0')}</span>
+                              <strong>{chapter.title}</strong>
+                            </button>
+                            <p>{chapter.summary}</p>
+                            <Citations
+                              ids={chapter.segmentIds}
+                              segments={learning.segments}
+                              onCite={cite}
+                              t={t}
+                            />
+                            <Button variant="ghost" onClick={() => setTab('practice')}>
+                              <GraduationCap size={13} />
+                              {t.quiz}
+                            </Button>
+                          </section>
+                        ))
+                      )}
+                      {job?.segments?.length && !learning ? (
+                        <details className="transcript">
+                          <summary>{t.showTranscript}</summary>
+                          {job.segments.map((s) => (
+                            <button key={s.id} onClick={() => cite(s)}>
+                              {s.start != null && <span>{formatPosition(s.start)}</span>}
+                              {s.text}
+                            </button>
+                          ))}
+                        </details>
+                      ) : null}
+                      {['video', 'audio'].includes(active.kind) &&
+                        job &&
+                        job.completedChunks > 0 && (
+                          <div className="caption-downloads">
+                            {(['original', 'translated'] as const).map((track) => (
+                              <div key={track}>
+                                <span>{t[track]}</span>
+                                {['vtt', 'srt'].map((format) => (
+                                  <a
+                                    key={format}
+                                    href={`/api/captions/${active.id}/${track}.${format}`}
+                                    download={`${active.name}.${track}.${format}`}
+                                  >
+                                    {format.toUpperCase()}
+                                  </a>
+                                ))}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      <button className="artifact-link" onClick={() => setArtifact(true)}>
+                        <span>
+                          <Activity size={17} />
+                          <strong>{t.artifact}</strong>
+                        </span>
+                        <p>{t.artifactBody}</p>
+                        <span className="text-link">
+                          {t.open}
+                          <ChevronRight size={13} />
+                        </span>
+                      </button>
+                    </>
+                  )}
+                  {tab === 'notes' && (
+                    <Notes
+                      key={active.id}
+                      source={active}
+                      session={session}
+                      update={updateSession}
+                      t={t}
+                    />
+                  )}
+                  {tab === 'bookmarks' && (
+                    <>
+                      <div className="section-label">{t.bookmarks}</div>
+                      {session.bookmarks
+                        .filter((b) => b.sourceId === active.id)
+                        .map((b) => (
+                          <div className="bookmark-row" key={b.id}>
+                            <button
+                              onClick={() => {
+                                setSeek({ value: b.seconds ?? b.page ?? 0, nonce: Date.now() });
+                                setArtifact(false);
+                              }}
+                            >
+                              <Bookmark size={14} />
+                              <span>
+                                {b.label}
+                                <small>
+                                  {b.page ? `${t.page} ${b.page}` : formatPosition(b.seconds || 0)}
+                                </small>
+                              </span>
+                            </button>
+                            <IconButton
+                              label={t.remove}
+                              onClick={() =>
+                                updateSession({
+                                  bookmarks: session.bookmarks.filter((v) => v.id !== b.id),
+                                })
+                              }
+                            >
+                              <X size={12} />
+                            </IconButton>
+                          </div>
+                        ))}
+                      {!session.bookmarks.some((b) => b.sourceId === active.id) && (
+                        <p className="small-empty">{t.noBookmarks}</p>
+                      )}
+                    </>
+                  )}
+                  {tab === 'glossary' && (
+                    <>
+                      <div className="section-label">{t.glossary}</div>
+                      {learning?.synthesis.glossary.map((concept) => (
+                        <section className="glossary-card" key={concept.term}>
+                          <h3>{concept.term}</h3>
+                          <p>
+                            {catalog.concepts?.find(
+                              (entry) => fold(entry.term) === fold(concept.term),
+                            )?.definition || concept.definition}
+                          </p>
+                          <Citations
+                            ids={concept.segmentIds}
+                            segments={learning.segments}
+                            onCite={cite}
+                            t={t}
+                          />
+                          {catalog.concepts
+                            ?.filter((entry) => fold(entry.term) === fold(concept.term))
+                            .map((entry) => (
+                              <div key={entry.id}>
+                                {entry.reviewed ? (
+                                  <Badge tone="success">{t.reviewed}</Badge>
+                                ) : (
+                                  <Button
+                                    variant="ghost"
+                                    onClick={() =>
+                                      void run(async () => {
+                                        await api(`/concepts/${entry.id}`, 'PATCH', {
+                                          reviewed: true,
+                                        });
+                                        await refresh();
+                                      })
+                                    }
+                                  >
+                                    {t.reviewDefinition}
+                                  </Button>
+                                )}
+                                {entry.proposals.map((proposal) => (
+                                  <details className="glossary-proposal" key={proposal.id}>
+                                    <summary>{t.proposed}</summary>
+                                    <p>{proposal.definition}</p>
+                                    <Button
+                                      onClick={() =>
+                                        void run(async () => {
+                                          await api(`/concepts/${entry.id}`, 'PATCH', {
+                                            proposalId: proposal.id,
+                                          });
+                                          await refresh();
+                                        })
+                                      }
+                                    >
+                                      {t.acceptDefinition}
+                                    </Button>
+                                  </details>
+                                ))}
+                              </div>
+                            ))}
+                        </section>
+                      ))}
+                      {!learning && <p className="small-empty">{t.noConcepts}</p>}
+                    </>
+                  )}
+                  {tab === 'practice' && (
+                    <Practice
+                      key={`${active.id}-${learning?.createdAt}`}
+                      source={active}
+                      learning={learning}
+                      t={t}
+                      onAttempt={(attempt) =>
+                        setCatalog((c) => (c ? { ...c, attempts: [...c.attempts, attempt] } : c))
+                      }
+                      onError={setError}
+                      onCite={cite}
+                    />
+                  )}
+                  {tab === 'review' && (
+                    <Review
+                      attempts={catalog.attempts.filter((a) => a.sourceId === active.id)}
+                      t={t}
+                      showPractice={() => setTab('practice')}
+                      showArtifact={() => setArtifact(true)}
+                    />
+                  )}
+                  {tab === 'assistant' && (
+                    <Assistant
+                      key={`${session.id}-${active.id}`}
+                      source={active}
+                      session={session}
+                      t={t}
+                      learning={learning}
+                      onError={setError}
+                      update={(patch) => {
+                        if (sessionRef.current?.id === session.id) updateSession(patch);
+                        else
+                          void run(async () => {
+                            const latest = await api<Catalog>('/catalog');
+                            const target = latest.sessions.find((item) => item.id === session.id);
+                            if (target)
+                              await api(`/sessions/${target.id}`, 'PUT', { ...target, ...patch });
+                            await refresh();
+                          });
+                      }}
+                    />
+                  )}
+                  {tab === 'miniapp' && <CodePanel t={t} onError={setError} />}
+                </>
+              )}
+            </div>
+          </aside>
+        </>
+      )}
+      {modal === 'settings' && (
+        <SettingsModal
+          initial={catalog.settings}
+          t={t}
+          close={() => {
+            localStorage.setItem('tl:explored', 'yes');
+            setModal(null);
+          }}
+          save={async (value) => {
+            const settings = await api<Settings>('/settings', 'POST', value);
+            setLocale(settings.locale);
+            setCatalog((c) => (c ? { ...c, settings } : c));
+          }}
+          onError={setError}
+        />
+      )}
+      {modal === 'upload' && (
+        <Modal
+          title={t.upload}
+          close={() => {
+            if (!busy) setModal(null);
+          }}
+          closeLabel={t.close}
+        >
+          <UploadForm
+            t={t}
+            busy={busy}
+            progress={uploadProgress}
+            submit={(files, folder) => void run(() => addFiles(files, folder))}
+          />
+        </Modal>
+      )}
+      {modal === 'session' && (
+        <TextModal
+          title={t.newSession}
+          label={t.name}
+          initial={`${t.sessionName} ${catalog.sessions.length + 1}`}
+          t={t}
+          close={() => setModal(null)}
+          submit={(value) =>
+            void run(async () => {
+              const created = await api<StudySession>('/sessions', 'POST', { name: value });
+              setCatalog((c) => (c ? { ...c, sessions: [...c.sessions, created] } : c));
+              selectSession(created);
+              setModal(null);
+            })
+          }
+        />
+      )}
+      {modal === 'rename' && rename && (
+        <TextModal
+          title={t.rename}
+          label={t.filename}
+          initial={rename.name}
+          t={t}
+          close={() => setModal(null)}
+          submit={(value) =>
+            void run(async () => {
+              await editFile(rename, { name: value });
+              setModal(null);
+            })
+          }
+        />
+      )}
+      {modal === 'split' && (
+        <Modal title={t.chooseSplit} close={() => setModal(null)} closeLabel={t.close}>
+          <div className="split-picker">
+            {catalog.files
+              .filter((f) => !f.archived && f.id !== active?.id)
+              .map((file) => (
+                <Button
+                  key={file.id}
+                  onClick={() => {
+                    updateSession({ split: file.id });
+                    setModal(null);
+                  }}
+                >
+                  <FileText size={14} />
+                  {file.name}
+                </Button>
+              ))}
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
 }
 
-function FileTree({files,t,active,onOpen,onArchive,onRename}:{files:Source[];t:T;active?:string;onOpen:(file:Source)=>void;onArchive:(file:Source)=>void;onRename:(file:Source)=>void}){
-  const render=(prefix:string):ReactNode=>{const children=files.filter(f=>f.folder===prefix),folders=[...new Set(files.filter(f=>f.folder.startsWith(prefix?`${prefix}/`:'')&&f.folder!==prefix).map(f=>f.folder.slice(prefix?prefix.length+1:0).split('/')[0]))].filter(Boolean).sort();return <>{folders.map(folder=>{const path=prefix?`${prefix}/${folder}`:folder;return <details className="folder-node" key={path} open><summary><ChevronRight size={12}/><Folder size={15}/><span>{folder}</span></summary><div>{render(path)}</div></details>;})}{children.map(file=>{const Icon=fileIcon(file.kind);return <div className={`file-row ${active===file.id?'active':''}`} key={file.id}><button title={file.name} onClick={()=>onOpen(file)}><Icon size={15}/><span>{file.name}</span>{file.reviewed&&<Check size={12}/>}</button><details className="file-menu"><summary aria-label={`${t.options}: ${file.name}`}><MoreHorizontal size={14}/></summary><div><button onClick={()=>onRename(file)}>{t.rename}</button><button onClick={()=>onArchive(file)}>{file.archived?t.restore:t.archive}</button></div></details></div>;})}</>;};return render('');
+function FileTree({
+  files,
+  t,
+  active,
+  onOpen,
+  onArchive,
+  onRename,
+}: {
+  files: Source[];
+  t: T;
+  active?: string;
+  onOpen: (file: Source) => void;
+  onArchive: (file: Source) => void;
+  onRename: (file: Source) => void;
+}) {
+  const render = (prefix: string): ReactNode => {
+    const children = files.filter((f) => f.folder === prefix),
+      folders = [
+        ...new Set(
+          files
+            .filter((f) => f.folder.startsWith(prefix ? `${prefix}/` : '') && f.folder !== prefix)
+            .map((f) => f.folder.slice(prefix ? prefix.length + 1 : 0).split('/')[0]),
+        ),
+      ]
+        .filter(Boolean)
+        .sort();
+    return (
+      <>
+        {folders.map((folder) => {
+          const path = prefix ? `${prefix}/${folder}` : folder;
+          return (
+            <details className="folder-node" key={path} open>
+              <summary>
+                <ChevronRight size={12} />
+                <Folder size={15} />
+                <span>{folder}</span>
+              </summary>
+              <div>{render(path)}</div>
+            </details>
+          );
+        })}
+        {children.map((file) => {
+          const Icon = fileIcon(file.kind);
+          return (
+            <div className={`file-row ${active === file.id ? 'active' : ''}`} key={file.id}>
+              <button title={file.name} onClick={() => onOpen(file)}>
+                <Icon size={15} />
+                <span>{file.name}</span>
+                {file.reviewed && <Check size={12} />}
+              </button>
+              <details className="file-menu">
+                <summary aria-label={`${t.options}: ${file.name}`}>
+                  <MoreHorizontal size={14} />
+                </summary>
+                <div>
+                  <button onClick={() => onRename(file)}>{t.rename}</button>
+                  <button onClick={() => onArchive(file)}>
+                    {file.archived ? t.restore : t.archive}
+                  </button>
+                </div>
+              </details>
+            </div>
+          );
+        })}
+      </>
+    );
+  };
+  return render('');
 }
-function formatPosition(seconds:number){return `${Math.floor(seconds/60)}:${String(Math.floor(seconds%60)).padStart(2,'0')}`;}
-function Citations({ids,segments,onCite,t}:{ids:string[];segments:Segment[];onCite:(s:Segment)=>void;t:T}){return <div className="citations" aria-label={t.sources}>{ids.map(id=>{const s=segments.find(x=>x.id===id);if(!s)return null;return <button key={id} title={s.text} onClick={()=>onCite(s)}>{s.start!=null?formatPosition(s.start):s.page?`${t.page} ${s.page}`:id}</button>;})}</div>;}
-function Notes({source,session,update,t}:{source:Source;session:StudySession;update:(v:Partial<StudySession>)=>void;t:T}){const [draft,setDraft]=useState('');const notes=session.notes.filter(n=>n.sourceId===source.id);return <><div className="section-label">{t.notes}</div><textarea aria-label={t.newNote} placeholder={t.notePlaceholder} value={draft} onChange={e=>setDraft(e.target.value)}/><Button variant="primary" disabled={!draft.trim()} onClick={()=>{update({notes:[...session.notes,{id:crypto.randomUUID(),sourceId:source.id,text:draft.trim(),createdAt:new Date().toISOString()}]});setDraft('');}}><Plus size={14}/>{t.addNote}</Button>{notes.map(note=><section className="note-card" key={note.id}><div><small>{new Date(note.createdAt).toLocaleDateString()}</small><IconButton label={t.remove} onClick={()=>update({notes:session.notes.filter(n=>n.id!==note.id)})}><X size={12}/></IconButton></div><p>{note.text}</p></section>)}{!notes.length&&<p className="small-empty">{t.noNotes}</p>}</>;}
-function Practice({source,learning,t,onAttempt,onError,onCite}:{source:Source;learning:PublicLearning|null;t:T;onAttempt:(attempt:Attempt)=>void;onError:(text:string)=>void;onCite:(s:Segment)=>void}){
-  const [answers,setAnswers]=useState<Record<string,number>>({}),[results,setResults]=useState<Record<string,Attempt>>({}),[pending,setPending]=useState<string|null>(null);
-  const questions=learning?.synthesis.chapters.flatMap(c=>c.questions)||[];
-  return <><div className="section-label">{t.practice}<Badge>{questions.length}</Badge></div>{!questions.length&&<p className="small-empty">{t.noQuestions}</p>}{questions.map((q,i)=><section className="quiz-card" key={q.id}><small>{String(i+1).padStart(2,'0')} · {q.concept}</small><h3>{q.prompt}</h3><div className="quiz-options">{q.choices.map((choice,index)=><label key={index} className={answers[q.id]===index?'chosen':''}><input type="radio" name={q.id} disabled={!!results[q.id]} checked={answers[q.id]===index} onChange={()=>setAnswers(a=>({...a,[q.id]:index}))}/><span>{choice}</span></label>)}</div>{results[q.id]?<div className={`quiz-result ${results[q.id].correct?'correct':'incorrect'}`}><strong>{results[q.id].correct?t.correct:t.incorrect}</strong><p>{results[q.id].explanation}</p><Citations ids={q.segmentIds} segments={learning!.segments} onCite={onCite} t={t}/></div>:<Button disabled={answers[q.id]==null||pending===q.id} onClick={async()=>{setPending(q.id);try{const result=await api<Attempt>('/attempts','POST',{sourceId:source.id,questionId:q.id,selected:answers[q.id],requestId:crypto.randomUUID()});setResults(r=>({...r,[q.id]:result}));onAttempt(result);}catch(e){onError(e instanceof Error?e.message:t.error);}finally{setPending(null);}}}>{t.checkAnswer}</Button>}</section>)}</>;
+function formatPosition(seconds: number) {
+  return `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
 }
-function Review({attempts,t,showPractice,showArtifact}:{attempts:Attempt[];t:T;showPractice:()=>void;showArtifact:()=>void}){const summary=reviewSummary(attempts);return <><div className="section-label">{t.review}</div>{!summary.count?<div className="small-empty"><Activity size={26}/><p>{t.noAttempts}</p><Button onClick={showPractice}>{t.practice}</Button></div>:<><div className="review-score"><strong>{summary.percent}%</strong><span>{summary.correct} / {summary.count}</span></div><p className="muted">{t.limited}</p>{summary.needsPractice.length>0&&<section className="review-concepts"><h3>{t.needsPractice}</h3>{summary.needsPractice.map(concept=><button key={concept} onClick={showPractice}><RotateCcw size={13}/>{concept}</button>)}</section>}<Button onClick={showArtifact}><Activity size={14}/>{t.artifact}</Button><div className="attempt-log">{attempts.map(a=><div key={a.id}><span className={a.correct?'success-text':'warning-text'}>{a.correct?'✓':'↻'}</span><span>{a.concept}<small>{new Date(a.createdAt).toLocaleString()}</small></span></div>)}</div></>}</>;}
-function Assistant({source,session,t,learning,onError}:{source:Source;session:StudySession;t:T;learning:PublicLearning|null;onError:(s:string)=>void}){
-  const storageKey=`tl:chat:${session.id}:${source.id}`;const [messages,setMessages]=useState<ChatMessage[]>(()=>{try{return JSON.parse(localStorage.getItem(storageKey)||'[]');}catch{return [];}}),[draft,setDraft]=useState(''),[pending,setPending]=useState(false);
-  async function send(){if(!draft.trim())return;const prompt=draft;setDraft('');setPending(true);const next:ChatMessage[]=[...messages,{role:'user',content:prompt}];setMessages(next);try{const result=await api<{text:string;tools:string[]}>(`/assistant/${source.id}`,'POST',{prompt,history:messages.slice(-16).map(({role,content})=>({role,content}))});const complete:ChatMessage[]=[...next,{role:'assistant',content:result.text,tools:result.tools}];setMessages(complete);localStorage.setItem(storageKey,JSON.stringify(complete));}catch(e){setMessages(messages);setDraft(prompt);onError(e instanceof Error?e.message:t.error);}finally{setPending(false);}}
-  return <div className="assistant"><p className="muted">{t.noChat}</p>{messages.map((m,i)=><div className={`chat-message ${m.role}`} key={i}><p>{m.content}</p>{m.tools?.length?<small>{t.toolsUsed}: {[...new Set(m.tools)].join(', ')}</small>:null}</div>)}{pending&&<p className="muted"><LoaderCircle className="spin" size={14}/> {t.thinking}</p>}<form onSubmit={e=>{e.preventDefault();void send();}}><textarea aria-label={t.assistant} placeholder={t.chatPlaceholder} disabled={!learning} value={draft} onChange={e=>setDraft(e.target.value)}/><Button variant="primary" disabled={!learning||pending||!draft.trim()} type="submit"><ArrowUp size={15}/>{t.send}</Button></form></div>;
+function Citations({
+  ids,
+  segments,
+  onCite,
+  t,
+}: {
+  ids: string[];
+  segments: Segment[];
+  onCite: (s: Segment) => void;
+  t: T;
+}) {
+  return (
+    <div className="citations" aria-label={t.sources}>
+      {ids.map((id) => {
+        const s = segments.find((x) => x.id === id);
+        if (!s) return null;
+        return (
+          <button key={id} title={s.text} onClick={() => onCite(s)}>
+            {s.start != null ? formatPosition(s.start) : s.page ? `${t.page} ${s.page}` : id}
+          </button>
+        );
+      })}
+    </div>
+  );
 }
-function CodePanel({t,onError}:{t:T;onError:(s:string)=>void}){const [available,setAvailable]=useState<boolean|null>(null),[draft,setDraft]=useState(''),[pending,setPending]=useState(false),[result,setResult]=useState('');useEffect(()=>{api<{available:boolean}>('/code/status').then(s=>setAvailable(s.available)).catch(()=>setAvailable(false));},[]);return <><div className="section-label"><Code2 size={15}/>{t.miniapp}</div><p className="muted">{t.miniappNotice}</p>{available===false&&<div className="notice">{t.codeUnavailable}</div>}<textarea aria-label={t.miniapp} placeholder={t.codePrompt} value={draft} onChange={e=>setDraft(e.target.value)}/><Button disabled={!available||pending||!draft.trim()} onClick={async()=>{setPending(true);try{const proposal=await api<unknown>('/code/sessions','POST',{prompt:draft});setResult(JSON.stringify(proposal,null,2));}catch(e){onError(e instanceof Error?e.message:t.error);}finally{setPending(false);}}}>{pending?<LoaderCircle className="spin" size={14}/>:<Code2 size={14}/>} {t.startCode}</Button><p className="muted">{t.readOnly}</p>{result&&<pre className="code-output">{result}</pre>}</>;}
-function SettingsModal({initial,t,close,save,onError}:{initial:Settings;t:T;close:()=>void;save:(value:unknown)=>Promise<void>;onError:(s:string)=>void}){
-  const [key,setKey]=useState(''),[locale,setLocale]=useState(initial.locale),[model,setModel]=useState(initial.model),[pending,setPending]=useState(false),[status,setStatus]=useState('');
-  return <Modal title={t.keyTitle} close={close} closeLabel={t.close}><p className="muted">{t.keyBody}</p><form className="settings-form" onSubmit={async e=>{e.preventDefault();setPending(true);try{await save({locale,model,...(key.trim()?{apiKey:key.trim()}:{})});setKey('');setStatus(t.keySaved);}catch(e){onError(e instanceof Error?e.message:t.error);}finally{setPending(false);}}}><label>{t.apiKey}<input autoComplete="off" type="password" aria-label={t.apiKey} placeholder={initial.configured?`${t.replaceKey} · ••••${initial.keySuffix}`:t.keyPlaceholder} value={key} onChange={e=>setKey(e.target.value)}/></label><div className="settings-grid"><label>{t.language}<select value={locale} onChange={e=>setLocale(e.target.value as Locale)}><option value="en">English</option><option value="es">Español</option></select></label><label>{t.model}<select value={model} onChange={e=>setModel(e.target.value)}><option value="muse-spark-1.3">Muse Spark 1.3</option><option value="muse-wonder-1.0">Muse Wonder</option></select></label></div><p className="credential-notice">{t.keyStorage}</p>{status&&<p role="status" className="success-text">{status}</p>}<div className="modal-actions"><Button type="submit" variant="primary" disabled={pending}>{t.save}</Button><Button onClick={close}>{initial.configured?t.close:t.explore}</Button>{initial.configured&&<Button variant="danger" onClick={async()=>{try{await save({removeKey:true});setKey('');setStatus(t.keyRemoved);}catch(e){onError(e instanceof Error?e.message:t.error);}}}>{t.removeKey}</Button>}</div></form></Modal>;
+function Notes({
+  source,
+  session,
+  update,
+  t,
+}: {
+  source: Source;
+  session: StudySession;
+  update: (v: Partial<StudySession>) => void;
+  t: T;
+}) {
+  const [draft, setDraft] = useState('');
+  const notes = session.notes.filter((n) => n.sourceId === source.id);
+  return (
+    <>
+      <div className="section-label">{t.notes}</div>
+      <textarea
+        aria-label={t.newNote}
+        placeholder={t.notePlaceholder}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+      />
+      <Button
+        variant="primary"
+        disabled={!draft.trim()}
+        onClick={() => {
+          update({
+            notes: [
+              ...session.notes,
+              {
+                id: crypto.randomUUID(),
+                sourceId: source.id,
+                text: draft.trim(),
+                createdAt: new Date().toISOString(),
+              },
+            ],
+          });
+          setDraft('');
+        }}
+      >
+        <Plus size={14} />
+        {t.addNote}
+      </Button>
+      {notes.map((note) => (
+        <section className="note-card" key={note.id}>
+          <div>
+            <small>{new Date(note.createdAt).toLocaleDateString()}</small>
+            <IconButton
+              label={t.remove}
+              onClick={() => update({ notes: session.notes.filter((n) => n.id !== note.id) })}
+            >
+              <X size={12} />
+            </IconButton>
+          </div>
+          <p>{note.text}</p>
+        </section>
+      ))}
+      {!notes.length && <p className="small-empty">{t.noNotes}</p>}
+    </>
+  );
 }
-function TextModal({title,label,initial,t,close,submit}:{title:string;label:string;initial:string;t:T;close:()=>void;submit:(value:string)=>void}){const [value,setValue]=useState(initial);return <Modal title={title} close={close} closeLabel={t.close}><form onSubmit={e=>{e.preventDefault();if(value.trim())submit(value.trim());}}><label>{label}<input autoFocus value={value} onChange={e=>setValue(e.target.value)} maxLength={240}/></label><div className="modal-actions"><Button variant="primary" type="submit" disabled={!value.trim()}>{t.save}</Button><Button onClick={close}>{t.cancel}</Button></div></form></Modal>;}
-function UploadForm({t,busy,progress,submit}:{t:T;busy:boolean;progress:number|null;submit:(files:File[],folder:string)=>void}){const [folder,setFolder]=useState(''),[files,setFiles]=useState<File[]>([]);return <form onSubmit={e=>{e.preventDefault();submit(files,folder.trim().replace(/^\/+|\/+$/g,''));}}><label>{t.folder}<input placeholder="Library / Recordings" value={folder} disabled={busy} onChange={e=>setFolder(e.target.value)}/></label><label className="upload-drop"><Upload size={28}/><strong>{t.chooseFile}</strong><span>PDF · MP4 · MP3 · WAV · PNG · JPG · MD · TXT</span><input type="file" multiple aria-label={t.chooseFile} disabled={busy} accept=".pdf,.mp4,.webm,.mov,.mkv,.wav,.mp3,.m4a,.ogg,.flac,.png,.jpg,.jpeg,.webp,.md,.txt,.csv" onChange={e=>setFiles([...e.target.files||[]])}/></label>{files.map((f,i)=><p className="upload-file" key={i}><FileText size={14}/>{f.name}<span>{(f.size/1024/1024).toFixed(1)} MB</span></p>)}{progress!=null&&<progress max={100} value={progress} aria-label={t.progress}/>}<p className="muted">{t.maxSize} {t.noKeyNeeded}</p><div className="modal-actions"><Button type="submit" variant="primary" disabled={!files.length||busy}>{busy?<LoaderCircle className="spin" size={14}/>:<Upload size={14}/>} {t.upload}</Button></div></form>;}
+function Practice({
+  source,
+  learning,
+  t,
+  onAttempt,
+  onError,
+  onCite,
+}: {
+  source: Source;
+  learning: PublicLearning | null;
+  t: T;
+  onAttempt: (attempt: Attempt) => void;
+  onError: (text: string) => void;
+  onCite: (s: Segment) => void;
+}) {
+  const [answers, setAnswers] = useState<Record<string, number>>({}),
+    [written, setWritten] = useState<Record<string, string>>({}),
+    [results, setResults] = useState<Record<string, Attempt>>({}),
+    [pending, setPending] = useState<string | null>(null);
+  const questions = learning?.synthesis.chapters.flatMap((c) => c.questions) || [];
+  return (
+    <>
+      <div className="section-label">
+        {t.practice}
+        <Badge>{questions.length}</Badge>
+      </div>
+      {!questions.length && <p className="small-empty">{t.noQuestions}</p>}
+      {questions.map((q, i) => (
+        <section className="quiz-card" key={q.id}>
+          <small>
+            {String(i + 1).padStart(2, '0')} · {q.concept}
+          </small>
+          <h3>{q.prompt}</h3>
+          <div className="quiz-options">
+            {q.kind === 'short' ? (
+              <textarea
+                aria-label={q.prompt}
+                disabled={!!results[q.id]}
+                maxLength={4000}
+                value={written[q.id] || ''}
+                onChange={(e) => setWritten((v) => ({ ...v, [q.id]: e.target.value }))}
+              />
+            ) : (
+              q.choices.map((choice, index) => (
+                <label key={index} className={answers[q.id] === index ? 'chosen' : ''}>
+                  <input
+                    type="radio"
+                    name={q.id}
+                    disabled={!!results[q.id]}
+                    checked={answers[q.id] === index}
+                    onChange={() => setAnswers((a) => ({ ...a, [q.id]: index }))}
+                  />
+                  <span>{choice}</span>
+                </label>
+              ))
+            )}
+          </div>
+          {results[q.id] ? (
+            <div className={`quiz-result ${results[q.id].correct ? 'correct' : 'incorrect'}`}>
+              <strong>
+                {results[q.id].pendingReview
+                  ? t.needsReview
+                  : results[q.id].correct
+                    ? t.correct
+                    : t.incorrect}
+              </strong>
+              <p>{results[q.id].explanation}</p>
+              <Citations ids={q.segmentIds} segments={learning!.segments} onCite={onCite} t={t} />
+            </div>
+          ) : (
+            <Button
+              disabled={
+                (q.kind === 'short' ? !written[q.id]?.trim() : answers[q.id] == null) ||
+                pending === q.id
+              }
+              onClick={async () => {
+                setPending(q.id);
+                try {
+                  const result = await api<Attempt>('/attempts', 'POST', {
+                    sourceId: source.id,
+                    questionId: q.id,
+                    ...(q.kind === 'short'
+                      ? { answer: written[q.id] }
+                      : { selected: answers[q.id] }),
+                    requestId: crypto.randomUUID(),
+                  });
+                  setResults((r) => ({ ...r, [q.id]: result }));
+                  onAttempt(result);
+                } catch (e) {
+                  onError(e instanceof Error ? e.message : t.error);
+                } finally {
+                  setPending(null);
+                }
+              }}
+            >
+              {t.checkAnswer}
+            </Button>
+          )}
+        </section>
+      ))}
+    </>
+  );
+}
+function Review({
+  attempts,
+  t,
+  showPractice,
+  showArtifact,
+}: {
+  attempts: Attempt[];
+  t: T;
+  showPractice: () => void;
+  showArtifact: () => void;
+}) {
+  const summary = reviewSummary(attempts);
+  return (
+    <>
+      <div className="section-label">{t.review}</div>
+      {!summary.count ? (
+        <div className="small-empty">
+          <Activity size={26} />
+          <p>{t.noAttempts}</p>
+          <Button onClick={showPractice}>{t.practice}</Button>
+        </div>
+      ) : (
+        <>
+          <div className="review-score">
+            <strong>{summary.percent}%</strong>
+            <span>
+              {summary.correct} / {summary.count}
+            </span>
+          </div>
+          <p className="muted">{t.limited}</p>
+          {summary.needsPractice.length > 0 && (
+            <section className="review-concepts">
+              <h3>{t.needsPractice}</h3>
+              {summary.needsPractice.map((concept) => (
+                <button key={concept} onClick={showPractice}>
+                  <RotateCcw size={13} />
+                  {concept}
+                </button>
+              ))}
+            </section>
+          )}
+          <Button onClick={showArtifact}>
+            <Activity size={14} />
+            {t.artifact}
+          </Button>
+          <div className="attempt-log">
+            {attempts.map((a) => (
+              <div key={a.id}>
+                <span className={a.correct ? 'success-text' : 'warning-text'}>
+                  {a.correct ? '✓' : '↻'}
+                </span>
+                <span>
+                  {a.concept}
+                  <small>{new Date(a.createdAt).toLocaleString()}</small>
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+function Assistant({
+  source,
+  session,
+  t,
+  learning,
+  onError,
+  update,
+}: {
+  source: Source;
+  session: StudySession;
+  t: T;
+  learning: PublicLearning | null;
+  onError: (s: string) => void;
+  update: (value: Partial<StudySession>) => void;
+}) {
+  const storageKey = `tl:chat:${session.id}:${source.id}`;
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+      if (session.conversations?.[source.id]) return session.conversations[source.id];
+      try {
+        return JSON.parse(localStorage.getItem(storageKey) || '[]');
+      } catch {
+        return [];
+      }
+    }),
+    [draft, setDraft] = useState(''),
+    [pending, setPending] = useState(false);
+  async function send() {
+    if (!draft.trim()) return;
+    const prompt = draft;
+    setDraft('');
+    setPending(true);
+    const next: ChatMessage[] = [...messages, { role: 'user', content: prompt }];
+    setMessages(next);
+    try {
+      const result = await api<{ text: string; tools: string[] }>(
+        `/assistant/${source.id}`,
+        'POST',
+        { prompt, history: messages.slice(-16).map(({ role, content }) => ({ role, content })) },
+      );
+      const complete: ChatMessage[] = [
+        ...next,
+        { role: 'assistant', content: result.text, tools: result.tools },
+      ];
+      setMessages(complete);
+      localStorage.setItem(storageKey, JSON.stringify(complete));
+      update({ conversations: { ...session.conversations, [source.id]: complete.slice(-100) } });
+    } catch (e) {
+      setMessages(messages);
+      setDraft(prompt);
+      onError(e instanceof Error ? e.message : t.error);
+    } finally {
+      setPending(false);
+    }
+  }
+  return (
+    <div className="assistant">
+      <p className="muted">{t.noChat}</p>
+      {messages.map((m, i) => (
+        <div className={`chat-message ${m.role}`} key={i}>
+          <p>{m.content}</p>
+          {m.tools?.length ? (
+            <small>
+              {t.toolsUsed}: {[...new Set(m.tools)].join(', ')}
+            </small>
+          ) : null}
+        </div>
+      ))}
+      {pending && (
+        <p className="muted">
+          <LoaderCircle className="spin" size={14} /> {t.thinking}
+        </p>
+      )}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          void send();
+        }}
+      >
+        <textarea
+          aria-label={t.assistant}
+          placeholder={t.chatPlaceholder}
+          disabled={!learning}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+        />
+        <Button variant="primary" disabled={!learning || pending || !draft.trim()} type="submit">
+          <ArrowUp size={15} />
+          {t.send}
+        </Button>
+      </form>
+    </div>
+  );
+}
+function CodePanel({ t, onError }: { t: T; onError: (s: string) => void }) {
+  const [available, setAvailable] = useState<boolean | null>(null),
+    [draft, setDraft] = useState(''),
+    [pending, setPending] = useState(false),
+    [result, setResult] = useState('');
+  useEffect(() => {
+    api<{ available: boolean }>('/code/status')
+      .then((s) => setAvailable(s.available))
+      .catch(() => setAvailable(false));
+  }, []);
+  return (
+    <>
+      <div className="section-label">
+        <Code2 size={15} />
+        {t.miniapp}
+      </div>
+      <p className="muted">{t.miniappNotice}</p>
+      {available === false && <div className="notice">{t.codeUnavailable}</div>}
+      <textarea
+        aria-label={t.miniapp}
+        placeholder={t.codePrompt}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+      />
+      <Button
+        disabled={!available || pending || !draft.trim()}
+        onClick={async () => {
+          setPending(true);
+          try {
+            const proposal = await api<unknown>('/code/sessions', 'POST', { prompt: draft });
+            setResult(JSON.stringify(proposal, null, 2));
+          } catch (e) {
+            onError(e instanceof Error ? e.message : t.error);
+          } finally {
+            setPending(false);
+          }
+        }}
+      >
+        {pending ? <LoaderCircle className="spin" size={14} /> : <Code2 size={14} />} {t.startCode}
+      </Button>
+      <p className="muted">{t.readOnly}</p>
+      {result && <pre className="code-output">{result}</pre>}
+    </>
+  );
+}
+function SettingsModal({
+  initial,
+  t,
+  close,
+  save,
+  onError,
+}: {
+  initial: Settings;
+  t: T;
+  close: () => void;
+  save: (value: unknown) => Promise<void>;
+  onError: (s: string) => void;
+}) {
+  const [key, setKey] = useState(''),
+    [locale, setLocale] = useState(initial.locale),
+    [model, setModel] = useState(initial.model),
+    [pending, setPending] = useState(false),
+    [status, setStatus] = useState('');
+  return (
+    <Modal title={t.keyTitle} close={close} closeLabel={t.close}>
+      <p className="muted">{t.keyBody}</p>
+      <form
+        className="settings-form"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          setPending(true);
+          try {
+            await save({ locale, model, ...(key.trim() ? { apiKey: key.trim() } : {}) });
+            setKey('');
+            setStatus(t.keySaved);
+          } catch (e) {
+            onError(e instanceof Error ? e.message : t.error);
+          } finally {
+            setPending(false);
+          }
+        }}
+      >
+        <label>
+          {t.apiKey}
+          <input
+            autoComplete="off"
+            type="password"
+            aria-label={t.apiKey}
+            placeholder={
+              initial.configured ? `${t.replaceKey} · ••••${initial.keySuffix}` : t.keyPlaceholder
+            }
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+          />
+        </label>
+        <div className="settings-grid">
+          <label>
+            {t.language}
+            <select value={locale} onChange={(e) => setLocale(e.target.value as Locale)}>
+              <option value="en">English</option>
+              <option value="es">Español</option>
+            </select>
+          </label>
+          <label>
+            {t.model}
+            <select value={model} onChange={(e) => setModel(e.target.value)}>
+              <option value="muse-spark-1.3">Muse Spark 1.3</option>
+              <option value="muse-wonder-1.0">Muse Wonder</option>
+            </select>
+          </label>
+        </div>
+        <p className="credential-notice">{t.keyStorage}</p>
+        {status && (
+          <p role="status" className="success-text">
+            {status}
+          </p>
+        )}
+        <div className="modal-actions">
+          <Button type="submit" variant="primary" disabled={pending}>
+            {t.save}
+          </Button>
+          <Button onClick={close}>{initial.configured ? t.close : t.explore}</Button>
+          {initial.configured && (
+            <Button
+              variant="danger"
+              onClick={async () => {
+                try {
+                  await save({ removeKey: true });
+                  setKey('');
+                  setStatus(t.keyRemoved);
+                } catch (e) {
+                  onError(e instanceof Error ? e.message : t.error);
+                }
+              }}
+            >
+              {t.removeKey}
+            </Button>
+          )}
+        </div>
+      </form>
+    </Modal>
+  );
+}
+function TextModal({
+  title,
+  label,
+  initial,
+  t,
+  close,
+  submit,
+}: {
+  title: string;
+  label: string;
+  initial: string;
+  t: T;
+  close: () => void;
+  submit: (value: string) => void;
+}) {
+  const [value, setValue] = useState(initial);
+  return (
+    <Modal title={title} close={close} closeLabel={t.close}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (value.trim()) submit(value.trim());
+        }}
+      >
+        <label>
+          {label}
+          <input
+            autoFocus
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            maxLength={240}
+          />
+        </label>
+        <div className="modal-actions">
+          <Button variant="primary" type="submit" disabled={!value.trim()}>
+            {t.save}
+          </Button>
+          <Button onClick={close}>{t.cancel}</Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+function UploadForm({
+  t,
+  busy,
+  progress,
+  submit,
+}: {
+  t: T;
+  busy: boolean;
+  progress: number | null;
+  submit: (files: File[], folder: string) => void;
+}) {
+  const [folder, setFolder] = useState(''),
+    [files, setFiles] = useState<File[]>([]);
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        submit(files, folder.trim().replace(/^\/+|\/+$/g, ''));
+      }}
+    >
+      <label>
+        {t.folder}
+        <input
+          placeholder="Library / Recordings"
+          value={folder}
+          disabled={busy}
+          onChange={(e) => setFolder(e.target.value)}
+        />
+      </label>
+      <label className="upload-drop">
+        <Upload size={28} />
+        <strong>{t.chooseFile}</strong>
+        <span>PDF · MP4 · MP3 · WAV · PNG · JPG · MD · TXT</span>
+        <input
+          type="file"
+          multiple
+          aria-label={t.chooseFile}
+          disabled={busy}
+          accept=".pdf,.mp4,.webm,.mov,.mkv,.wav,.mp3,.m4a,.ogg,.flac,.png,.jpg,.jpeg,.webp,.md,.txt,.csv"
+          onChange={(e) => setFiles([...(e.target.files || [])])}
+        />
+      </label>
+      {files.map((f, i) => (
+        <p className="upload-file" key={i}>
+          <FileText size={14} />
+          {f.name}
+          <span>{(f.size / 1024 / 1024).toFixed(1)} MB</span>
+        </p>
+      ))}
+      {progress != null && <progress max={100} value={progress} aria-label={t.progress} />}
+      <p className="muted">
+        {t.maxSize} {t.noKeyNeeded}
+      </p>
+      <div className="modal-actions">
+        <Button type="submit" variant="primary" disabled={!files.length || busy}>
+          {busy ? <LoaderCircle className="spin" size={14} /> : <Upload size={14} />} {t.upload}
+        </Button>
+      </div>
+    </form>
+  );
+}

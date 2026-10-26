@@ -1,0 +1,9 @@
+node_modules
+dist
+.celld
+.local
+.research
+.dev.vars
+.env*
+package-lock.json
+worker-env.d.ts

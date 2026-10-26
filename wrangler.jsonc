@@ -4,12 +4,22 @@
   "main": "worker/index.ts",
   "compatibility_date": "2026-10-26",
   "compatibility_flags": ["nodejs_compat"],
-  "assets": { "directory": "./dist", "binding": "ASSETS", "not_found_handling": "single-page-application", "run_worker_first": ["/api/*"] },
-  "durable_objects": { "bindings": [
-    { "name": "LIBRARY", "class_name": "Library" },
-    { "name": "JOBS", "class_name": "ProcessingJob" }
-  ] },
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"],
+  },
+  "durable_objects": {
+    "bindings": [
+      { "name": "LIBRARY", "class_name": "Library" },
+      { "name": "JOBS", "class_name": "ProcessingJob" },
+    ],
+  },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Library", "ProcessingJob"] }],
   "r2_buckets": [{ "binding": "FILES", "bucket_name": "tailored-library-files" }],
-  "vars": { "MEDIA_BRIDGE_URL": "http://127.0.0.1:9877", "MEDIA_BRIDGE_TOKEN": "launcher-required" }
+  "vars": {
+    "MEDIA_BRIDGE_URL": "http://127.0.0.1:9877",
+    "MEDIA_BRIDGE_TOKEN": "launcher-required",
+  },
 }

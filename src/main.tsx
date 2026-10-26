@@ -3,4 +3,4 @@ import { App } from './App';
 import './design/tokens.css';
 import './styles.css';
 
-createRoot(document.getElementById('root')!).render(<App/>);
+createRoot(document.getElementById('root')!).render(<App />);
