@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.celld/
+.local/
+.research/
+.dev.vars
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
