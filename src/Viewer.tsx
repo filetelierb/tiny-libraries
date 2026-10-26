@@ -41,7 +41,7 @@ export function Viewer({
   useEffect(() => {
     if (!seek) return;
     if (media.current) media.current.currentTime = seek.value;
-    else {
+    else if (source.kind === 'pdf') {
       setPage(Math.max(1, Math.round(seek.value)));
       onPosition(Math.max(1, Math.round(seek.value)));
     }
