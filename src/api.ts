@@ -1,3 +1,11 @@
+export class ApiResponseError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
 export async function api<T>(path: string, method = 'GET', value?: unknown): Promise<T> {
   const response = await fetch(`/api${path}`, {
     method,
@@ -5,7 +13,11 @@ export async function api<T>(path: string, method = 'GET', value?: unknown): Pro
     ...(value === undefined ? {} : { body: JSON.stringify(value) }),
   });
   const data = await response.json();
-  if (!response.ok) throw new Error(data.error || `Request failed (${response.status})`);
+  if (!response.ok)
+    throw new ApiResponseError(
+      data.error || `Request failed (${response.status})`,
+      response.status,
+    );
   return data;
 }
 export function uploadFile(

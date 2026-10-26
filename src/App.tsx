@@ -59,6 +59,7 @@ import { dictionaries, type T } from './i18n';
 import { Badge, Button, Empty, IconButton, Modal } from './design/components';
 import { StudyReader } from './study/StudyReader';
 import { ChapterQuiz, type ChapterQuizRequest } from './study/ChapterQuiz';
+import { FlashcardDeck, type DeckRequest } from './study/FlashcardDeck';
 import { GeneratedArtifact } from './GeneratedArtifact';
 import { SignalExplorer } from './SignalExplorer';
 import { PanelResizer, useDrawerFocus, usePanels } from './workspace/Panels';
@@ -114,6 +115,8 @@ export function App() {
   const [glossaryFocus, setGlossaryFocus] = useState<{ id: string; nonce: string } | null>(null);
   const [annotationTick, setAnnotationTick] = useState(0);
   const [quizRequest, setQuizRequest] = useState<ChapterQuizRequest | null>(null);
+  const [deckRequest, setDeckRequest] = useState<DeckRequest | null>(null),
+    [cardTick, setCardTick] = useState(0);
   const [resumePlayback, setResumePlayback] = useState<{ sourceId: string; nonce: number } | null>(
     null,
   );
@@ -1077,7 +1080,13 @@ export function App() {
                             focusPane(source.id);
                             setQuizRequest({ source, learning: material, chapter, wasPlaying });
                           }}
-                          suspended={!!quizRequest}
+                          cardTick={cardTick}
+                          openCards={(chapterId, dueOnly) => {
+                            if (!material) return;
+                            focusPane(source.id);
+                            setDeckRequest({ source, learning: material, chapterId, dueOnly });
+                          }}
+                          suspended={!!quizRequest || !!deckRequest}
                           resumeSignal={
                             resumePlayback?.sourceId === source.id ? resumePlayback.nonce : 0
                           }
@@ -1489,6 +1498,19 @@ export function App() {
           )}
         </div>
       </aside>
+      {deckRequest && (
+        <FlashcardDeck
+          key={`${deckRequest.source.id}:${deckRequest.learning.createdAt}:${deckRequest.chapterId || 'due'}`}
+          request={deckRequest}
+          t={t}
+          close={() => setDeckRequest(null)}
+          changed={() => setCardTick((tick) => tick + 1)}
+          cite={(segment) => {
+            setDeckRequest(null);
+            citeFrom(deckRequest.source.id, segment);
+          }}
+        />
+      )}
       {quizRequest && (
         <ChapterQuiz
           key={`${quizRequest.source.id}:${quizRequest.chapter.id}:${quizRequest.learning.createdAt}`}

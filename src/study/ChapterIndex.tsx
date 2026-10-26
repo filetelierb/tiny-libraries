@@ -1,5 +1,14 @@
 import { useState } from 'react';
-import { Check, GraduationCap, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import {
+  Check,
+  GraduationCap,
+  Layers,
+  LoaderCircle,
+  PanelLeftClose,
+  PanelLeftOpen,
+} from 'lucide-react';
+import { cardDue } from '../../shared/flashcards';
+import type { useFlashcards } from './useFlashcards';
 import type { Attempt, PublicLearning, Source, Segment } from '../../shared/domain';
 import {
   chapterLocations,
@@ -22,6 +31,8 @@ export function ChapterIndex({
   setEnabled,
   navigate,
   quiz,
+  cards,
+  openCards,
   t,
 }: {
   source: Source;
@@ -33,6 +44,8 @@ export function ChapterIndex({
   setEnabled: (value: boolean) => void;
   navigate: (segment: Segment, heading?: string) => void;
   quiz: (chapter: StudyChapter) => void;
+  cards: ReturnType<typeof useFlashcards>;
+  openCards: (chapterId: string | undefined, dueOnly: boolean) => void;
   t: T;
 }) {
   const key = `tl:chapter-index:${source.id}:v${source.version}`;
@@ -71,6 +84,45 @@ export function ChapterIndex({
       </div>
       {expanded && (
         <div className="chapter-index-content">
+          <div className="chapter-card-tools">
+            <Button
+              variant="ghost"
+              disabled={
+                cards.starting ||
+                cards.decks.some((d) => ['queued', 'running'].includes(d.status)) ||
+                learning.synthesis.chapters.every((c) =>
+                  cards.decks.some((d) => d.chapterId === c.id && d.status === 'ready'),
+                )
+              }
+              onClick={() =>
+                void cards.create(
+                  learning.synthesis.chapters
+                    .filter(
+                      (c) => !cards.decks.some((d) => d.chapterId === c.id && d.status === 'ready'),
+                    )
+                    .map((c) => c.id),
+                )
+              }
+            >
+              <Layers size={13} />
+              {cards.decks.some((d) => ['queued', 'running'].includes(d.status))
+                ? t.creatingCards
+                : t.createCards}
+            </Button>
+            <Button
+              variant="ghost"
+              disabled={!cards.decks.some((d) => d.cards.some((c) => cardDue(c)))}
+              onClick={() => openCards(undefined, true)}
+            >
+              {t.reviewDueCards} ·{' '}
+              {cards.decks.flatMap((d) => d.cards).filter((c) => cardDue(c)).length} {t.cardsDue}
+            </Button>
+            {cards.error && (
+              <p className="notice" role="alert">
+                {cards.error}
+              </p>
+            )}
+          </div>
           {['audio', 'video', 'pdf'].includes(source.kind) && (
             <label className="chapter-checkpoints">
               <input
@@ -82,6 +134,8 @@ export function ChapterIndex({
             </label>
           )}
           {locations.map((range) => {
+            const deck = cards.decks.find((d) => d.chapterId === range.chapter.id),
+              pending = !!deck && ['queued', 'running'].includes(deck.status);
             const complete = completedChapter(attempts, learning, range.chapter),
               draft = readQuizDraft(quizDraftKey(sessionId, learning, range.chapter));
             const label =
@@ -112,6 +166,27 @@ export function ChapterIndex({
                   {complete ? <Check size={13} /> : <GraduationCap size={13} />}
                   {draft && !draft.completed ? t.continueQuiz : complete ? t.repeatQuiz : t.quiz}
                 </Button>
+                <Button
+                  variant="ghost"
+                  disabled={cards.starting || pending}
+                  onClick={() =>
+                    deck?.status === 'ready'
+                      ? openCards(range.chapter.id, false)
+                      : void cards.create([range.chapter.id])
+                  }
+                >
+                  {pending ? <LoaderCircle size={13} className="spin" /> : <Layers size={13} />}
+                  {pending
+                    ? t.creatingCards
+                    : deck?.status === 'ready'
+                      ? `${t.studyCards} · ${deck.cards.length}`
+                      : t.createCards}
+                </Button>
+                {deck?.error && (
+                  <p className="chapter-card-error" role="status">
+                    {deck.error}
+                  </p>
+                )}
               </section>
             );
           })}

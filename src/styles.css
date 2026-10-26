@@ -3832,3 +3832,86 @@ body:has(.panel-resizer.resizing) {
   color: var(--muted-text);
   line-height: 1.6;
 }
+.chapter-card-tools {
+  padding: 8px 4px 12px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  gap: 5px;
+}
+.chapter-card-tools .button,
+.chapter-index-item > .button {
+  justify-content: flex-start;
+  white-space: normal;
+  text-align: left;
+}
+.chapter-card-error {
+  font-size: 12px;
+  color: var(--muted-text);
+  padding: 0 10px;
+  overflow-wrap: anywhere;
+}
+.card-deck {
+  padding: 4px 18px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.card-deck > p {
+  margin: 0;
+}
+.recall-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 24px;
+  min-height: 180px;
+  overflow-wrap: anywhere;
+}
+.recall-card h3 {
+  font-size: 21px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+.recall-card small {
+  color: var(--muted-text);
+}
+.recall-answer {
+  border-top: 1px solid var(--border);
+  margin-top: 20px;
+  line-height: 1.7;
+}
+.card-grades {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.card-grades .button {
+  justify-content: center;
+  min-height: 44px;
+}
+.card-evidence {
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.card-evidence summary {
+  cursor: pointer;
+  color: var(--primary);
+}
+.card-evidence blockquote {
+  margin: 12px 0;
+  border-left: 2px solid var(--border);
+  padding-left: 14px;
+}
+@media (max-width: 480px) {
+  .card-deck {
+    padding: 4px 12px 18px;
+  }
+  .recall-card {
+    padding: 16px;
+  }
+  .card-grades {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

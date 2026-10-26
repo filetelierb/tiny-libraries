@@ -1,5 +1,36 @@
 import type { Locale } from '../shared/domain';
 const en = {
+  flashcards: 'Flashcards',
+  createCards: 'Create cards',
+  creatingCards: 'Creating cards…',
+  studyCards: 'Study cards',
+  reviewDueCards: 'Review due cards',
+  cardsDue: 'due',
+  closeCards: 'Close cards',
+  cardSelfAssessment:
+    'Your ratings schedule future reviews. They are self-assessments and do not change quiz scores.',
+  cardMaterialUnavailable:
+    'These cards are no longer available in the current study material. Close and reopen the source.',
+  cardsReviewed: 'reviewed',
+  cardsRemaining: 'remaining',
+  recallBeforeReveal: 'Recall the answer, then reveal it to check.',
+  revealAnswer: 'Reveal answer',
+  cardRatingRetained:
+    'Your selected rating is retained until it is saved. Retry to recover the result.',
+  cardScheduleChanged:
+    'This card changed. Refresh its saved schedule before choosing a new rating.',
+  refreshCardSchedule: 'Refresh card schedule',
+  retryRating: 'Retry rating',
+  cardGrade_again: 'Again',
+  cardGrade_hard: 'Hard',
+  cardGrade_good: 'Good',
+  cardGrade_easy: 'Easy',
+  sourceEvidence: 'Source evidence',
+  openSource: 'Open source',
+  nextCardReview: 'Next review',
+  cardReviewComplete: 'Review complete',
+  cardReviewCompleteHint:
+    'Your ratings are saved. Due cards will be available for review when their scheduled time arrives.',
   readerUnavailable: 'Reader unavailable',
   studyToolUnavailable: 'Study tool unavailable',
   contentLoadRecovery: 'This view could not load. Reload the app to load the current version.',
@@ -542,6 +573,37 @@ const en = {
 };
 type Dictionary = typeof en;
 const es: Dictionary = {
+  flashcards: 'Tarjetas de repaso',
+  createCards: 'Crear tarjetas',
+  creatingCards: 'Creando tarjetas…',
+  studyCards: 'Estudiar tarjetas',
+  reviewDueCards: 'Repasar tarjetas pendientes',
+  cardsDue: 'pendientes',
+  closeCards: 'Cerrar tarjetas',
+  cardSelfAssessment:
+    'Tus valoraciones programan próximos repasos. Son autoevaluaciones y no cambian los resultados de los cuestionarios.',
+  cardMaterialUnavailable:
+    'Estas tarjetas ya no están disponibles en el material de estudio actual. Cierra y vuelve a abrir la fuente.',
+  cardsReviewed: 'repasadas',
+  cardsRemaining: 'restantes',
+  recallBeforeReveal: 'Recuerda la respuesta y después muéstrala para comprobarla.',
+  revealAnswer: 'Mostrar respuesta',
+  cardRatingRetained:
+    'La valoración elegida se conserva hasta guardarla. Reintenta para recuperar el resultado.',
+  cardScheduleChanged:
+    'La tarjeta ha cambiado. Actualiza su programación guardada antes de elegir otra valoración.',
+  refreshCardSchedule: 'Actualizar programación de la tarjeta',
+  retryRating: 'Reintentar valoración',
+  cardGrade_again: 'Otra vez',
+  cardGrade_hard: 'Difícil',
+  cardGrade_good: 'Bien',
+  cardGrade_easy: 'Fácil',
+  sourceEvidence: 'Evidencia de la fuente',
+  openSource: 'Abrir fuente',
+  nextCardReview: 'Próximo repaso',
+  cardReviewComplete: 'Repaso completo',
+  cardReviewCompleteHint:
+    'Tus valoraciones están guardadas. Las tarjetas estarán disponibles cuando llegue su próximo repaso.',
   readerUnavailable: 'Visor no disponible',
   studyToolUnavailable: 'Herramienta de estudio no disponible',
   contentLoadRecovery:

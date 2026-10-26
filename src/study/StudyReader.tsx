@@ -9,16 +9,21 @@ import {
 } from '../../shared/chapters';
 import { Viewer } from '../Viewer';
 import { ChapterIndex } from './ChapterIndex';
+import { useFlashcards } from './useFlashcards';
 
 export function StudyReader({
   attempts,
   navigate,
   quiz,
+  openCards,
+  cardTick,
   ...props
 }: ComponentProps<typeof Viewer> & {
   attempts: Attempt[];
   navigate: (segment: Segment, heading?: string) => void;
   quiz: (chapter: StudyChapter, wasPlaying: boolean) => void;
+  openCards: (chapterId: string | undefined, dueOnly: boolean) => void;
+  cardTick: number;
 }) {
   const { source, learning, position = 0, sessionId, t } = props;
   const preferenceKey = `tl:checkpoints:${source.id}:v${source.version}`;
@@ -34,6 +39,7 @@ export function StudyReader({
     prompted = useRef(new Set<string>()),
     playing = useRef(false);
   const material = learning?.sourceVersion === source.version ? learning : null;
+  const cards = useFlashcards(material, cardTick);
   const progress = (event: ReadingProgress) => {
     const before = previous.current;
     previous.current = event.value;
@@ -75,6 +81,8 @@ export function StudyReader({
             }}
             navigate={navigate}
             quiz={(chapter) => quiz(chapter, playing.current)}
+            cards={cards}
+            openCards={openCards}
             t={t}
           />
         )}

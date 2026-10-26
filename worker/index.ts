@@ -18,7 +18,15 @@ import {
   type Attempt,
 } from '../shared/domain';
 export { ProcessingJob } from './jobs';
-import { runAssistant, bridgedFetch, gradeShortAnswer, analyzeConcepts, MetaError } from './meta';
+import {
+  runAssistant,
+  bridgedFetch,
+  gradeShortAnswer,
+  analyzeConcepts,
+  generateCards,
+  MetaError,
+} from './meta';
+import { cardSnapshot, startCardDecks, rateCard, CardError } from './flashcards';
 import { conceptSuggestionsRoute } from './concept-suggestions';
 import { conversationRoute, conversationSnapshot } from './conversations';
 import { recordAttempt, PracticeError } from './practice';
@@ -306,6 +314,37 @@ export class Library extends DurableObject<Env> {
           value ? (learningMatch[1] === 'internal' ? value : publicLearning(value)) : null,
         );
       }
+      const cardsMatch = path.match(/^\/api\/flashcards\/([a-f0-9-]+)$/);
+      if (cardsMatch && request.method === 'GET')
+        return json(await cardSnapshot(this.ctx.storage, cardsMatch[1], this.executionId));
+      if (cardsMatch && request.method === 'POST') {
+        const settings = await this.settings();
+        return json(
+          await startCardDecks(this.ctx.storage, cardsMatch[1], await boundedJson(request), {
+            owner: this.executionId,
+            settings,
+            start: (task) => this.ctx.waitUntil(task),
+            generate: async (learning, chapterId) => {
+              const key = await this.ctx.storage.get<string>('apiKey');
+              if (!key) throw new ApiError('Add a Meta API key in Settings', 409);
+              return generateCards(
+                key,
+                settings.model,
+                learning,
+                chapterId,
+                bridgedFetch(this.env),
+              );
+            },
+          }),
+          202,
+        );
+      }
+      const cardReviewMatch = path.match(/^\/api\/flashcards\/([a-f0-9-]+)\/review$/);
+      if (cardReviewMatch && request.method === 'POST')
+        return json(
+          await rateCard(this.ctx.storage, cardReviewMatch[1], await boundedJson(request)),
+          201,
+        );
       if (path === '/api/attempts' && request.method === 'POST') {
         const attempt = await recordAttempt(
           this.ctx.storage,
@@ -396,6 +435,7 @@ export class Library extends DurableObject<Env> {
         error instanceof DirectoryError ||
         error instanceof AnnotationError ||
         error instanceof GlossaryError ||
+        error instanceof CardError ||
         error instanceof PracticeError
       )
         return json({ error: error.message }, error.status);
