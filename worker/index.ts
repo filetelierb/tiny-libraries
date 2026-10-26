@@ -9,8 +9,6 @@ import {
   publicLearning,
   reviewSummary,
   fold,
-  mergeConcept,
-  type Concept,
   type Source,
   type Directory,
   type Catalog,
@@ -23,6 +21,7 @@ export { ProcessingJob } from './jobs';
 import { runAssistant, bridgedFetch, gradeShortAnswer } from './meta';
 import { conversationRoute, conversationSnapshot } from './conversations';
 import { annotationRoute, AnnotationError } from './annotations';
+import { glossaryRoute, glossarySnapshot, ingestGeneratedConcept, GlossaryError } from './glossary';
 import {
   changeDirectory,
   ensureDirectories,
@@ -128,14 +127,14 @@ export class Library extends DurableObject<Env> {
         );
         const sessions = await this.ctx.storage.list<StudySession>({ prefix: 'session:' });
         const attempts = await this.ctx.storage.list<Attempt>({ prefix: 'attempt:' });
-        const concepts = await this.ctx.storage.list<Concept>({ prefix: 'concept:' });
+        const concepts = await glossarySnapshot(this.ctx.storage);
         return json({
           files,
           directories,
           sessions: [...sessions.values()].map((value) => sessionSchema.parse(value)),
           conversations: await conversationSnapshot(this.ctx.storage, [...sessions.values()]),
           attempts: [...attempts.values()],
-          concepts: [...concepts.values()],
+          concepts,
           settings: await this.settings(),
         } satisfies Catalog);
       }
@@ -298,15 +297,10 @@ export class Library extends DurableObject<Env> {
           if (!file || file.version !== value.sourceVersion)
             throw new ApiError('Source version changed', 409);
           for (const term of value.synthesis.glossary) {
-            const conceptKey = `concept:${fold(term.term).slice(0, 180)}`;
-            await this.ctx.storage.transaction(async (transaction) => {
-              const existing = await transaction.get<Concept>(conceptKey);
-              const merged = mergeConcept(existing, term.term, term.definition, {
-                sourceId: id,
-                sourceVersion: value.sourceVersion,
-                segmentIds: term.segmentIds,
-              });
-              await transaction.put(conceptKey, merged);
+            await ingestGeneratedConcept(this.ctx.storage, term.term, term.definition, {
+              sourceId: id,
+              sourceVersion: value.sourceVersion,
+              segmentIds: term.segmentIds,
             });
           }
           await this.ctx.storage.put(`learning:${id}`, value);
@@ -316,35 +310,6 @@ export class Library extends DurableObject<Env> {
         return json(
           value ? (learningMatch[1] === 'internal' ? value : publicLearning(value)) : null,
         );
-      }
-      const conceptMatch = path.match(/^\/api\/concepts\/([a-f0-9-]+)$/);
-      if (conceptMatch && request.method === 'PATCH') {
-        const input = z
-          .object({ proposalId: z.string().uuid().optional(), reviewed: z.boolean().optional() })
-          .parse(await boundedJson(request));
-        const entries = await this.ctx.storage.list<Concept>({ prefix: 'concept:' }),
-          entry = [...entries].find(([, concept]) => concept.id === conceptMatch[1]);
-        if (!entry) throw new ApiError('Concept not found', 404);
-        const [key, concept] = entry;
-        const proposal = input.proposalId
-          ? concept.proposals.find((p) => p.id === input.proposalId)
-          : null;
-        if (input.proposalId && !proposal) throw new ApiError('Proposal not found', 404);
-        if (proposal)
-          await this.ctx.storage.put(`concept-history:${concept.id}:${concept.version}`, concept);
-        const updated = {
-          ...concept,
-          reviewed: input.reviewed ?? true,
-          ...(proposal
-            ? {
-                definition: proposal.definition,
-                version: concept.version + 1,
-                proposals: concept.proposals.filter((p) => p.id !== proposal.id),
-              }
-            : {}),
-        };
-        await this.ctx.storage.put(key, updated);
-        return json(updated);
       }
       if (path === '/api/attempts' && request.method === 'POST') {
         const data = z
@@ -445,6 +410,10 @@ export class Library extends DurableObject<Env> {
         settings: () => this.settings(),
       });
       if (conversationResponse) return conversationResponse;
+      const glossaryResponse = await glossaryRoute(request, this.ctx.storage, () =>
+        boundedJson(request),
+      );
+      if (glossaryResponse) return glossaryResponse;
       const annotationResponse = await annotationRoute(request, this.env, this.ctx.storage, () =>
         boundedJson(request),
       );
@@ -454,7 +423,8 @@ export class Library extends DurableObject<Env> {
       if (
         error instanceof ApiError ||
         error instanceof DirectoryError ||
-        error instanceof AnnotationError
+        error instanceof AnnotationError ||
+        error instanceof GlossaryError
       )
         return json({ error: error.message }, error.status);
       if (error instanceof z.ZodError || error instanceof SyntaxError)

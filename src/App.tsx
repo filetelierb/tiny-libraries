@@ -88,6 +88,7 @@ import type { Annotation, SourceLocation } from '../shared/annotations';
 import { useBookmarks } from './bookmarks/useBookmarks';
 import { BookmarkEditor, type BookmarkIntent } from './bookmarks/BookmarkEditor';
 import { BookmarksPanel, type BookmarkFilter } from './bookmarks/BookmarksPanel';
+import { GlossaryPanel } from './glossary/GlossaryPanel';
 const AnnotationEditor = lazy(() => import('./annotations/AnnotationEditor'));
 import { sessionPreview, type QuestionContext } from '../shared/conversations';
 import { ActionMenu } from './design/ActionMenu';
@@ -492,9 +493,9 @@ export function App() {
       ...(references ? { references } : {}),
     });
   }
-  function navigateAnnotation(sourceId: string, location: SourceLocation) {
+  function navigateAnnotation(sourceId: string, location: SourceLocation, label = 'annotation') {
     citeFrom(sourceId, {
-      id: 'annotation',
+      id: label,
       text: location.quote || '',
       ...(location.page ? { page: location.page } : {}),
       ...(location.seconds != null ? { start: location.seconds } : {}),
@@ -1110,7 +1111,19 @@ export function App() {
           aria-labelledby={`study-tab-${tab}`}
           className="study-content"
         >
-          {tab === 'assistant' ? (
+          <div hidden={tab !== 'glossary'} className="glossary-host">
+            <GlossaryPanel
+              catalog={catalog}
+              source={active}
+              openSourceIds={resources.resourceTabs.flatMap((tab) => tab.sources)}
+              t={t}
+              actions={treeActions}
+              changed={refresh}
+              navigate={(id, location) => navigateAnnotation(id, location, t.glossary)}
+              onError={setError}
+            />
+          </div>
+          {tab === 'glossary' ? null : tab === 'assistant' ? (
             <ConversationPanel
               key={session.id}
               sessionId={session.id}
@@ -1305,68 +1318,6 @@ export function App() {
                     });
                   }}
                 />
-              )}
-              {tab === 'glossary' && (
-                <>
-                  <div className="section-label">{t.glossary}</div>
-                  {learning?.synthesis.glossary.map((concept) => (
-                    <section className="glossary-card" key={concept.term}>
-                      <h3>{concept.term}</h3>
-                      <p>
-                        {catalog.concepts?.find((entry) => fold(entry.term) === fold(concept.term))
-                          ?.definition || concept.definition}
-                      </p>
-                      <Citations
-                        ids={concept.segmentIds}
-                        segments={learning.segments}
-                        onCite={cite}
-                        t={t}
-                      />
-                      {catalog.concepts
-                        ?.filter((entry) => fold(entry.term) === fold(concept.term))
-                        .map((entry) => (
-                          <div key={entry.id}>
-                            {entry.reviewed ? (
-                              <Badge tone="success">{t.reviewed}</Badge>
-                            ) : (
-                              <Button
-                                variant="ghost"
-                                onClick={() =>
-                                  void run(async () => {
-                                    await api(`/concepts/${entry.id}`, 'PATCH', {
-                                      reviewed: true,
-                                    });
-                                    await refresh();
-                                  })
-                                }
-                              >
-                                {t.reviewDefinition}
-                              </Button>
-                            )}
-                            {entry.proposals.map((proposal) => (
-                              <details className="glossary-proposal" key={proposal.id}>
-                                <summary>{t.proposed}</summary>
-                                <p>{proposal.definition}</p>
-                                <Button
-                                  onClick={() =>
-                                    void run(async () => {
-                                      await api(`/concepts/${entry.id}`, 'PATCH', {
-                                        proposalId: proposal.id,
-                                      });
-                                      await refresh();
-                                    })
-                                  }
-                                >
-                                  {t.acceptDefinition}
-                                </Button>
-                              </details>
-                            ))}
-                          </div>
-                        ))}
-                    </section>
-                  ))}
-                  {!learning && <p className="small-empty">{t.noConcepts}</p>}
-                </>
               )}
               {tab === 'practice' && (
                 <Practice

@@ -239,7 +239,12 @@ export type Job = {
   createdAt: string;
 };
 export type Settings = { configured: boolean; locale: Locale; model: string; keySuffix?: string };
-export type ConceptSource = { sourceId: string; sourceVersion: number; segmentIds: string[] };
+export type ConceptSource = {
+  sourceId: string;
+  sourceVersion: number;
+  segmentIds: string[];
+  location?: import('./annotations').SourceLocation;
+};
 export type Concept = {
   id: string;
   term: string;
@@ -248,6 +253,11 @@ export type Concept = {
   reviewed: boolean;
   sources: ConceptSource[];
   proposals: Array<{ id: string; definition: string; source: ConceptSource }>;
+  aliases?: string[];
+  senses?: import('./glossary').GlossarySense[];
+  archived?: boolean;
+  mergedInto?: string;
+  updatedAt?: string;
 };
 export type Catalog = {
   files: Source[];
