@@ -220,6 +220,9 @@ export type Attempt = {
   answer?: string;
   pendingReview?: boolean;
   learningVersion?: string;
+  runId?: string;
+  chapterId?: string;
+  question?: PublicQuestion;
   correct: boolean;
   explanation: string;
   segmentIds: string[];

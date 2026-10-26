@@ -23,6 +23,7 @@ import {
 } from '../shared/media-controls';
 import { IconButton } from './design/components';
 import type { T } from './i18n';
+import type { ReadingProgress } from '../shared/chapters';
 
 type Preferences = { speed: number; volume: number; muted: boolean; track: string };
 function readPreferences(key: string): Preferences {
@@ -48,6 +49,10 @@ export function MediaPlayer({
   onPosition,
   seek,
   t,
+  onReadingProgress,
+  onPlaying,
+  suspended = false,
+  resumeSignal = 0,
 }: {
   source: Source;
   learning: PublicLearning | null;
@@ -56,6 +61,10 @@ export function MediaPlayer({
   onPosition: (value: number) => void;
   seek: { value: number; nonce: number } | null;
   t: T;
+  onReadingProgress?: (event: ReadingProgress) => void;
+  onPlaying?: (value: boolean) => void;
+  suspended?: boolean;
+  resumeSignal?: number;
 }) {
   const root = useRef<HTMLDivElement>(null),
     media = useRef<HTMLVideoElement & HTMLAudioElement>(null);
@@ -75,6 +84,21 @@ export function MediaPlayer({
     lastReported = useRef(0),
     positionCallback = useRef(onPosition);
   positionCallback.current = onPosition;
+  const readingCallback = useRef(onReadingProgress),
+    playingCallback = useRef(onPlaying);
+  readingCallback.current = onReadingProgress;
+  playingCallback.current = onPlaying;
+  const ignoredTime = useRef(false);
+  useEffect(() => {
+    if (suspended) media.current?.pause();
+  }, [suspended]);
+  const consumedResume = useRef(resumeSignal);
+  useEffect(() => {
+    if (consumedResume.current === resumeSignal) return;
+    consumedResume.current = resumeSignal;
+    if (resumeSignal && media.current && !suspended)
+      void media.current.play().catch(() => setError(t.playbackError));
+  }, [resumeSignal]);
   const wake = () => {
     setVisible(true);
     if (timer.current) clearTimeout(timer.current);
@@ -114,6 +138,7 @@ export function MediaPlayer({
       window.removeEventListener('pointerup', release);
       window.removeEventListener('pointercancel', release);
       if (timer.current) clearTimeout(timer.current);
+      playingCallback.current?.(false);
       if (player && player.readyState > 0) {
         player.pause();
         positionCallback.current(player.currentTime);
@@ -131,6 +156,8 @@ export function MediaPlayer({
     if (!player || !Number.isFinite(player.duration)) return;
     const next = boundedTime(value, player.duration);
     player.currentTime = next;
+    ignoredTime.current = true;
+    readingCallback.current?.({ value: next, cause: 'seek' });
     setTime(next);
     positionCallback.current(next);
     wake();
@@ -247,30 +274,54 @@ export function MediaPlayer({
           setDuration(player.duration);
           const initial = boundedTime(seek?.value ?? position, player.duration);
           player.currentTime = initial;
+          readingCallback.current?.({ value: initial, cause: 'restore' });
           setTime(initial);
           player.playbackRate = preferences.speed;
           player.volume = preferences.volume;
           player.muted = preferences.muted;
           configureTracks();
         }}
-        onPlay={() => setPlaying(true)}
+        onPlay={() => {
+          setPlaying(true);
+          playingCallback.current?.(true);
+        }}
         onPause={() => {
           setPlaying(false);
+          playingCallback.current?.(false);
           if (media.current) positionCallback.current(media.current.currentTime);
         }}
         onEnded={() => {
+          if (media.current)
+            readingCallback.current?.({
+              value: media.current.currentTime,
+              cause: 'read',
+              playing: false,
+            });
           setPlaying(false);
+          playingCallback.current?.(false);
           if (media.current) positionCallback.current(media.current.currentTime);
         }}
         onSeeked={() => {
           if (media.current) {
             setTime(media.current.currentTime);
             positionCallback.current(media.current.currentTime);
+            readingCallback.current?.({ value: media.current.currentTime, cause: 'seek' });
           }
         }}
         onTimeUpdate={() => {
           if (media.current) {
             setTime(media.current.currentTime);
+            readingCallback.current?.({
+              value: media.current.currentTime,
+              cause:
+                media.current.seeking || ignoredTime.current
+                  ? 'seek'
+                  : media.current.paused
+                    ? 'restore'
+                    : 'read',
+              playing: !media.current.paused,
+            });
+            ignoredTime.current = false;
             if (Date.now() - lastReported.current > 5000) {
               positionCallback.current(media.current.currentTime);
               lastReported.current = Date.now();

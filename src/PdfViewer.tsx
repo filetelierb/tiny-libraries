@@ -31,6 +31,7 @@ export default function PdfViewer({
   sessionId,
   annotationTick,
   onSelection,
+  onReadingProgress,
 }: {
   source: Source;
   sessionId: string;
@@ -39,6 +40,7 @@ export default function PdfViewer({
   t: T;
   position: number;
   onPosition: (page: number) => void;
+  onReadingProgress?: (event: import('../shared/chapters').ReadingProgress) => void;
   seek: { value: number; nonce: number } | null;
 }) {
   const scroll = useRef<HTMLDivElement>(null),
@@ -136,23 +138,30 @@ export default function PdfViewer({
       void task.destroy().catch(() => {});
     };
   }, [source.id, source.version]);
-  const navigate = (value: number) => {
+  const ignoreReading = useRef(false);
+  const currentPage = useRef(Math.max(1, position || 1));
+  const readingCallback = useRef(onReadingProgress);
+  readingCallback.current = onReadingProgress;
+  const navigate = (value: number, cause: 'read' | 'seek' | 'restore' = 'read') => {
     const next = boundedPage(value, documentRef.current?.numPages || 1);
+    currentPage.current = next;
     const target = scroll.current?.querySelector<HTMLElement>(`[data-pdf-page="${next}"]`);
     if (target && scroll.current) scroll.current.scrollTop = target.offsetTop - 16;
     setPage(next);
     setPageInput(String(next));
     positionCallback.current(next);
+    ignoreReading.current = cause !== 'read';
+    readingCallback.current?.({ value: next, cause });
   };
   const loaded = pages.length > 0;
   useLayoutEffect(() => {
-    if (loaded) navigate(initialPage.current);
+    if (loaded) navigate(seek?.value ?? initialPage.current, seek ? 'seek' : 'restore');
   }, [loaded]);
   useEffect(() => {
-    if (loaded && seek) navigate(seek.value);
+    if (loaded && seek) navigate(seek.value, 'seek');
   }, [seek?.nonce, loaded]);
   useLayoutEffect(() => {
-    if (loaded) navigate(page);
+    if (loaded) navigate(currentPage.current, 'restore');
   }, [zoom, loaded, size.width, size.height]);
   const trackPage = () => {
     const root = scroll.current;
@@ -175,11 +184,14 @@ export default function PdfViewer({
       return visible > previous ? element : best;
     }, undefined);
     const next = current ? Number(current.dataset.pdfPage) : 1;
-    if (next !== page) {
+    if (next !== currentPage.current) {
+      currentPage.current = next;
       setPage(next);
       setPageInput(String(next));
       positionCallback.current(next);
+      readingCallback.current?.({ value: next, cause: ignoreReading.current ? 'restore' : 'read' });
     }
+    ignoreReading.current = false;
   };
   const captureSelection = () => {
     const selected = window.getSelection();
@@ -199,7 +211,7 @@ export default function PdfViewer({
     if (quote) onSelection({ page: Number(anchor.dataset.pdfPage), quote });
   };
   return (
-    <div className="pdf-stage continuous-pdf">
+    <div className="pdf-stage continuous-pdf" aria-busy={!loaded && !error}>
       {error && (
         <p role="alert" className="form-error">
           {error}

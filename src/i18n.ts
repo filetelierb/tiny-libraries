@@ -1,5 +1,34 @@
 import type { Locale } from '../shared/domain';
 const en = {
+  readerUnavailable: 'Reader unavailable',
+  studyToolUnavailable: 'Study tool unavailable',
+  contentLoadRecovery: 'This view could not load. Reload the app to load the current version.',
+  reloadApp: 'Reload app',
+  chapterIndex: 'Chapter index',
+  collapseChapters: 'Collapse chapter index',
+  expandChapters: 'Expand chapter index',
+  studyCheckpoints: 'Mini quizzes while studying',
+  continueQuiz: 'Continue quiz',
+  repeatQuiz: 'Repeat quiz',
+  closeQuiz: 'Close quiz',
+  quizAccuracy: 'accuracy',
+  gradedAnswers: 'graded answers',
+  yourAnswer: 'Your answer',
+  continueStudying: 'Continue studying',
+  quizQuestion: 'Question',
+  writtenAnswer: 'Written answer',
+  quizPrevious: 'Previous',
+  quizNext: 'Next',
+  checkingAnswers: 'Checking answers',
+  retryFinish: 'Retry Finish',
+  finishQuiz: 'Finish',
+  quizRetryNotice:
+    'Your submitted answers are retained. Retry Finish to recover saved results and complete the remaining checks.',
+  skipQuiz: 'Skip for now',
+  previousQuizAttempts: 'Earlier quiz attempts',
+  quizAttempt: 'Attempt',
+  quizIncomplete: 'Incomplete quiz',
+
   inspectConcept: 'Inspect concept context',
   conceptScopedMeanings:
     'Only the meanings supplied to this reply are shown. Open the current glossary entry to see every meaning.',
@@ -513,6 +542,36 @@ const en = {
 };
 type Dictionary = typeof en;
 const es: Dictionary = {
+  readerUnavailable: 'Visor no disponible',
+  studyToolUnavailable: 'Herramienta de estudio no disponible',
+  contentLoadRecovery:
+    'No se pudo cargar esta vista. Recarga la aplicación para cargar la versión actual.',
+  reloadApp: 'Recargar aplicación',
+  chapterIndex: 'Índice de capítulos',
+  collapseChapters: 'Contraer índice de capítulos',
+  expandChapters: 'Expandir índice de capítulos',
+  studyCheckpoints: 'Mini cuestionarios al estudiar',
+  continueQuiz: 'Continuar cuestionario',
+  repeatQuiz: 'Repetir cuestionario',
+  closeQuiz: 'Cerrar cuestionario',
+  quizAccuracy: 'de precisión',
+  gradedAnswers: 'respuestas evaluadas',
+  yourAnswer: 'Tu respuesta',
+  continueStudying: 'Continuar estudiando',
+  quizQuestion: 'Pregunta',
+  writtenAnswer: 'Respuesta escrita',
+  quizPrevious: 'Anterior',
+  quizNext: 'Siguiente',
+  checkingAnswers: 'Evaluando respuestas',
+  retryFinish: 'Reintentar finalizar',
+  finishQuiz: 'Finalizar',
+  quizRetryNotice:
+    'Se conservan tus respuestas enviadas. Reintenta finalizar para recuperar los resultados guardados y completar las evaluaciones pendientes.',
+  skipQuiz: 'Omitir por ahora',
+  previousQuizAttempts: 'Intentos anteriores',
+  quizAttempt: 'Intento',
+  quizIncomplete: 'Cuestionario incompleto',
+
   inspectConcept: 'Inspeccionar contexto del concepto',
   conceptScopedMeanings:
     'Solo se muestran los significados proporcionados a esta respuesta. Abre la entrada actual del glosario para ver todos los significados.',

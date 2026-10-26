@@ -21,6 +21,7 @@ export { ProcessingJob } from './jobs';
 import { runAssistant, bridgedFetch, gradeShortAnswer, analyzeConcepts, MetaError } from './meta';
 import { conceptSuggestionsRoute } from './concept-suggestions';
 import { conversationRoute, conversationSnapshot } from './conversations';
+import { recordAttempt, PracticeError } from './practice';
 import { annotationRoute, AnnotationError } from './annotations';
 import { glossaryRoute, glossarySnapshot, GlossaryError } from './glossary';
 import {
@@ -306,61 +307,23 @@ export class Library extends DurableObject<Env> {
         );
       }
       if (path === '/api/attempts' && request.method === 'POST') {
-        const data = z
-          .object({
-            sourceId: z.string().uuid(),
-            questionId: z.string(),
-            selected: z.number().int().min(0).max(4).optional(),
-            answer: z.string().trim().min(1).max(4000).optional(),
-            requestId: z.string().uuid(),
-          })
-          .parse(await boundedJson(request));
-        const existing = await this.ctx.storage.get<Attempt>(`attempt:${data.requestId}`);
-        if (existing) return json(existing);
-        const learning = await this.ctx.storage.get<Learning>(`learning:${data.sourceId}`);
-        const question = learning?.synthesis.chapters
-          .flatMap((c) => c.questions)
-          .find((q) => q.id === data.questionId);
-        if (!learning || !question) throw new ApiError('Question not found', 404);
-        let correct = false,
-          explanation = question.explanation,
-          pendingReview = false;
-        if (question.kind === 'short') {
-          if (!data.answer) throw new ApiError('Enter a short answer');
-          const key = await this.ctx.storage.get<string>('apiKey');
-          if (!key) throw new ApiError('Add a Meta API key in Settings', 409);
-          const grade = await gradeShortAnswer(
-            key,
-            (await this.settings()).model,
-            question,
-            data.answer,
-            learning.segments,
-            bridgedFetch(this.env),
-          );
-          correct = grade.status === 'correct';
-          pendingReview = grade.status === 'review';
-          explanation = grade.explanation;
-        } else {
-          if (data.selected == null || data.selected >= question.choices.length)
-            throw new ApiError('Invalid answer');
-          correct = data.selected === question.correctIndex;
-        }
-        const attempt: Attempt = {
-          id: data.requestId,
-          sourceId: data.sourceId,
-          sourceVersion: learning.sourceVersion,
-          learningVersion: learning.createdAt,
-          questionId: question.id,
-          concept: question.concept,
-          selected: data.selected ?? -1,
-          ...(data.answer ? { answer: data.answer } : {}),
-          pendingReview,
-          correct,
-          explanation,
-          segmentIds: question.segmentIds,
-          createdAt: new Date().toISOString(),
-        };
-        await this.ctx.storage.put(`attempt:${attempt.id}`, attempt);
+        const attempt = await recordAttempt(
+          this.ctx.storage,
+          await boundedJson(request),
+          this.executionId,
+          async (question, answer, segments) => {
+            const key = await this.ctx.storage.get<string>('apiKey');
+            if (!key) throw new ApiError('Add a Meta API key in Settings', 409);
+            return gradeShortAnswer(
+              key,
+              (await this.settings()).model,
+              question,
+              answer,
+              segments,
+              bridgedFetch(this.env),
+            );
+          },
+        );
         return json(attempt, 201);
       }
       const chatMatch = path.match(/^\/api\/assistant\/([a-f0-9-]+)$/);
@@ -432,7 +395,8 @@ export class Library extends DurableObject<Env> {
         error instanceof ApiError ||
         error instanceof DirectoryError ||
         error instanceof AnnotationError ||
-        error instanceof GlossaryError
+        error instanceof GlossaryError ||
+        error instanceof PracticeError
       )
         return json({ error: error.message }, error.status);
       if (error instanceof MetaError)

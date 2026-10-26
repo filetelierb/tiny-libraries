@@ -57,7 +57,8 @@ import {
 import { api, uploadFile } from './api';
 import { dictionaries, type T } from './i18n';
 import { Badge, Button, Empty, IconButton, Modal } from './design/components';
-import { Viewer } from './Viewer';
+import { StudyReader } from './study/StudyReader';
+import { ChapterQuiz, type ChapterQuizRequest } from './study/ChapterQuiz';
 import { GeneratedArtifact } from './GeneratedArtifact';
 import { SignalExplorer } from './SignalExplorer';
 import { PanelResizer, useDrawerFocus, usePanels } from './workspace/Panels';
@@ -94,6 +95,7 @@ import { ResourceConceptSuggestions } from './glossary/ResourceConceptSuggestion
 const AnnotationEditor = lazy(() => import('./annotations/AnnotationEditor'));
 import { sessionPreview, type QuestionContext } from '../shared/conversations';
 import { ActionMenu } from './design/ActionMenu';
+import { ContentBoundary } from './design/ContentBoundary';
 import { containsPath, directoryName, sourceState, type CatalogView } from '../shared/directories';
 
 const localGet = (key: string, fallback: string) => localStorage.getItem(key) || fallback;
@@ -111,6 +113,11 @@ export function App() {
   const [conceptSuggestionsOpen, setConceptSuggestionsOpen] = useState(false);
   const [glossaryFocus, setGlossaryFocus] = useState<{ id: string; nonce: string } | null>(null);
   const [annotationTick, setAnnotationTick] = useState(0);
+  const [quizRequest, setQuizRequest] = useState<ChapterQuizRequest | null>(null);
+  const [resumePlayback, setResumePlayback] = useState<{ sourceId: string; nonce: number } | null>(
+    null,
+  );
+  const playbackStates = useRef<Record<string, boolean>>({});
   const [bookmarkTick, setBookmarkTick] = useState(0);
   const [bookmarkIntent, setBookmarkIntent] = useState<BookmarkIntent | null>(null);
   const [bookmarkFilter, setBookmarkFilter] = useState<BookmarkFilter>(() => {
@@ -161,14 +168,20 @@ export function App() {
     [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [learningState, setLearning] = useState<PublicLearning | null>(null),
     [jobState, setJob] = useState<(Job & { segments?: Segment[] }) | null>(null),
-    [seek, setSeek] = useState<{ sourceId: string; value: number; nonce: number } | null>(null),
+    [seek, setSeek] = useState<{
+      sourceId: string;
+      value: number;
+      nonce: number;
+      segment?: Segment;
+      heading?: string;
+    } | null>(null),
     [evidence, setEvidence] = useState<{ sourceId: string; segment: Segment } | null>(null),
     [artifact, setArtifact] = useState<string | false>(false),
     [refreshTick, setRefreshTick] = useState(0);
   const sessionRef = useRef(session),
     saveChain = useRef(Promise.resolve()),
     t = dictionaries[locale] || dictionaries.en;
-  const materialCache = useRef<Record<string, PublicLearning | null>>({});
+  const [materialCache, setMaterialCache] = useState<Record<string, PublicLearning | null>>({});
   const usable = (value: StudySession, data = catalog) =>
     visibleWorkspace(
       readWorkspace(value),
@@ -342,7 +355,7 @@ export function App() {
           ),
         ]);
         if (!stopped) {
-          materialCache.current[active.id] = material;
+          setMaterialCache((previous) => ({ ...previous, [active.id]: material }));
           setLearning(material);
           setJob(current);
         }
@@ -359,6 +372,48 @@ export function App() {
       clearInterval(timer);
     };
   }, [active?.id, locale, refreshTick]);
+  useEffect(() => {
+    const sources = [primary, split].filter(
+      (source): source is Source => !!source && source.id !== active?.id,
+    );
+    if (!sources.length) return;
+    let cancelled = false;
+    const load = async () => {
+      const results = await Promise.all(
+        sources.map(async (source) => {
+          try {
+            return [source.id, await api<PublicLearning | null>(`/learning/${source.id}`)] as const;
+          } catch {
+            return null;
+          }
+        }),
+      );
+      if (cancelled) return;
+      setMaterialCache((previous) => {
+        let next = previous;
+        for (const result of results) {
+          if (!result) continue;
+          const [id, value] = result,
+            old = previous[id];
+          if (
+            old === undefined ||
+            old?.createdAt !== value?.createdAt ||
+            old?.sourceVersion !== value?.sourceVersion
+          ) {
+            if (next === previous) next = { ...previous };
+            next[id] = value;
+          }
+        }
+        return next;
+      });
+    };
+    void load();
+    const timer = setInterval(() => void load(), 2500);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [primary?.id, primary?.version, split?.id, split?.version, active?.id, refreshTick]);
   async function prepare() {
     if (!active) return;
     if (!catalog?.settings.configured) {
@@ -510,7 +565,7 @@ export function App() {
     if (!active) return;
     citeFrom(active.id, segment);
   }
-  function citeFrom(sourceId: string, segment: Segment) {
+  function citeFrom(sourceId: string, segment: Segment, heading?: string) {
     if (!activeResourceTab?.sources.includes(sourceId)) {
       const file = catalog?.files.find((item) => item.id === sourceId);
       if (!file || sourceState(file, catalog?.directories || []) === 'trash') {
@@ -520,10 +575,13 @@ export function App() {
       openFile(file, 'retain');
     } else focusPane(sourceId);
     setEvidence({ sourceId, segment });
-    if (segment.start != null || segment.page != null) {
-      setSeek({ sourceId, value: segment.start ?? segment.page ?? 0, nonce: Date.now() });
-      setArtifact(false);
-    }
+    setSeek({
+      sourceId,
+      value: segment.start ?? segment.page ?? 0,
+      nonce: Date.now(),
+      segment,
+      heading,
+    });
     setArtifact(false);
   }
   if (!catalog || !session)
@@ -954,7 +1012,7 @@ export function App() {
               >
                 {(source) => {
                   const material =
-                    learning?.sourceId === source.id ? learning : materialCache.current[source.id];
+                    learning?.sourceId === source.id ? learning : materialCache[source.id];
                   return (
                     <>
                       {evidence?.sourceId === source.id && (
@@ -1010,7 +1068,22 @@ export function App() {
                           )}
                         </div>
                       ) : (
-                        <Viewer
+                        <StudyReader
+                          key={`${source.id}:v${source.version}:${material?.createdAt || 'unprepared'}`}
+                          attempts={catalog.attempts}
+                          navigate={(segment, heading) => citeFrom(source.id, segment, heading)}
+                          quiz={(chapter, wasPlaying) => {
+                            if (!material) return;
+                            focusPane(source.id);
+                            setQuizRequest({ source, learning: material, chapter, wasPlaying });
+                          }}
+                          suspended={!!quizRequest}
+                          resumeSignal={
+                            resumePlayback?.sourceId === source.id ? resumePlayback.nonce : 0
+                          }
+                          onPlaying={(value) => {
+                            playbackStates.current[source.id] = value;
+                          }}
                           source={source}
                           bookmarks={savedBookmarks
                             .filter(
@@ -1294,7 +1367,17 @@ export function App() {
                           onCite={cite}
                           t={t}
                         />
-                        <Button variant="ghost" onClick={() => setTab('practice')}>
+                        <Button
+                          variant="ghost"
+                          onClick={() =>
+                            setQuizRequest({
+                              source: active,
+                              learning,
+                              chapter,
+                              wasPlaying: !!playbackStates.current[active.id],
+                            })
+                          }
+                        >
                           <GraduationCap size={13} />
                           {t.quiz}
                         </Button>
@@ -1380,7 +1463,14 @@ export function App() {
                   learning={learning}
                   t={t}
                   onAttempt={(attempt) =>
-                    setCatalog((c) => (c ? { ...c, attempts: [...c.attempts, attempt] } : c))
+                    setCatalog((c) =>
+                      c
+                        ? {
+                            ...c,
+                            attempts: [...c.attempts.filter((a) => a.id !== attempt.id), attempt],
+                          }
+                        : c,
+                    )
                   }
                   onError={setError}
                   onCite={cite}
@@ -1399,6 +1489,35 @@ export function App() {
           )}
         </div>
       </aside>
+      {quizRequest && (
+        <ChapterQuiz
+          key={`${quizRequest.source.id}:${quizRequest.chapter.id}:${quizRequest.learning.createdAt}`}
+          request={quizRequest}
+          sessionId={session.id}
+          attempts={catalog.attempts}
+          t={t}
+          onAttempt={(attempt) =>
+            setCatalog((current) =>
+              current
+                ? {
+                    ...current,
+                    attempts: [...current.attempts.filter((a) => a.id !== attempt.id), attempt],
+                  }
+                : current,
+            )
+          }
+          close={(resume) => {
+            const request = quizRequest;
+            setQuizRequest(null);
+            if (resume && request.wasPlaying)
+              setResumePlayback({ sourceId: request.source.id, nonce: Date.now() });
+          }}
+          cite={(segment) => {
+            setQuizRequest(null);
+            citeFrom(quizRequest.source.id, segment);
+          }}
+        />
+      )}
       {bookmarkIntent && (
         <BookmarkEditor
           intent={bookmarkIntent}
@@ -1414,22 +1533,24 @@ export function App() {
         />
       )}
       {annotationRequest && (
-        <Suspense fallback={<p role="status">{t.loadingAnnotations}</p>}>
-          <AnnotationEditor
-            key={annotationRequest.id}
-            request={annotationRequest}
-            sessionId={session.id}
-            source={catalog.files.find((file) => file.id === annotationRequest.sourceId) || null}
-            t={t}
-            close={() => setAnnotationRequest(null)}
-            saved={() => {
-              setAnnotationTick((value) => value + 1);
-              setAnnotationRequest(null);
-              setTab('notes');
-              setRight(true);
-            }}
-          />
-        </Suspense>
+        <ContentBoundary t={t} close={() => setAnnotationRequest(null)}>
+          <Suspense fallback={<p role="status">{t.loadingAnnotations}</p>}>
+            <AnnotationEditor
+              key={annotationRequest.id}
+              request={annotationRequest}
+              sessionId={session.id}
+              source={catalog.files.find((file) => file.id === annotationRequest.sourceId) || null}
+              t={t}
+              close={() => setAnnotationRequest(null)}
+              saved={() => {
+                setAnnotationTick((value) => value + 1);
+                setAnnotationRequest(null);
+                setTab('notes');
+                setRight(true);
+              }}
+            />
+          </Suspense>
+        </ContentBoundary>
       )}
       {modal === 'settings' && (
         <SettingsModal
@@ -1697,6 +1818,9 @@ function Practice({
     [results, setResults] = useState<Record<string, Attempt>>({}),
     [pending, setPending] = useState<string | null>(null);
   const questions = learning?.synthesis.chapters.flatMap((c) => c.questions) || [];
+  const [practiceRun] = useState(() => crypto.randomUUID());
+  const operations = useRef<Record<string, { fingerprint: string; id: string }>>({});
+  const checking = useRef(false);
   return (
     <>
       <div className="section-label">
@@ -1714,7 +1838,7 @@ function Practice({
             {q.kind === 'short' ? (
               <textarea
                 aria-label={q.prompt}
-                disabled={!!results[q.id]}
+                disabled={!!results[q.id] || !!pending}
                 maxLength={4000}
                 value={written[q.id] || ''}
                 onChange={(e) => setWritten((v) => ({ ...v, [q.id]: e.target.value }))}
@@ -1725,7 +1849,7 @@ function Practice({
                   <input
                     type="radio"
                     name={q.id}
-                    disabled={!!results[q.id]}
+                    disabled={!!results[q.id] || !!pending}
                     checked={answers[q.id] === index}
                     onChange={() => setAnswers((a) => ({ ...a, [q.id]: index }))}
                   />
@@ -1749,25 +1873,40 @@ function Practice({
           ) : (
             <Button
               disabled={
-                (q.kind === 'short' ? !written[q.id]?.trim() : answers[q.id] == null) ||
-                pending === q.id
+                (q.kind === 'short' ? !written[q.id]?.trim() : answers[q.id] == null) || !!pending
               }
               onClick={async () => {
+                if (checking.current) return;
+                checking.current = true;
                 setPending(q.id);
                 try {
-                  const result = await api<Attempt>('/attempts', 'POST', {
+                  const input = {
                     sourceId: source.id,
+                    sourceVersion: source.version,
+                    learningVersion: learning!.createdAt,
+                    runId: practiceRun,
                     questionId: q.id,
                     ...(q.kind === 'short'
-                      ? { answer: written[q.id] }
+                      ? { answer: written[q.id].trim() }
                       : { selected: answers[q.id] }),
-                    requestId: crypto.randomUUID(),
+                  };
+                  const fingerprint = JSON.stringify(input),
+                    previous = operations.current[q.id];
+                  const operation =
+                    previous?.fingerprint === fingerprint
+                      ? previous
+                      : { fingerprint, id: crypto.randomUUID() };
+                  operations.current[q.id] = operation;
+                  const result = await api<Attempt>('/attempts', 'POST', {
+                    ...input,
+                    requestId: operation.id,
                   });
                   setResults((r) => ({ ...r, [q.id]: result }));
                   onAttempt(result);
                 } catch (e) {
                   onError(e instanceof Error ? e.message : t.error);
                 } finally {
+                  checking.current = false;
                   setPending(null);
                 }
               }}
