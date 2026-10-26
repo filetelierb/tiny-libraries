@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "tsx scripts/dev.ts",
     "dev:ui": "vite --host 127.0.0.1",
-    "build": "vite build",
+    "build": "vite build && tsx scripts/pdf-assets.ts",
     "check": "tsc --noEmit && tsc -p tsconfig.worker.json --noEmit",
     "test": "tsx --test tests/*.test.ts",
     "types": "wrangler types worker-env.d.ts --include-runtime false",

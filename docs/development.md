@@ -60,3 +60,10 @@ Record actual implementation and validation as it lands. Commit dates remain act
 - Browser checks covered muted audio, an authored silent video, byte ranges, bookmark/chapter seeking, 2.25x/3.75x speeds, caption switching without position reset, fullscreen entry/exit, idle hiding and keyboard reveal. At 390px, controls stayed within the viewport and hidden-pane audio paused.
 - Session switching now captures the current media position before unmount; the verified 5.741051-second position remained attached to the previous session. Browser reload restored source preferences, bookmarks and position.
 - All 46 tests, type checks and production build passed. Physical touch gestures remain unverified; the configured browser automation exposes pointer/keyboard input only. Reduced motion disables the controls transition.
+
+### Continuous PDF reader
+
+- Added a locally bundled PDF.js reader with continuous pages, a selectable text layer, actual page counts, bounded previous/next/input navigation and independent per-document zoom preferences. Fit width, fit page and 25–300% zoom use each page’s dimensions. Raster rendering is limited to nearby pages with a bounded pixel budget.
+- An authored three-page PDF with mixed portrait/landscape sizes passed browser checks for continuous scroll, page limits, native text selection, fit modes, 390px layout, viewport resizing and reload. A second document retained an independent 50% setting while the first restored fit-page/page two.
+- Fixed responsive page tracking to use visible page coverage and retain the current page when the viewport changes. Bundled fonts, character maps, decoders, worker and licenses are served locally; the optional Vite UI proxies these assets to the local runtime.
+- All 48 tests, type checks and production build passed. Selection-linked study actions and persisted page drawing remain separate reader work.

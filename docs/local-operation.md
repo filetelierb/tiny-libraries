@@ -82,3 +82,9 @@ The audio/video player includes five-second skip buttons, a seek bar, volume, ca
 Bookmark markers return to saved times. Chapter markers use the source’s actual timing; overlapping evidence intervals appear in separate rows. Caption/speed/volume preferences persist per recording in browser storage, and switching caption language keeps playback position. Position is checkpointed during playback and saved on pause, seek or session navigation.
 
 Video controls hide after three seconds of inactivity during playback. Pointer movement or keyboard focus reveals them; keyboard interaction and slider drags keep them accessible. Audio controls remain visible. Browser fullscreen is independent of workspace focus mode.
+
+## PDF reading
+
+PDFs open in a continuous page stack with selectable text. The bottom toolbar shows the actual page total and bounds page navigation. Choose **Fit width**, **Fit page**, or 25–300% zoom. Zoom preferences belong to the document; the selected page belongs to the study session. Resizing the reader retains the selected page.
+
+The PDF worker, fonts and decoders are bundled locally. Opening a PDF needs no Meta key or remote viewer. The original remains available through Download.
