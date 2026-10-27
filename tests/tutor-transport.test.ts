@@ -239,6 +239,30 @@ test('a prior process journal becomes interrupted on demand without any provider
   assert.deepEqual(await manager.start(id, credential, request), recovered);
 });
 
+test('Stop before a delayed start persists cancellation and prevents any later provider call', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'tutor-preempt-')),
+    id = identity('stop-before-start');
+  const manager = new TutorTransport(root, async () => {
+    assert.fail('A preemptively stopped request must never reach Meta');
+  });
+  t.after(async () => {
+    await manager.shutdown();
+    await rm(root, { recursive: true, force: true });
+  });
+  await manager.initialize();
+  const cancelled = await manager.cancel(id);
+  assert.equal(cancelled?.status, 'cancelled');
+  assert.equal((await manager.start(id, credential, request)).status, 'cancelled');
+  const restored = new TutorTransport(root, async () => {
+    assert.fail('Preemptive cancellation must survive local process loss');
+  });
+  await restored.initialize();
+  assert.deepEqual(await restored.start(id, credential, request), cancelled);
+  assert.deepEqual(await restored.cancel(id), cancelled);
+  assert.equal((await stat(join(root, id, 'status.json'))).mode & 0o777, 0o600);
+  await restored.shutdown();
+});
+
 test('provider rejection, incomplete streams and oversized/invalid requests keep truthful bounded state', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'tutor-errors-'));
   let calls = 0;

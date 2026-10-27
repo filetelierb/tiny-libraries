@@ -49,6 +49,8 @@ export const chatMessageSchema = z.object({
     .regex(/^[a-f0-9]{64}$/)
     .optional(),
   sourceIds: z.array(z.string().uuid()).max(20).optional(),
+  messageId: z.string().max(200).optional(),
+  status: z.enum(['stopped', 'failed', 'interrupted']).optional(),
 });
 export const conversationSchema = z.object({
   id: z.string().min(1).max(200),
@@ -61,9 +63,21 @@ export const conversationSchema = z.object({
   messages: z.array(chatMessageSchema).max(100),
   createdAt: z.string(),
   updatedAt: z.string(),
+  messageCount: z.number().int().nonnegative().optional(),
+  historyCursor: z.string().nullable().optional(),
+  latestPreview: z.string().max(240).optional(),
 });
 export type ChatMessage = z.infer<typeof chatMessageSchema>;
 export type Conversation = z.infer<typeof conversationSchema>;
+
+export function conversationMessageSources(message: ChatMessage, fallback: string[]) {
+  return [
+    ...new Set([
+      ...(message.sourceIds || (message.context ? [] : fallback)),
+      ...(message.context ? [message.context.sourceId] : []),
+    ]),
+  ];
+}
 
 // Stable identities make migration safe to retry without duplicating old histories.
 export function migrateConversations(session: StudySession): Conversation[] {
@@ -93,7 +107,7 @@ export function sessionPreview(
 ) {
   const threads = conversations.filter((item) => item.sessionId === session.id);
   const count = threads.length
-    ? threads.reduce((sum, item) => sum + item.messages.length, 0)
+    ? threads.reduce((sum, item) => sum + (item.messageCount ?? item.messages.length), 0)
     : Object.values(session.conversations || {}).reduce(
         (sum, messages) => sum + messages.length,
         0,

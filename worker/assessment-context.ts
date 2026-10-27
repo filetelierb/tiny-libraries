@@ -1,5 +1,5 @@
 import type { AnnotationSummary } from '../shared/annotations';
-import type { Conversation } from '../shared/conversations';
+import { conversationMessageSources, type Conversation } from '../shared/conversations';
 import type { Directory, Learning, Source, StudySession } from '../shared/domain';
 import type {
   AssessmentConfig,
@@ -180,6 +180,7 @@ export async function captureAssessmentContext(
   tx: GlossaryStore,
   sessionId: string,
   config: AssessmentConfig,
+  linkedConversations?: Conversation[],
 ): Promise<AssessmentContext> {
   const session = await tx.get<StudySession>(`session:${sessionId}`);
   if (!session) throw new AssessmentError('Study session not found.', 404);
@@ -207,17 +208,19 @@ export async function captureAssessmentContext(
   }
   const selected = new Set(config.sourceIds),
     conversation: AssessmentContext['conversation'] = [];
-  for (const chat of (await tx.list<Conversation>({ prefix: 'conversation:' })).values()) {
+  for (const chat of linkedConversations ??
+    (await tx.list<Conversation>({ prefix: 'conversation:' })).values()) {
     if (chat.sessionId !== sessionId) continue;
+    if (chat.messageCount && chat.messageCount > chat.messages.length)
+      gaps.push(
+        'Linked conversation context uses a bounded selection of recent relevant messages. Earlier history remains saved.',
+      );
     for (const message of chat.messages) {
-      const refs = [
-        ...new Set([
-          ...(message.sourceIds || (message.context ? [] : chat.sourceIds)),
-          ...(message.context ? [message.context.sourceId] : []),
-        ]),
-      ];
+      const refs = conversationMessageSources(message, chat.sourceIds);
       if (!refs.length || refs.some((id) => !selected.has(id))) continue;
       conversation.push({ role: message.role, content: message.content.slice(0, 4000) });
+      if (message.status)
+        gaps.push(`A linked reply was ${message.status}; its text is partial study context.`);
       if (message.content.length > 4000) gaps.push('A linked conversation message is an excerpt.');
     }
   }

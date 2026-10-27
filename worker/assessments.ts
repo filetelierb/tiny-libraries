@@ -42,6 +42,10 @@ type Stored = AssessmentSummary & {
 type SourceRecord = Omit<AssessmentSource, 'segments'> & { segmentIds: string[] };
 type BatchRecord = Omit<AssessmentBatch, 'questions'> & { questionIds: string[] };
 type Operations = {
+  conversations?: (
+    sessionId: string,
+    sourceIds: string[],
+  ) => Promise<import('../shared/conversations').Conversation[]>;
   owner: string;
   settings: Settings;
   start: (task: Promise<void>) => void;
@@ -426,6 +430,9 @@ export async function createAssessment(
         priorReportIds: [...input.config.priorReportIds].sort(),
       },
     });
+  const linkedConversations = options.conversations
+    ? await options.conversations(input.sessionId, input.config.sourceIds)
+    : undefined;
   const record = await storage.transaction(async (tx) => {
     const previous = await tx.get<Stored>(key(input.requestId));
     if (previous) {
@@ -446,7 +453,12 @@ export async function createAssessment(
         'This session already has an unfinished assessment. Resume, retry or cancel it first.',
         409,
       );
-    const context = await captureAssessmentContext(tx, input.sessionId, input.config);
+    const context = await captureAssessmentContext(
+      tx,
+      input.sessionId,
+      input.config,
+      linkedConversations,
+    );
     await storeContext(tx, input.requestId, context);
     const now = new Date().toISOString(),
       record: Stored = {

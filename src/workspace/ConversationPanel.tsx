@@ -214,7 +214,7 @@ export function ConversationPanel({
                 <strong>{item.name}</strong>
                 <span>{item.messages.at(-1)?.content.slice(0, 120) || t.noMessages}</span>
                 <small>
-                  {item.messages.length} {t.messages} ·{' '}
+                  {item.messageCount ?? item.messages.length} {t.messages} ·{' '}
                   {new Date(item.updatedAt).toLocaleDateString()}
                 </small>
               </button>
@@ -287,6 +287,43 @@ function ConversationThread({
   onError: (message: string) => void;
   cite: (sourceId: string, segment: Segment) => void;
 }) {
+  const [historyPages, setHistoryPages] = useState(new Map<number, ChatMessage>());
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const messageCount = conversation.messageCount ?? conversation.messages.length;
+  const displayed = new Map(historyPages);
+  conversation.messages.forEach((message, index) =>
+    displayed.set(messageCount - conversation.messages.length + index + 1, message),
+  );
+  const firstMessage = displayed.size ? Math.min(...displayed.keys()) : 1;
+  useEffect(() => {
+    // Keep already visible messages when the latest server page advances.
+    setHistoryPages((previous) => {
+      const next = new Map(previous);
+      conversation.messages.forEach((message, index) =>
+        next.set(messageCount - conversation.messages.length + index + 1, message),
+      );
+      return next;
+    });
+  }, [conversation.messages, messageCount]);
+  const loadEarlier = async () => {
+    setHistoryLoading(true);
+    try {
+      const page = await api<{ messages: ChatMessage[] }>(
+        `/conversations/${conversation.id}/messages?before=${firstMessage}`,
+      );
+      setHistoryPages((previous) => {
+        const next = new Map(previous);
+        page.messages.forEach((message, index) =>
+          next.set(firstMessage - page.messages.length + index, message),
+        );
+        return next;
+      });
+    } catch (error) {
+      onError(error instanceof Error ? error.message : t.error);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
   const draftKey = `tl:conversation-draft:${conversation.id}`;
   const conceptKey = `tl:concept-draft:${conversation.id}`;
   const retryKey = `tl:conversation-request:${conversation.id}`;
@@ -363,7 +400,10 @@ function ConversationThread({
   > | null>(null);
   const mentionPicker = useRef<MentionPickerHandle>(null);
   const mentionBusy = useRef(false);
-  const recoveredMaterials = useCitationRecovery(conversation, catalog);
+  const recoveredMaterials = useCitationRecovery(
+    { ...conversation, messages: [...displayed.values()] },
+    catalog,
+  );
   const contextStampKey = `tl:question-context-stamp:${conversation.id}`;
   const contextStamp = useRef(stored(contextStampKey) || crypto.randomUUID());
   const contextKey = `tl:question-context:${conversation.id}`;
@@ -605,14 +645,19 @@ function ConversationThread({
       generation,
     });
     if (!text || pending || running || mentionBusy.current) return;
-    let previous: { prompt?: string; requestId?: string; fingerprint?: string } = {};
+    let previous: {
+      prompt?: string;
+      requestId?: string;
+      fingerprint?: string;
+      references?: string[];
+    } = {};
     try {
       previous = JSON.parse(stored(retryKey) || '{}');
     } catch {}
-    const requestId =
-      previous.fingerprint === fingerprint && previous.requestId
-        ? previous.requestId
-        : crypto.randomUUID();
+    const sameRequest = previous.fingerprint === fingerprint && previous.requestId;
+    const requestId = sameRequest ? previous.requestId! : crypto.randomUUID();
+    // An older receipt retains its original body format; new questions capture references at Send.
+    const references = sameRequest ? previous.references : [...conversation.sourceIds];
     store(
       retryKey,
       JSON.stringify({
@@ -625,6 +670,7 @@ function ConversationThread({
         contextStamp: questionStamp,
         fingerprint,
         requestId,
+        ...(references ? { references } : {}),
       }),
     );
     setPending(true);
@@ -639,6 +685,7 @@ function ConversationThread({
         concepts: questionConcepts,
         attachments: questionAttachments,
         generation,
+        ...(references ? { references } : {}),
         ...(question ? { context: question } : {}),
       });
       await receive(next);
@@ -715,127 +762,134 @@ function ConversationThread({
               : t.generalTutorNotice}
       </p>
       <div className="conversation-messages" aria-live="polite" aria-relevant="additions text">
-        {conversation.messages.map((message, index) => {
-          const references =
-            message.citations ?? recoverCitations(message, conversation, recoveredMaterials);
-          const byId = new Map(references.map((ref) => [ref.id, ref]));
-          return (
-            <div
-              className={`chat-message ${message.role}`}
-              key={`${message.requestId || 'history'}-${index}`}
-            >
-              {message.role === 'user' && !!message.attachments?.length && (
-                <div className="message-attachments" aria-label={t.questionAttachments}>
-                  {message.attachments.map((attachment) => (
+        {firstMessage > 1 && (
+          <Button variant="ghost" disabled={historyLoading} onClick={() => void loadEarlier()}>
+            {historyLoading ? t.loading : t.earlierMessages}
+          </Button>
+        )}
+        {[...displayed.entries()]
+          .sort(([a], [b]) => a - b)
+          .map(([sequence, message]) => {
+            const references =
+              message.citations ?? recoverCitations(message, conversation, recoveredMaterials);
+            const byId = new Map(references.map((ref) => [ref.id, ref]));
+            return (
+              <div
+                className={`chat-message ${message.role}`}
+                key={`${conversation.id}:message:${sequence}`}
+              >
+                {message.role === 'user' && !!message.attachments?.length && (
+                  <div className="message-attachments" aria-label={t.questionAttachments}>
+                    {message.attachments.map((attachment) => (
+                      <button
+                        key={attachment.id}
+                        type="button"
+                        onClick={() => setInspectedAttachment(attachment.id)}
+                      >
+                        <Paperclip size={13} />
+                        {attachment.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {message.role === 'user' && message.context && (
+                  <div className="message-question-context">
                     <button
-                      key={attachment.id}
-                      type="button"
-                      onClick={() => setInspectedAttachment(attachment.id)}
+                      onClick={() =>
+                        void resolve(message.context!.sourceId, 'selected-passage', message.context)
+                      }
                     >
-                      <Paperclip size={13} />
-                      {attachment.name}
+                      {message.context.sourceName}
+                      {message.context.location.page
+                        ? ` · ${t.page} ${message.context.location.page}`
+                        : message.context.location.seconds != null
+                          ? ` · ${Math.floor(message.context.location.seconds / 60)}:${String(Math.floor(message.context.location.seconds % 60)).padStart(2, '0')}`
+                          : ''}
                     </button>
-                  ))}
-                </div>
-              )}
-              {message.role === 'user' && message.context && (
-                <div className="message-question-context">
-                  <button
+                    {message.context.location.quote && (
+                      <blockquote>{message.context.location.quote}</blockquote>
+                    )}
+                  </div>
+                )}
+                {message.role === 'user' && message.concepts?.length ? (
+                  <div className="message-concepts" aria-label={t.attachedConcepts}>
+                    {message.concepts.map((ref) => (
+                      <button key={ref.id} onClick={() => setInspectedConcept(ref)}>
+                        {ref.term} · {t.revision} {ref.version}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                <StudyMarkdown
+                  t={t}
+                  remarkPlugins={[[remarkTutorCitations, { references, label: citationLabel }]]}
+                  components={{
+                    a: ({ href, children }) => {
+                      const ref = citationFromHref(href, byId);
+                      if (ref)
+                        return (
+                          <button
+                            className="evidence-link"
+                            title={`${citationLabel(ref)}${ref.kind === 'concept' ? ` · ${t.revision} ${ref.version}` : ref.kind === 'source' && ref.recovered ? ` · ${t.recoveredCitationNotice}` : ''}`}
+                            onClick={() => openCitation(ref)}
+                          >
+                            {children}
+                          </button>
+                        );
+                      if (href?.startsWith('#tutor/') || href?.startsWith('#evidence/'))
+                        return <span>{children}</span>;
+                      return (
+                        <a href={href} target="_blank" rel="noreferrer">
+                          {children}
+                        </a>
+                      );
+                    },
+                  }}
+                >
+                  {message.content}
+                </StudyMarkdown>
+                {message.role === 'assistant' && (
+                  <Button
+                    variant="ghost"
                     onClick={() =>
-                      void resolve(message.context!.sourceId, 'selected-passage', message.context)
+                      annotate(
+                        message.content,
+                        message.sourceIds || conversation.sourceIds,
+                        contextFor(message),
+                      )
                     }
                   >
-                    {message.context.sourceName}
-                    {message.context.location.page
-                      ? ` · ${t.page} ${message.context.location.page}`
-                      : message.context.location.seconds != null
-                        ? ` · ${Math.floor(message.context.location.seconds / 60)}:${String(Math.floor(message.context.location.seconds % 60)).padStart(2, '0')}`
-                        : ''}
-                  </button>
-                  {message.context.location.quote && (
-                    <blockquote>{message.context.location.quote}</blockquote>
-                  )}
-                </div>
-              )}
-              {message.role === 'user' && message.concepts?.length ? (
-                <div className="message-concepts" aria-label={t.attachedConcepts}>
-                  {message.concepts.map((ref) => (
-                    <button key={ref.id} onClick={() => setInspectedConcept(ref)}>
-                      {ref.term} · {t.revision} {ref.version}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-              <StudyMarkdown
-                t={t}
-                remarkPlugins={[[remarkTutorCitations, { references, label: citationLabel }]]}
-                components={{
-                  a: ({ href, children }) => {
-                    const ref = citationFromHref(href, byId);
-                    if (ref)
-                      return (
-                        <button
-                          className="evidence-link"
-                          title={`${citationLabel(ref)}${ref.kind === 'concept' ? ` · ${t.revision} ${ref.version}` : ref.kind === 'source' && ref.recovered ? ` · ${t.recoveredCitationNotice}` : ''}`}
-                          onClick={() => openCitation(ref)}
-                        >
-                          {children}
-                        </button>
-                      );
-                    if (href?.startsWith('#tutor/') || href?.startsWith('#evidence/'))
-                      return <span>{children}</span>;
-                    return (
-                      <a href={href} target="_blank" rel="noreferrer">
-                        {children}
-                      </a>
-                    );
-                  },
-                }}
-              >
-                {message.content}
-              </StudyMarkdown>
-              {message.role === 'assistant' && (
-                <Button
-                  variant="ghost"
-                  onClick={() =>
-                    annotate(
-                      message.content,
-                      message.sourceIds || conversation.sourceIds,
-                      contextFor(message),
-                    )
-                  }
-                >
-                  <Pencil size={14} />
-                  {t.saveAsAnnotation}
-                </Button>
-              )}
-              {message.tools?.length ? (
-                <small>
-                  {t.toolsUsed}:{' '}
-                  {[...new Set(message.tools)]
-                    .map(
-                      (tool) =>
-                        (
-                          ({
-                            read_segments: t.toolReadSegments,
-                            practice_summary: t.toolPracticeSummary,
-                            list_concepts: t.toolListConcepts,
-                            read_concepts: t.toolReadConcepts,
-                            create_bookmark: t.toolCreateBookmark,
-                          }) as Record<string, string>
-                        )[tool] || t.studyTool,
-                    )
-                    .join(', ')}
-                </small>
-              ) : null}
-              {message.generation && (
-                <small className="message-generation" aria-label={t.tutorGeneration}>
-                  <GenerationLabel value={message.generation} t={t} />
-                </small>
-              )}
-            </div>
-          );
-        })}
+                    <Pencil size={14} />
+                    {t.saveAsAnnotation}
+                  </Button>
+                )}
+                {message.tools?.length ? (
+                  <small>
+                    {t.toolsUsed}:{' '}
+                    {[...new Set(message.tools)]
+                      .map(
+                        (tool) =>
+                          (
+                            ({
+                              read_segments: t.toolReadSegments,
+                              practice_summary: t.toolPracticeSummary,
+                              list_concepts: t.toolListConcepts,
+                              read_concepts: t.toolReadConcepts,
+                              create_bookmark: t.toolCreateBookmark,
+                            }) as Record<string, string>
+                          )[tool] || t.studyTool,
+                      )
+                      .join(', ')}
+                  </small>
+                ) : null}
+                {message.generation && (
+                  <small className="message-generation" aria-label={t.tutorGeneration}>
+                    <GenerationLabel value={message.generation} t={t} />
+                  </small>
+                )}
+              </div>
+            );
+          })}
         {pending && (
           <>
             {!!sentAttachments.length && (

@@ -564,6 +564,7 @@ const en = {
   renameConversation: 'Rename conversation',
   searchConversations: 'Search conversations…',
   noMessages: 'No messages yet',
+  earlierMessages: 'Load earlier messages',
   startConversation: 'Start conversation',
   startConversationBody:
     'Start a conversation with your tutor. Add references when you want to discuss library material.',
@@ -1381,6 +1382,7 @@ const es: Dictionary = {
   renameConversation: 'Renombrar conversación',
   searchConversations: 'Buscar conversaciones…',
   noMessages: 'Aún no hay mensajes',
+  earlierMessages: 'Cargar mensajes anteriores',
   startConversation: 'Iniciar conversación',
   startConversationBody:
     'Inicia una conversación con el tutor. Añade referencias para hablar sobre material de la biblioteca.',

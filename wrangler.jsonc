@@ -14,9 +14,13 @@
     "bindings": [
       { "name": "LIBRARY", "class_name": "Library" },
       { "name": "JOBS", "class_name": "ProcessingJob" },
+      { "name": "TUTOR", "class_name": "TutorConversation" },
     ],
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Library", "ProcessingJob"] }],
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["Library", "ProcessingJob"] },
+    { "tag": "v2", "new_sqlite_classes": ["TutorConversation"] },
+  ],
   "r2_buckets": [{ "binding": "FILES", "bucket_name": "tailored-library-files" }],
   "vars": {
     "MEDIA_BRIDGE_URL": "http://127.0.0.1:9877",

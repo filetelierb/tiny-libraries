@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import {
   conversationSchema,
-  questionContextSchema,
   migrateConversations,
   type Conversation,
 } from '../shared/conversations';
@@ -15,21 +14,49 @@ import {
   type Attempt,
   type Settings,
 } from '../shared/domain';
-import { runAssistant, bridgedFetch } from './meta';
-import { createSuggestedBookmark } from './annotations';
-import { conceptReferencesSchema } from '../shared/tutor-context';
-import { loadTutorConcepts } from './tutor-context';
-import { attachmentIdsSchema, attachmentMention } from '../shared/tutor-attachments';
-import { readQuestionAttachments, attachmentImageData } from './tutor-attachments';
 import {
-  tutorGenerationSchema,
-  resolveTutorGeneration,
-  type TutorGeneration,
-} from '../shared/tutor-generation';
+  tutorTurnInputSchema,
+  turnActionSchema,
+  turnInputFingerprint,
+  tutorFingerprint,
+  type TutorTurnInput,
+  type TurnIntent,
+  type ConversationDetail,
+} from '../shared/tutor-turns';
+import { loadTutorConcepts } from './tutor-context';
+import { attachmentMention } from '../shared/tutor-attachments';
+import { readQuestionAttachments, attachmentImageData } from './tutor-attachments';
+import { resolveTutorGeneration } from '../shared/tutor-generation';
+import { TutorObjects, TutorJournalError } from './tutor-journal';
+import type { FrozenTutorContext } from './tutor-runner';
 
+export function coordinator(env: Env, id: string) {
+  return env.TUTOR.getByName(id);
+}
+function unwrap<T>(
+  result: { ok: true; value: T } | { ok: false; error: string; status: number },
+): T {
+  if (!result.ok) throw new TutorJournalError(result.error, result.status);
+  return result.value;
+}
+export async function conversationDetail(
+  env: Env,
+  conversation: Conversation,
+): Promise<ConversationDetail> {
+  const snapshot = unwrap(await coordinator(env, conversation.id).snapshot());
+  return snapshot
+    ? {
+        ...conversation,
+        ...snapshot,
+        updatedAt:
+          snapshot.updatedAt > conversation.updatedAt ? snapshot.updatedAt : conversation.updatedAt,
+      }
+    : { ...conversation, pending: false };
+}
 export async function conversationSnapshot(
   storage: DurableObjectStorage,
   sessions: StudySession[],
+  enrich?: (value: Conversation) => Promise<Conversation>,
 ) {
   const existing = await storage.list<Conversation>({ prefix: 'conversation:' });
   for (const session of sessions) {
@@ -46,7 +73,168 @@ export async function conversationSnapshot(
       }
     }
   }
-  return [...existing.values()].map((value) => conversationSchema.parse(value));
+  return Promise.all(
+    [...existing.values()].map((value) => {
+      const parsed = conversationSchema.parse(value);
+      return enrich ? enrich(parsed) : parsed;
+    }),
+  );
+}
+
+export async function assessmentConversations(
+  env: Env,
+  storage: DurableObjectStorage,
+  sessionId: string,
+  sourceIds: string[],
+) {
+  const headers = [
+    ...(await storage.list<Conversation>({ prefix: 'conversation:' })).values(),
+  ].filter((value) => value.sessionId === sessionId);
+  return Promise.all(
+    headers.map(async (header) => {
+      const snapshot = unwrap(
+        await coordinator(env, header.id).linkedMessages(sourceIds, header.sourceIds),
+      );
+      return snapshot ? { ...header, ...snapshot } : header;
+    }),
+  );
+}
+
+async function prepareIntent(
+  env: Env,
+  storage: DurableObjectStorage,
+  conversation: Conversation,
+  input: TutorTurnInput,
+  requestFingerprint: string,
+  settings: Settings,
+): Promise<TurnIntent> {
+  if (!settings.configured) throw new TutorJournalError('Add a Meta API key in Settings');
+  const generation = resolveTutorGeneration(input.generation, settings.model);
+  const references = input.references || conversation.sourceIds;
+  const directories = [...(await storage.list<Directory>({ prefix: 'directory:' })).values()];
+  const materials: Learning[] = [],
+    sources = new Map<string, Source>();
+  for (const id of references) {
+    const source = await storage.get<Source>(`file:${id}`);
+    if (!source || sourceState(source, directories) === 'trash')
+      throw new TutorJournalError('Restore or remove a deleted reference before sending');
+    sources.set(id, source);
+    const learning = await storage.get<Learning>(`learning:${id}`);
+    if (
+      (!learning || learning.sourceVersion !== source.version) &&
+      input.context?.sourceId === id &&
+      input.context.location.quote
+    )
+      continue;
+    if (!learning || learning.sourceVersion !== source.version)
+      throw new TutorJournalError(`Prepare the reference first: ${source.name}`);
+    materials.push(learning);
+  }
+  let context = input.context;
+  const sourceIds = [...references];
+  if (context) {
+    const source = await storage.get<Source>(`file:${context.sourceId}`);
+    if (
+      !source ||
+      sourceState(source, directories) === 'trash' ||
+      source.version !== context.sourceVersion
+    )
+      throw new TutorJournalError(
+        'The question source changed or is unavailable. Select the passage again.',
+      );
+    context = { ...context, sourceName: source.name };
+    sources.set(source.id, source);
+    if (!sourceIds.includes(source.id)) {
+      if (sourceIds.length >= 20)
+        throw new TutorJournalError(
+          'Remove a reference before attaching another question source (20 maximum)',
+        );
+      sourceIds.push(source.id);
+    }
+    if (!materials.some((material) => material.sourceId === source.id)) {
+      const learning = await storage.get<Learning>(`learning:${source.id}`);
+      if (learning?.sourceVersion === source.version) materials.push(learning);
+      else if (!context.location.quote)
+        throw new TutorJournalError(
+          `Select a passage or prepare this source first: ${source.name}`,
+        );
+    }
+  }
+  const glossary = await loadTutorConcepts(storage, input.concepts, materials);
+  const attachments = await readQuestionAttachments(
+    storage,
+    conversation.sessionId,
+    input.attachments,
+  );
+  const attachedContent = await Promise.all(
+    attachments.map(async (item) => ({
+      ...item,
+      imageData: await attachmentImageData(env.FILES, item.attachment),
+    })),
+  );
+  for (const { attachment } of attachments)
+    if (attachment.sourceId && !sourceIds.includes(attachment.sourceId))
+      sourceIds.push(attachment.sourceId);
+  if (sourceIds.length > 20)
+    throw new TutorJournalError(
+      'The question has more than 20 source origins. Remove a reference or attachment before sending.',
+    );
+  const attempts = [...(await storage.list<Attempt>({ prefix: 'attempt:' })).values()].filter(
+    (attempt) => sourceIds.includes(attempt.sourceId),
+  );
+  const frozen: FrozenTutorContext = {
+    model: generation.model,
+    reasoningEffort: generation.reasoningEffort,
+    learning: materials,
+    review: reviewSummary(attempts),
+    concepts: glossary.concepts,
+    attachments: attachedContent,
+    context,
+    canCreateBookmark: true,
+  };
+  const objects = new TutorObjects(
+    {
+      read: async (key) => (await env.FILES.get(key))?.text() || null,
+      write: async (key, text) => {
+        await env.FILES.put(key, text, { httpMetadata: { contentType: 'application/json' } });
+      },
+    },
+    conversation.id,
+  );
+  const contextObject = await objects.put(frozen);
+  return {
+    input,
+    generation,
+    contextObject,
+    scope: {
+      references: await Promise.all(
+        [...sources.values()].map(async (source) => ({
+          id: source.id,
+          version: source.version,
+          prepared: await tutorFingerprint({
+            learning: materials.find((item) => item.sourceId === source.id) || null,
+            concepts: glossary.concepts.filter((item) => item.scope === 'source'),
+          }),
+        })),
+      ),
+      context,
+      concepts: input.concepts,
+      attachments: input.attachments,
+    },
+    userMessage: {
+      role: 'user',
+      content: input.prompt,
+      requestId: input.requestId,
+      requestFingerprint,
+      generation,
+      sourceIds,
+      ...(context ? { context } : {}),
+      ...(glossary.mentions.length ? { concepts: glossary.mentions } : {}),
+      ...(attachments.length
+        ? { attachments: attachments.map((item) => attachmentMention(item.attachment)) }
+        : {}),
+    },
+  };
 }
 
 export async function conversationRoute({
@@ -55,7 +243,6 @@ export async function conversationRoute({
   storage,
   body,
   settings,
-  executionId,
 }: {
   request: Request;
   env: Env;
@@ -64,16 +251,21 @@ export async function conversationRoute({
   settings: () => Promise<Settings>;
   executionId: string;
 }): Promise<Response | null> {
-  const path = new URL(request.url).pathname;
+  const url = new URL(request.url),
+    path = url.pathname;
   const sessionMatch = path.match(/^\/api\/sessions\/([a-f0-9-]+)\/conversations$/);
-  const match = path.match(/^\/api\/conversations\/([\w-]+)(\/turns)?$/);
+  const match = path.match(
+    /^\/api\/conversations\/([\w-]+)(\/messages|\/turns(?:\/([a-f0-9-]+)(\/attempts)?)?)?$/,
+  );
   if (!sessionMatch && !match) return null;
   const json = (value: unknown, status = 200) =>
     Response.json(value, { status, headers: { 'Cache-Control': 'no-store' } });
   if (sessionMatch) {
     const session = await storage.get<StudySession>(`session:${sessionMatch[1]}`);
     if (!session) return json({ error: 'Session not found' }, 404);
-    const threads = await conversationSnapshot(storage, [session]);
+    const threads = await conversationSnapshot(storage, [session], (value) =>
+      conversationDetail(env, value),
+    );
     if (request.method === 'GET')
       return json(threads.filter((item) => item.sessionId === session.id));
     if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
@@ -85,6 +277,8 @@ export async function conversationRoute({
       .parse(await body());
     if (threads.filter((item) => item.sessionId === session.id).length >= 100)
       return json({ error: 'Conversation limit reached for this session (100)' }, 409);
+    for (const id of input.sourceIds)
+      if (!(await storage.get(`file:${id}`))) return json({ error: 'Reference not found' }, 404);
     const created = conversationSchema.parse({
       ...input,
       id: crypto.randomUUID(),
@@ -93,29 +287,40 @@ export async function conversationRoute({
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
-    for (const id of created.sourceIds)
-      if (!(await storage.get(`file:${id}`))) return json({ error: 'Reference not found' }, 404);
     await storage.put(`conversation:${created.id}`, created);
     return json(created, 201);
   }
-  const key = `conversation:${match![1]}`;
-  const conversation = await storage.get<Conversation>(key);
+  const key = `conversation:${match![1]}`,
+    conversation = await storage.get<Conversation>(key);
   if (!conversation) return json({ error: 'Conversation not found' }, 404);
+  const actor = coordinator(env, conversation.id);
+  const before = url.searchParams.has('before')
+    ? Number(url.searchParams.get('before'))
+    : undefined;
+  if (before !== undefined && (!Number.isInteger(before) || before < 1))
+    return json({ error: 'Invalid history cursor' }, 400);
+  if (match![2] === '/messages' && request.method === 'GET') {
+    if (unwrap(await actor.snapshot())) return json(unwrap(await actor.history(before)));
+    const end = before ?? conversation.messages.length + 1;
+    if (end > conversation.messages.length + 1)
+      return json({ error: 'Invalid history cursor' }, 400);
+    const start = Math.max(1, end - 50);
+    return json({
+      messages: conversation.messages.slice(start - 1, end - 1),
+      messageCount: conversation.messages.length,
+      historyCursor: start > 1 ? String(start) : null,
+    });
+  }
+  if (match![4])
+    return request.method === 'GET'
+      ? json(unwrap(await actor.attempts(match![3], before)))
+      : json({ error: 'Method not allowed' }, 405);
+  if (match![3] && ['POST', 'PATCH'].includes(request.method)) {
+    const action = turnActionSchema.parse(await body());
+    return json(unwrap(await actor.action(match![3], action)));
+  }
   if (!match![2]) {
-    if (request.method === 'GET') {
-      const pending = await storage.get<{
-        until: number;
-        owner: string;
-        generation?: TutorGeneration;
-      }>(`conversation-run:${conversation.id}`);
-      return json({
-        ...conversation,
-        pending: !!pending && pending.owner === executionId && pending.until > Date.now(),
-        ...(pending?.generation && pending.owner === executionId && pending.until > Date.now()
-          ? { pendingGeneration: pending.generation }
-          : {}),
-      });
-    }
+    if (request.method === 'GET') return json(await conversationDetail(env, conversation));
     if (request.method !== 'PATCH') return json({ error: 'Method not allowed' }, 405);
     const input = z
       .object({
@@ -135,262 +340,43 @@ export async function conversationRoute({
       await transaction.put(key, value);
       return value;
     });
-    return json(next);
+    return json(await conversationDetail(env, next));
   }
+  if (match![2] !== '/turns') return json({ error: 'Method not allowed' }, 405);
+  if (request.method === 'GET') return json(unwrap(await actor.turns(before)));
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
-  const input = z
-    .object({
-      prompt: z.string().trim().min(1).max(8000),
-      requestId: z.string().uuid(),
-      context: questionContextSchema.optional(),
-      concepts: conceptReferencesSchema.default([]),
-      attachments: attachmentIdsSchema.default([]),
-      generation: tutorGenerationSchema.optional(),
-    })
-    .parse(await body());
-  const requestFingerprint = [
-    ...new Uint8Array(
-      await crypto.subtle.digest(
-        'SHA-256',
-        new TextEncoder().encode(
-          JSON.stringify({
-            prompt: input.prompt,
-            context: input.context,
-            concepts: input.concepts,
-            attachments: input.attachments,
-            ...(input.generation ? { generation: input.generation } : {}),
-          }),
-        ),
-      ),
-    ),
-  ]
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join('');
-  const runKey = `conversation-run:${conversation.id}`;
-  const generation = resolveTutorGeneration(input.generation, (await settings()).model);
-  const reservation = await storage.transaction(async (transaction) => {
-    const current = (await transaction.get<Conversation>(key))!;
-    if (
-      current.messages.some(
-        (message) => message.role === 'assistant' && message.requestId === input.requestId,
-      )
-    ) {
-      const original = current.messages.find(
-        (message) => message.role === 'user' && message.requestId === input.requestId,
+  const input = tutorTurnInputSchema.parse(await body()),
+    fingerprint = await turnInputFingerprint(input);
+  const completed = conversation.messages.some(
+    (m) => m.role === 'assistant' && m.requestId === input.requestId,
+  );
+  if (completed) {
+    const original = conversation.messages.find(
+      (m) => m.role === 'user' && m.requestId === input.requestId,
+    );
+    if (original?.requestFingerprint && original.requestFingerprint !== fingerprint)
+      throw new TutorJournalError(
+        'This request ID was already used for different question context or generation settings',
       );
-      if (original?.requestFingerprint && original.requestFingerprint !== requestFingerprint)
-        return { kind: 'different' as const, current };
-      return { kind: 'complete' as const, current };
-    }
-    const pending = await transaction.get<{ requestId: string; until: number; owner: string }>(
-      runKey,
-    );
-    if (pending && pending.owner === executionId && pending.until > Date.now())
-      return { kind: 'busy' as const, current };
-    await transaction.put(runKey, {
-      requestId: input.requestId,
-      until: Date.now() + 10 * 60 * 1000,
-      owner: executionId,
-      generation,
-    });
-    return { kind: 'reserved' as const, current };
-  });
-  if (reservation.kind === 'complete') return json(reservation.current);
-  if (reservation.kind === 'different')
-    return json(
-      {
-        error:
-          'This request ID was already used for a different question, context, model or reasoning effort',
-      },
-      409,
-    );
-  if (reservation.kind === 'busy')
-    return json(
-      {
-        error:
-          'A reply is already running in this conversation. Reopen it shortly to retrieve the result.',
-      },
-      409,
-    );
-  try {
-    if (new TextEncoder().encode(JSON.stringify(reservation.current)).length > 80000)
-      return json(
-        {
-          error: 'This conversation is full. Start a new conversation to keep this history intact.',
-        },
-        409,
-      );
-    const apiKey = await storage.get<string>('apiKey');
-    if (!apiKey) return json({ error: 'Add a Meta API key in Settings' }, 409);
-    const directories = [...(await storage.list<Directory>({ prefix: 'directory:' })).values()];
-    const materials: Learning[] = [];
-    for (const id of reservation.current.sourceIds) {
-      const source = await storage.get<Source>(`file:${id}`);
-      if (!source || sourceState(source, directories) === 'trash')
-        return json({ error: 'Restore or remove a deleted reference before sending' }, 409);
-      const learning = await storage.get<Learning>(`learning:${id}`);
-      if (
-        (!learning || learning.sourceVersion !== source.version) &&
-        input.context?.sourceId === id &&
-        input.context.location.quote
-      )
-        continue;
-      if (!learning || learning.sourceVersion !== source.version)
-        return json({ error: `Prepare the reference first: ${source.name}` }, 409);
-      materials.push(learning);
-    }
-    let context = input.context;
-    const sourceIds = [...reservation.current.sourceIds];
-    if (context) {
-      const source = await storage.get<Source>(`file:${context.sourceId}`);
-      if (
-        !source ||
-        sourceState(source, directories) === 'trash' ||
-        source.version !== context.sourceVersion
-      )
-        return json(
-          { error: 'The question source changed or is unavailable. Select the passage again.' },
-          409,
-        );
-      context = { ...context, sourceName: source.name };
-      if (!sourceIds.includes(source.id)) {
-        if (sourceIds.length >= 20)
-          return json(
-            { error: 'Remove a reference before attaching another question source (20 maximum)' },
-            409,
-          );
-        sourceIds.push(source.id);
-      }
-      if (!materials.some((material) => material.sourceId === source.id)) {
-        const learning = await storage.get<Learning>(`learning:${source.id}`);
-        if (learning?.sourceVersion === source.version) materials.push(learning);
-        else if (!context.location.quote)
-          return json(
-            { error: `Select a passage or prepare this source first: ${source.name}` },
-            409,
-          );
-      }
-    }
-    const glossaryContext = await loadTutorConcepts(storage, input.concepts, materials);
-    const attachments = await readQuestionAttachments(
-      storage,
-      reservation.current.sessionId,
-      input.attachments,
-    );
-    const attachedContent = await Promise.all(
-      attachments.map(async (item) => ({
-        ...item,
-        imageData: await attachmentImageData(env.FILES, item.attachment),
-      })),
-    );
-    for (const { attachment } of attachments) {
-      if (attachment.sourceId && !sourceIds.includes(attachment.sourceId))
-        sourceIds.push(attachment.sourceId);
-    }
-    if (sourceIds.length > 20)
-      return json(
-        {
-          error:
-            'The question has more than 20 source origins. Remove a reference or attachment before sending.',
-        },
-        409,
-      );
-    const userMessage = {
-      role: 'user' as const,
-      content: input.prompt,
-      requestId: input.requestId,
-      requestFingerprint,
-      generation,
-      sourceIds,
-      ...(context ? { context } : {}),
-      ...(glossaryContext.mentions.length ? { concepts: glossaryContext.mentions } : {}),
-      ...(attachments.length
-        ? { attachments: attachments.map((item) => attachmentMention(item.attachment)) }
-        : {}),
-    };
-    if (
-      new TextEncoder().encode(
-        JSON.stringify({
-          ...reservation.current,
-          messages: [...reservation.current.messages, userMessage],
-        }),
-      ).length > 80000
-    )
-      return json(
-        {
-          error: 'This conversation is full. Start a new conversation to keep its history intact.',
-        },
-        409,
-      );
-    const attempts = [...(await storage.list<Attempt>({ prefix: 'attempt:' })).values()].filter(
-      (attempt) => sourceIds.includes(attempt.sourceId),
-    );
-    const result = await runAssistant(
-      apiKey,
-      generation.model,
-      input.prompt,
-      reservation.current.messages.slice(-16),
-      materials,
-      reviewSummary(attempts),
-      bridgedFetch(env),
-      context,
-      {
-        concepts: glossaryContext.concepts,
-        attachments: attachedContent,
-        reasoningEffort: generation.reasoningEffort,
-        createBookmark: ({ sourceId, sourceVersion, segment, label }) =>
-          createSuggestedBookmark(storage, {
-            sessionId: reservation.current.sessionId,
-            sourceId,
-            sourceVersion,
-            label,
-            requestId: input.requestId,
-            segmentId: segment.id,
-            location: {
-              quote: segment.text.slice(0, 8000),
-              ...(segment.page ? { page: segment.page } : {}),
-              ...(segment.start != null ? { seconds: segment.start } : {}),
-            },
-          }),
-      },
-    );
-    const completed = await storage.transaction(async (transaction) => {
-      const current = (await transaction.get<Conversation>(key))!;
-      // Settings and name edits made during generation must survive the reply.
-      const next = conversationSchema.parse({
-        ...current,
-        updatedAt: new Date().toISOString(),
-        messages: [
-          ...current.messages.slice(-98),
-          userMessage,
-          {
-            role: 'assistant',
-            content: result.text,
-            tools: result.tools,
-            citations: result.citations,
-            generation,
-            requestId: input.requestId,
-            sourceIds,
-          },
-        ],
-      });
-      if (new TextEncoder().encode(JSON.stringify(next)).length > 120000) return null;
-      await transaction.put(key, next);
-      return next;
-    });
-    return completed
-      ? json(completed)
-      : json(
-          {
-            error:
-              'This reply is too large for the conversation. Start a new conversation or ask a shorter question; existing history is intact.',
-          },
-          409,
-        );
-  } finally {
-    await storage.transaction(async (transaction) => {
-      const pending = await transaction.get<{ requestId: string }>(runKey);
-      if (pending?.requestId === input.requestId) await transaction.delete(runKey);
+    return json({
+      ...(await conversationDetail(env, conversation)),
+      acceptedRequestId: input.requestId,
     });
   }
+  if (!unwrap(await actor.receipt(input.requestId, fingerprint))) {
+    const intent = await prepareIntent(
+      env,
+      storage,
+      conversation,
+      input,
+      fingerprint,
+      await settings(),
+    );
+    unwrap(await actor.seed(conversation));
+    unwrap(await actor.accept(intent, fingerprint));
+  }
+  return json(
+    { ...(await conversationDetail(env, conversation)), acceptedRequestId: input.requestId },
+    202,
+  );
 }

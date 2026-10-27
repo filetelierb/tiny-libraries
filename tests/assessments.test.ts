@@ -17,6 +17,7 @@ import {
   type AssessmentGrade,
 } from '../shared/assessments';
 import type { Source, Learning, StudySession } from '../shared/domain';
+import type { Conversation } from '../shared/conversations';
 import {
   createAssessment,
   assessmentDetail,
@@ -248,6 +249,52 @@ async function prepare(store: MemoryStore, count = 12) {
   await Promise.all(tasks);
   return { id, ops, tasks, detail: await assessmentDetail(store.storage(), id, ops.owner) };
 }
+
+test('assessment preparation freezes journal messages supplied outside the storage transaction', async () => {
+  const store = await setup(),
+    tasks: Promise<void>[] = [];
+  const journalConversation: Conversation = {
+    id: crypto.randomUUID(),
+    sessionId,
+    sourceIds: [],
+    name: 'Synthetic journal context',
+    createdAt: '2026-10-27',
+    updatedAt: '2026-10-27',
+    messageCount: 200,
+    messages: [
+      {
+        role: 'assistant',
+        content: 'Accepted journal answer',
+        sourceIds: [sourceId],
+        status: 'stopped',
+      },
+      { role: 'assistant', content: 'UNRELATED_JOURNAL_TEXT', sourceIds: [otherId] },
+    ],
+  };
+  let lookedUp = 0;
+  const ops = operations(tasks, {
+    conversations: async (selectedSession, selectedSources) => {
+      assert.equal(selectedSession, sessionId);
+      assert.deepEqual(selectedSources, config.sourceIds);
+      lookedUp++;
+      return [journalConversation];
+    },
+    generate: async (frozen, _config, _previous, index) => {
+      assert.deepEqual(frozen.conversation, [
+        { role: 'assistant', content: 'Accepted journal answer' },
+      ]);
+      assert.ok(frozen.gaps.some((gap) => gap.includes('stopped')));
+      assert.ok(frozen.gaps.some((gap) => gap.includes('bounded selection')));
+      assert.equal(JSON.stringify(frozen).includes('UNRELATED_JOURNAL_TEXT'), false);
+      return batch(index);
+    },
+  });
+  const id = crypto.randomUUID();
+  await createAssessment(store.storage(), { requestId: id, sessionId, config }, ops);
+  await Promise.all(tasks);
+  assert.equal(lookedUp, 1);
+  assert.equal((await assessmentDetail(store.storage(), id, ops.owner)).status, 'ready');
+});
 const response = (q: AssessmentQuestion) =>
   q.type === 'matching'
     ? JSON.stringify(Object.fromEntries(q.matches.map((m) => [m.promptId, m.optionId])))

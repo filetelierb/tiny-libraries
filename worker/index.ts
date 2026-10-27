@@ -6,6 +6,7 @@ import {
   localeSchema,
   sessionSchema,
   sourceSchema,
+  segmentSchema,
   publicLearning,
   reviewSummary,
   fold,
@@ -18,6 +19,7 @@ import {
   type Attempt,
 } from '../shared/domain';
 export { ProcessingJob } from './jobs';
+export { TutorConversation } from './tutor-conversation';
 import {
   runAssistant,
   bridgedFetch,
@@ -43,11 +45,22 @@ import {
 import { assessmentOptions, captureStudyProgress } from './assessment-context';
 import { assessmentMarkdown } from '../shared/assessments';
 import { conceptSuggestionsRoute } from './concept-suggestions';
-import { conversationRoute, conversationSnapshot } from './conversations';
+import {
+  conversationRoute,
+  conversationSnapshot,
+  conversationDetail,
+  assessmentConversations,
+} from './conversations';
+import { TutorJournalError } from './tutor-journal';
 import { attachmentRoute } from './attachment-route';
 import { AttachmentError } from './tutor-attachments';
 import { recordAttempt, PracticeError } from './practice';
-import { annotationRoute, AnnotationError, ensureSharedAnnotations } from './annotations';
+import {
+  annotationRoute,
+  AnnotationError,
+  ensureSharedAnnotations,
+  createSuggestedBookmark,
+} from './annotations';
 import { glossaryRoute, glossarySnapshot, GlossaryError } from './glossary';
 import {
   changeDirectory,
@@ -148,6 +161,37 @@ export class Library extends DurableObject<Env> {
     try {
       if (path === '/internal/key')
         return json({ key: (await this.ctx.storage.get<string>('apiKey')) || null });
+      if (path === '/internal/tutor-bookmark' && request.method === 'POST') {
+        const value = z
+          .object({
+            conversationId: z.string().min(1).max(200),
+            requestId: z.string().min(1).max(240),
+            sourceId: z.string().uuid(),
+            sourceVersion: z.number().int().positive(),
+            segment: segmentSchema,
+            label: z.string().trim().min(1).max(240),
+          })
+          .parse(await boundedJson(request));
+        const conversation = await this.ctx.storage.get<
+          import('../shared/conversations').Conversation
+        >(`conversation:${value.conversationId}`);
+        if (!conversation) throw new ApiError('Conversation not found', 404);
+        return json(
+          await createSuggestedBookmark(this.ctx.storage, {
+            sessionId: conversation.sessionId,
+            requestId: value.requestId,
+            sourceId: value.sourceId,
+            sourceVersion: value.sourceVersion,
+            label: value.label,
+            segmentId: value.segment.id,
+            location: {
+              quote: value.segment.text.slice(0, 8000),
+              ...(value.segment.page ? { page: value.segment.page } : {}),
+              ...(value.segment.start != null ? { seconds: value.segment.start } : {}),
+            },
+          }),
+        );
+      }
       if (path === '/api/catalog') {
         const { files, directories } = await this.ctx.storage.transaction((storage) =>
           this.directorySnapshot(storage),
@@ -159,7 +203,11 @@ export class Library extends DurableObject<Env> {
           files,
           directories,
           sessions: [...sessions.values()].map((value) => sessionSchema.parse(value)),
-          conversations: await conversationSnapshot(this.ctx.storage, [...sessions.values()]),
+          conversations: await conversationSnapshot(
+            this.ctx.storage,
+            [...sessions.values()],
+            (value) => conversationDetail(this.env, value),
+          ),
           attempts: [...attempts.values()],
           concepts,
           settings: await this.settings(),
@@ -320,6 +368,8 @@ export class Library extends DurableObject<Env> {
       }
       if (path.startsWith('/api/assessments')) {
         const options = {
+          conversations: (sessionId: string, sourceIds: string[]) =>
+            assessmentConversations(this.env, this.ctx.storage, sessionId, sourceIds),
           owner: this.executionId,
           settings: await this.settings(),
           start: (task: Promise<void>) => this.ctx.waitUntil(task),
@@ -588,6 +638,7 @@ export class Library extends DurableObject<Env> {
         error instanceof CardError ||
         error instanceof ReinforcementError ||
         error instanceof AssessmentError ||
+        error instanceof TutorJournalError ||
         error instanceof PracticeError
       )
         return json({ error: error.message }, error.status);

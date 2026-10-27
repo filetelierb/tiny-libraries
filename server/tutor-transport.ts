@@ -18,7 +18,7 @@ export class TutorTransportError extends Error {
     super(message);
   }
 }
-type Saved = TransportSnapshot & { owner: string };
+type Saved = TransportSnapshot & { owner: string; preempted?: true };
 type Active = { controller: AbortController; stream: TutorStream; task?: Promise<void> };
 export type TutorProvider = (url: string, options: RequestInit) => Promise<Response>;
 class ProviderRejection extends Error {}
@@ -82,7 +82,11 @@ export class TutorTransport {
       const snapshot = transportSnapshotSchema.parse(value);
       if (snapshot.id !== id || typeof value.owner !== 'string')
         throw new TutorTransportError('Invalid local stream state', 500);
-      return { ...snapshot, owner: value.owner };
+      return {
+        ...snapshot,
+        owner: value.owner,
+        ...(value.preempted === true ? { preempted: true } : {}),
+      };
     } catch (error) {
       if (isMissing(error)) return null;
       throw error;
@@ -142,6 +146,7 @@ export class TutorTransport {
         throw new TutorTransportError('The local provider process is stopping', 503);
       let previous = await this.read(id);
       if (previous) {
+        if (previous.preempted) return transportSnapshotSchema.parse(previous);
         if (previous.fingerprint !== fingerprint)
           throw new TutorTransportError(
             'Stream retry used different context or generation settings',
@@ -279,7 +284,29 @@ export class TutorTransport {
   async cancel(id: string) {
     return this.exclusive(id, async () => {
       const previous = await this.read(id);
-      if (!previous) return null;
+      if (!previous) {
+        // Stop can arrive before the coordinator's delayed start reaches this process.
+        const directory = dirname(this.path(id, 'status.json'));
+        await mkdir(directory, { recursive: true, mode: 0o700 });
+        const info = await lstat(directory);
+        if (!info.isDirectory() || info.isSymbolicLink())
+          throw new TutorTransportError('Invalid local stream directory', 500);
+        await chmod(directory, 0o700);
+        const time = new Date().toISOString();
+        return this.publish({
+          id,
+          owner: this.owner,
+          fingerprint: id,
+          preempted: true,
+          status: 'cancelled',
+          sequence: 0,
+          text: '',
+          toolNames: [],
+          createdAt: time,
+          updatedAt: time,
+          error: 'Stopped before generation started.',
+        });
+      }
       if (transportTerminal(previous.status)) return transportSnapshotSchema.parse(previous);
       const active = this.active.get(id);
       const value = await this.publish({
