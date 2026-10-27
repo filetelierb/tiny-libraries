@@ -8,9 +8,16 @@ import { museStatus, codeSession } from './muse';
 import { z } from 'zod';
 import { composeCapture } from './capture-image';
 import { drawingSchema } from '../shared/annotations';
+import { TutorTransport, TutorTransportError, type TutorProvider } from './tutor-transport';
 
-export async function startBridge(token: string, root: string, port = 9877) {
+export async function startBridge(
+  token: string,
+  root: string,
+  port = 9877,
+  tutorProvider?: TutorProvider,
+) {
   await mkdir(root, { recursive: true, mode: 0o700 });
+  const tutor = new TutorTransport(join(root, 'tutor-requests'), tutorProvider);
   const server = createServer(async (req, res) => {
     const send = (value: unknown, status = 200) => {
       res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
@@ -24,6 +31,34 @@ export async function startBridge(token: string, root: string, port = 9877) {
         return;
       }
       const url = new URL(req.url || '/', 'http://127.0.0.1');
+      const tutorMatch = url.pathname.match(/^\/tutor-requests\/([a-f0-9]{64})(\/cancel)?$/);
+      if (tutorMatch) {
+        let result;
+        if (req.method === 'GET' && !tutorMatch[2]) result = await tutor.get(tutorMatch[1]);
+        else if (req.method === 'POST' && tutorMatch[2]) result = await tutor.cancel(tutorMatch[1]);
+        else if (req.method === 'POST') {
+          const key = req.headers['x-meta-key'];
+          if (typeof key !== 'string') throw new TutorTransportError('Meta credential is missing');
+          const parts: Buffer[] = [];
+          let length = 0;
+          for await (const part of req) {
+            length += part.length;
+            if (length > 32 * 1024 * 1024)
+              throw new TutorTransportError('Model request exceeds 32 MB', 413);
+            parts.push(Buffer.from(part));
+          }
+          result = await tutor.start(
+            tutorMatch[1],
+            key,
+            JSON.parse(Buffer.concat(parts).toString()),
+          );
+        } else {
+          send({ error: 'Method not allowed' }, 405);
+          return;
+        }
+        send(result || { error: 'Stream request not found' }, result ? 200 : 404);
+        return;
+      }
       if (url.pathname === '/capture-image' && req.method === 'POST') {
         const parts: Buffer[] = [];
         let bytes = 0;
@@ -179,12 +214,27 @@ export async function startBridge(token: string, root: string, port = 9877) {
       send({ error: 'Not found' }, 404);
     } catch (error) {
       if (res.headersSent) res.destroy();
-      else send({ error: error instanceof Error ? error.message : 'Media operation failed' }, 422);
+      else
+        send(
+          { error: error instanceof Error ? error.message : 'Media operation failed' },
+          error instanceof TutorTransportError ? error.status : 422,
+        );
     }
   });
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);
     server.listen(port, '127.0.0.1', resolve);
   });
-  return server;
+  try {
+    await tutor.initialize();
+  } catch (error) {
+    server.close();
+    throw error;
+  }
+  server.once('close', () => {
+    void tutor
+      .shutdown()
+      .catch(() => console.error('Unable to finish saving local tutor streams.'));
+  });
+  return Object.assign(server, { shutdownTutor: () => tutor.shutdown() });
 }

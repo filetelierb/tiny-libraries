@@ -77,7 +77,15 @@ runtime.on('error', () => {
   process.exitCode = 1;
 });
 runtime.on('exit', (code) => {
-  bridge.close();
-  process.exitCode = stopping ? 0 : (code ?? 1);
+  void bridge
+    .shutdownTutor()
+    .catch(() => {
+      console.error('Unable to finish saving local tutor streams.');
+      process.exitCode = 1;
+    })
+    .finally(() => {
+      bridge.close();
+      process.exitCode ??= stopping ? 0 : (code ?? 1);
+    });
 });
 console.log('Tailored Library: http://127.0.0.1:9876 — local files, optional Meta inference.');
