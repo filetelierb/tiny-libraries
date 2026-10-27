@@ -255,6 +255,8 @@ export function App() {
     } | null>(null),
     [evidence, setEvidence] = useState<{ sourceId: string; segment: Segment } | null>(null),
     [artifact, setArtifact] = useState<string | false>(false),
+    /** Source whose artifact is shown beside the cited source after following a citation. */
+    [artifactSplit, setArtifactSplit] = useState<string | null>(null),
     [refreshTick, setRefreshTick] = useState(0);
   const sessionRef = useRef(session),
     saveChain = useRef(Promise.resolve()),
@@ -441,12 +443,14 @@ export function App() {
     if (!sessionRef.current) return;
     commitWorkspace(openArtifact(usable(sessionRef.current), sourceId));
     setArtifact(sourceId);
+    setArtifactSplit(null);
     setSeek(null);
   }
   function openFile(file: Source, mode: 'preview' | 'retain' = 'preview') {
     if (!sessionRef.current) return;
     commitWorkspace(openResource(usable(sessionRef.current), file.id, mode));
     setArtifact(false);
+    setArtifactSplit(null);
     setSeek(null);
     if (panels.drawer === 'left') setLeft(false);
   }
@@ -811,6 +815,14 @@ export function App() {
   function cite(segment: Segment) {
     if (!active) return;
     citeFrom(active.id, segment);
+  }
+  /** Citations inside an artifact keep the artifact and open the evidence beside it. */
+  function citeFromArtifact(sourceId: string, segment: Segment) {
+    setArtifactSplit(sourceId);
+    setEvidence({ sourceId, segment });
+    setSeek({ sourceId, value: segment.start ?? segment.page ?? 0, nonce: Date.now(), segment });
+    setLeft(false);
+    setRight(false);
   }
   function citeFrom(sourceId: string, segment: Segment, heading?: string) {
     if (!activeResourceTab?.sources.includes(sourceId)) {
@@ -1396,6 +1408,80 @@ export function App() {
                 {(source) => {
                   const material =
                     learning?.sourceId === source.id ? learning : materialCache[source.id];
+                  const reader = (
+                    <StudyReader
+                      key={`${source.id}:v${source.version}:${material?.createdAt || 'unprepared'}`}
+                      attempts={catalog.attempts}
+                      navigate={(segment, heading) => citeFrom(source.id, segment, heading)}
+                      quiz={(chapter, wasPlaying) => {
+                        if (!material) return;
+                        focusPane(source.id);
+                        setQuizRequest({ source, learning: material, chapter, wasPlaying });
+                      }}
+                      cardTick={cardTick}
+                      openCards={(chapterId, dueOnly) => {
+                        if (!material) return;
+                        focusPane(source.id);
+                        setDeckRequest({ source, learning: material, chapterId, dueOnly });
+                      }}
+                      suspended={
+                        !!quizRequest ||
+                        !!deckRequest ||
+                        assessmentOpen ||
+                        (right && !focus && tab === 'review')
+                      }
+                      resumeSignal={
+                        resumePlayback?.sourceId === source.id ? resumePlayback.nonce : 0
+                      }
+                      onPlaying={(value) => {
+                        playbackStates.current[source.id] = value;
+                      }}
+                      source={source}
+                      bookmarks={savedBookmarks
+                        .filter(
+                          (bookmark) =>
+                            bookmark.sourceId === source.id &&
+                            !bookmark.deleted &&
+                            (bookmarkFilter === 'all' || bookmark.origin === bookmarkFilter),
+                        )
+                        .map((bookmark) => ({
+                          id: bookmark.id,
+                          sourceId: source.id,
+                          label: bookmark.title,
+                          ...(bookmark.location.page ? { page: bookmark.location.page } : {}),
+                          ...(bookmark.location.seconds != null
+                            ? { seconds: bookmark.location.seconds }
+                            : {}),
+                        }))}
+                      t={t}
+                      learning={material || null}
+                      sessionId={session.id}
+                      annotationTick={annotationTick}
+                      onSelection={(location) => {
+                        setSelection({ sourceId: source.id, location });
+                        const range = location.quote
+                          ? window.getSelection()?.getRangeAt(0)
+                          : undefined;
+                        const box = range?.getBoundingClientRect();
+                        setSelectionMenu(
+                          box && box.width + box.height > 0
+                            ? { sourceId: source.id, x: box.left + box.width / 2, y: box.top }
+                            : null,
+                        );
+                      }}
+                      position={session.positions[source.id] || 0}
+                      onPosition={(value) => {
+                        if (source.kind === 'pdf')
+                          setSelection((current) =>
+                            current?.sourceId === source.id && current.location.page !== value
+                              ? null
+                              : current,
+                          );
+                        if (sessionRef.current?.id === session.id) savePosition(source, value);
+                      }}
+                      seek={seek?.sourceId === source.id ? seek : null}
+                    />
+                  );
                   return (
                     <>
                       {evidence?.sourceId === source.id && (
@@ -1412,117 +1498,66 @@ export function App() {
                         </section>
                       )}
                       {artifact === source.id ? (
-                        <div className="artifact-stage">
-                          <Button variant="ghost" onClick={() => openFile(source, 'retain')}>
-                            <ArrowLeft size={14} />
-                            {t.originalSource}
-                          </Button>
-                          {material?.synthesis.artifact ? (
-                            <GeneratedArtifact
-                              artifact={material.synthesis.artifact}
-                              t={t}
-                              segments={material.segments}
-                              onCite={(segment) => citeFrom(source.id, segment)}
-                              saved={session.artifacts?.[source.id]}
-                              persist={(value) =>
-                                updateSession({
-                                  artifacts: {
-                                    ...sessionRef.current!.artifacts,
-                                    [source.id]: value,
-                                  },
-                                })
-                              }
-                            />
-                          ) : (
-                            <SignalExplorer
-                              key={source.id}
-                              t={t}
-                              storageKey={`tl:signal:${session.id}:${source.id}`}
-                              initial={session.artifacts?.[source.id]}
-                              onPersist={(value) =>
-                                updateSession({
-                                  artifacts: {
-                                    ...sessionRef.current!.artifacts,
-                                    [source.id]: value,
-                                  },
-                                })
-                              }
-                            />
+                        <div
+                          className={
+                            artifactSplit === source.id ? 'artifact-split' : 'artifact-host'
+                          }
+                        >
+                          <div className="artifact-stage">
+                            <Button variant="ghost" onClick={() => openFile(source, 'retain')}>
+                              <ArrowLeft size={14} />
+                              {t.originalSource}
+                            </Button>
+                            {material?.synthesis.artifact ? (
+                              <GeneratedArtifact
+                                artifact={material.synthesis.artifact}
+                                t={t}
+                                segments={material.segments}
+                                onCite={(segment) => citeFromArtifact(source.id, segment)}
+                                saved={session.artifacts?.[source.id]}
+                                persist={(value) =>
+                                  updateSession({
+                                    artifacts: {
+                                      ...sessionRef.current!.artifacts,
+                                      [source.id]: value,
+                                    },
+                                  })
+                                }
+                              />
+                            ) : (
+                              <SignalExplorer
+                                key={source.id}
+                                t={t}
+                                storageKey={`tl:signal:${session.id}:${source.id}`}
+                                initial={session.artifacts?.[source.id]}
+                                onPersist={(value) =>
+                                  updateSession({
+                                    artifacts: {
+                                      ...sessionRef.current!.artifacts,
+                                      [source.id]: value,
+                                    },
+                                  })
+                                }
+                              />
+                            )}
+                          </div>
+                          {artifactSplit === source.id && (
+                            <div className="artifact-split-source">
+                              <div className="artifact-split-head">
+                                <span>{source.name}</span>
+                                <IconButton
+                                  label={t.closeEvidence}
+                                  onClick={() => setArtifactSplit(null)}
+                                >
+                                  <X />
+                                </IconButton>
+                              </div>
+                              {reader}
+                            </div>
                           )}
                         </div>
                       ) : (
-                        <StudyReader
-                          key={`${source.id}:v${source.version}:${material?.createdAt || 'unprepared'}`}
-                          attempts={catalog.attempts}
-                          navigate={(segment, heading) => citeFrom(source.id, segment, heading)}
-                          quiz={(chapter, wasPlaying) => {
-                            if (!material) return;
-                            focusPane(source.id);
-                            setQuizRequest({ source, learning: material, chapter, wasPlaying });
-                          }}
-                          cardTick={cardTick}
-                          openCards={(chapterId, dueOnly) => {
-                            if (!material) return;
-                            focusPane(source.id);
-                            setDeckRequest({ source, learning: material, chapterId, dueOnly });
-                          }}
-                          suspended={
-                            !!quizRequest ||
-                            !!deckRequest ||
-                            assessmentOpen ||
-                            (right && !focus && tab === 'review')
-                          }
-                          resumeSignal={
-                            resumePlayback?.sourceId === source.id ? resumePlayback.nonce : 0
-                          }
-                          onPlaying={(value) => {
-                            playbackStates.current[source.id] = value;
-                          }}
-                          source={source}
-                          bookmarks={savedBookmarks
-                            .filter(
-                              (bookmark) =>
-                                bookmark.sourceId === source.id &&
-                                !bookmark.deleted &&
-                                (bookmarkFilter === 'all' || bookmark.origin === bookmarkFilter),
-                            )
-                            .map((bookmark) => ({
-                              id: bookmark.id,
-                              sourceId: source.id,
-                              label: bookmark.title,
-                              ...(bookmark.location.page ? { page: bookmark.location.page } : {}),
-                              ...(bookmark.location.seconds != null
-                                ? { seconds: bookmark.location.seconds }
-                                : {}),
-                            }))}
-                          t={t}
-                          learning={material || null}
-                          sessionId={session.id}
-                          annotationTick={annotationTick}
-                          onSelection={(location) => {
-                            setSelection({ sourceId: source.id, location });
-                            const range = location.quote
-                              ? window.getSelection()?.getRangeAt(0)
-                              : undefined;
-                            const box = range?.getBoundingClientRect();
-                            setSelectionMenu(
-                              box && box.width + box.height > 0
-                                ? { sourceId: source.id, x: box.left + box.width / 2, y: box.top }
-                                : null,
-                            );
-                          }}
-                          position={session.positions[source.id] || 0}
-                          onPosition={(value) => {
-                            if (source.kind === 'pdf')
-                              setSelection((current) =>
-                                current?.sourceId === source.id && current.location.page !== value
-                                  ? null
-                                  : current,
-                              );
-                            if (sessionRef.current?.id === session.id) savePosition(source, value);
-                          }}
-                          seek={seek?.sourceId === source.id ? seek : null}
-                        />
+                        reader
                       )}
                     </>
                   );

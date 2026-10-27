@@ -8438,3 +8438,51 @@ body:has(.panel-resizer.resizing) {
 .pdf-load-error .form-error {
   margin: 0;
 }
+.artifact-host,
+.artifact-split {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+.artifact-host > .artifact-stage,
+.artifact-split > .artifact-stage {
+  flex: 1;
+  min-width: 0;
+}
+.artifact-split-source {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  border-left: 1px solid var(--border);
+}
+.artifact-split-source > :last-child {
+  flex: 1;
+  min-height: 0;
+}
+.artifact-split-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px 4px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--muted-text);
+}
+.artifact-split-head > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@container (max-width: 760px) {
+  .artifact-split {
+    flex-direction: column;
+  }
+  .artifact-split-source {
+    border-left: 0;
+    border-top: 1px solid var(--border);
+  }
+}
