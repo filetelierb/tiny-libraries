@@ -31,6 +31,7 @@ export function ReviewPanel({
   persist,
   refresh,
   assess,
+  openConcept,
 }: {
   catalog: Catalog;
   session: StudySession;
@@ -42,6 +43,7 @@ export function ReviewPanel({
   persist: (key: string, parameters: Parameters) => void;
   refresh: () => Promise<unknown>;
   assess: () => void;
+  openConcept: (id: string) => void;
 }) {
   const [scope, setScope] = useState<ReviewScope>(() => {
     try {
@@ -301,6 +303,8 @@ export function ReviewPanel({
                   segments={record.segments}
                   onCite={(segment) => cite(record.sourceId, segment)}
                   storageKey={`tl:reinforcement:${record.id}:v${record.version}`}
+                  concepts={catalog.concepts}
+                  openConcept={openConcept}
                   saved={session.artifacts[`reinforcement:${record.id}`]}
                   persist={(value) => persist(`reinforcement:${record.id}`, value)}
                 />

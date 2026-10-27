@@ -1,13 +1,20 @@
-import { useEffect, useRef, useState } from 'react';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
+import { BookOpen, ChevronDown, ChevronRight } from 'lucide-react';
 import type { Artifact, Segment } from '../shared/domain';
 import type { T } from './i18n';
 import { SignalExplorer } from './SignalExplorer';
 import { Button } from './design/components';
 import { StudyMarkdown } from './study/StudyMarkdown';
+import {
+  CONCEPT_LINK_MAX,
+  conceptMatcher,
+  remarkConceptLinks,
+  type LinkableConcept,
+} from './glossary/conceptLinks';
 
 type Parameters = { frequency: number; sampling: number; amplitude: number };
 type OutlineEntry = { id: string; level: 2 | 3; label: string };
+const noConcepts: LinkableConcept[] = [];
 export function GeneratedArtifact({
   artifact,
   t,
@@ -17,6 +24,8 @@ export function GeneratedArtifact({
   persist,
   storageKey = 'tl:generated-signal',
   sourceName,
+  concepts = noConcepts,
+  openConcept,
 }: {
   artifact: Artifact;
   t: T;
@@ -26,6 +35,8 @@ export function GeneratedArtifact({
   persist: (p: Parameters) => void;
   storageKey?: string;
   sourceName?: string;
+  concepts?: LinkableConcept[];
+  openConcept?: (id: string) => void;
 }) {
   // Citations are numbered by first appearance and listed again under References.
   const cited = [...new Set(artifact.segmentIds)]
@@ -35,6 +46,56 @@ export function GeneratedArtifact({
     [sourceName, segment.page ? `${t.page} ${segment.page}` : segment.id]
       .filter(Boolean)
       .join(' · ');
+  // Glossary terms in the text open the Glossary focused on that entry.
+  const linkable = openConcept ? concepts : noConcepts,
+    matcher = useMemo(() => conceptMatcher(linkable), [linkable]),
+    conceptPlugins = useMemo(
+      () =>
+        linkable.length
+          ? [[remarkConceptLinks, linkable] as [typeof remarkConceptLinks, LinkableConcept[]]]
+          : [],
+      [linkable],
+    ),
+    conceptComponents = useMemo(
+      () => ({
+        button: ({ node: _node, ...props }: ComponentProps<'button'> & { node?: unknown }) => {
+          const id = (props as { 'data-concept'?: string })['data-concept'];
+          return id ? (
+            <button {...props} title={t.openInGlossary} onClick={() => openConcept?.(id)} />
+          ) : (
+            <button {...props} />
+          );
+        },
+      }),
+      [openConcept, t],
+    );
+  const conceptLabel = (label: string) => {
+    const id = matcher?.idFor(label.trim());
+    if (!id || !openConcept) return label;
+    return label.length <= CONCEPT_LINK_MAX ? (
+      <button
+        type="button"
+        className="artifact-concept"
+        title={t.openInGlossary}
+        onClick={() => openConcept(id)}
+      >
+        {label}
+      </button>
+    ) : (
+      <>
+        {label}
+        <button
+          type="button"
+          className="artifact-concept-chip"
+          title={t.openInGlossary}
+          aria-label={`${t.openInGlossary}: ${label}`}
+          onClick={() => openConcept(id)}
+        >
+          <BookOpen aria-hidden />
+        </button>
+      </>
+    );
+  };
   const root = useRef<HTMLElement>(null),
     [outline, setOutline] = useState<OutlineEntry[]>([]),
     [current, setCurrent] = useState(''),
@@ -116,7 +177,9 @@ export function GeneratedArtifact({
           )}
         </nav>
       )}
-      <StudyMarkdown t={t}>{artifact.explanation}</StudyMarkdown>
+      <StudyMarkdown t={t} remarkPlugins={conceptPlugins} components={conceptComponents}>
+        {artifact.explanation}
+      </StudyMarkdown>
       <div className="citations">
         {cited.map((segment, index) => (
           <button
@@ -149,7 +212,7 @@ export function GeneratedArtifact({
             <tbody>
               {artifact.rows.map((row, i) => (
                 <tr key={i}>
-                  <th scope="row">{row.label}</th>
+                  <th scope="row">{conceptLabel(row.label)}</th>
                   <td>
                     <StudyMarkdown t={t}>{row.left}</StudyMarkdown>
                   </td>

@@ -466,6 +466,11 @@ export function App() {
     setSeek(null);
   }
   /** Saves the selected passage as a highlight annotation and shows it in Notes. */
+  function openGlossaryConcept(id: string) {
+    setGlossaryFocus({ id, nonce: crypto.randomUUID() });
+    setRight(true);
+    setTab('glossary');
+  }
   async function saveHighlight(source: Source, location: SourceLocation) {
     const quote = location.quote?.trim();
     if (!quote || !sessionRef.current) return;
@@ -1598,6 +1603,8 @@ export function App() {
                                   segments={material.segments}
                                   onCite={(segment) => citeFromArtifact(source.id, segment)}
                                   sourceName={source.name}
+                                  concepts={catalog.concepts}
+                                  openConcept={openGlossaryConcept}
                                   saved={session.artifacts?.[source.id]}
                                   persist={(value) =>
                                     updateSession({
@@ -1898,6 +1905,7 @@ export function App() {
               session={session}
               active={active}
               t={t}
+              openConcept={openGlossaryConcept}
               assess={() => {
                 setAssessmentStart({});
                 setAssessmentOpen(true);

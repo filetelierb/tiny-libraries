@@ -8800,3 +8800,45 @@ body:has(.panel-resizer.resizing) {
   text-transform: uppercase;
   color: var(--muted-text);
 }
+
+/* Glossary concept links inside artifacts */
+.artifact-concept {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 550;
+  color: var(--primary);
+  text-align: inherit;
+  text-decoration: underline dotted;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.artifact-concept:hover {
+  text-decoration-style: solid;
+}
+.artifact-concept-chip {
+  display: inline-flex;
+  vertical-align: middle;
+  margin-left: 0.3rem;
+  padding: 0.15rem;
+  border: 0;
+  border-radius: 0.3rem;
+  background: none;
+  color: var(--primary);
+  cursor: pointer;
+}
+.artifact-concept-chip:hover {
+  background: var(--secondary);
+}
+.artifact-concept-chip svg {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+:is(.artifact-concept, .artifact-concept-chip):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: 0.25rem;
+}
