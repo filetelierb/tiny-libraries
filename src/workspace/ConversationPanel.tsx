@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { SavedTutorMessage } from '../tutor/SavedTutorMessage';
 import {
-  ArrowLeft,
+  ChevronLeft,
+  Search,
   ArrowUp,
   History,
   LoaderCircle,
@@ -10,6 +11,9 @@ import {
   X,
   Paperclip,
   Globe,
+  Globe2,
+  ListPlus,
+  StickyNote,
 } from 'lucide-react';
 import { readWebDraft, type WebDraft } from '../../shared/tutor-web';
 import {
@@ -41,7 +45,7 @@ import {
   type TutorSubmission,
 } from '../tutor/turnDrafts';
 import { TurnProgress, TurnOutbox } from '../tutor/TurnProgress';
-import { Button, IconButton, Modal } from '../design/components';
+import { Badge, Button, IconButton, Modal } from '../design/components';
 import type { T } from '../i18n';
 import { DirectoryTree, type TreeActions } from './DirectoryTree';
 import {
@@ -207,14 +211,20 @@ export function ConversationPanel({
   return (
     <div className="conversation-panel">
       <div className="conversation-heading">
+        {history && (
+          <IconButton label={t.backToConversation} onClick={() => setHistory(false)}>
+            <ChevronLeft />
+          </IconButton>
+        )}
         <strong title={current?.name}>
           {history ? t.conversationHistory : current?.name || t.assistant}
         </strong>
         <IconButton
-          label={history ? t.backToConversation : t.conversationHistory}
+          label={t.conversationHistory}
+          aria-pressed={history}
           onClick={() => setHistory(!history)}
         >
-          {history ? <ArrowLeft /> : <History />}
+          <History />
         </IconButton>
         <IconButton
           label={t.newConversation}
@@ -226,13 +236,16 @@ export function ConversationPanel({
       </div>
       {history ? (
         <div className="conversation-history">
-          <input
-            type="search"
-            aria-label={t.searchConversations}
-            placeholder={t.searchConversations}
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
+          <div className="search-field">
+            <Search />
+            <input
+              type="search"
+              aria-label={t.searchConversations}
+              placeholder={t.searchConversations}
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </div>
           {[...threads]
             .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
             .filter((item) =>
@@ -249,11 +262,16 @@ export function ConversationPanel({
                   setHistory(false);
                 }}
               >
-                <strong>{item.name}</strong>
+                <span className="conversation-row-title">
+                  <strong>{item.name}</strong>
+                  <Badge>{item.messageCount ?? item.messages.length}</Badge>
+                </span>
                 <span>{item.messages.at(-1)?.content.slice(0, 120) || t.noMessages}</span>
                 <small>
-                  {item.messageCount ?? item.messages.length} {t.messages} ·{' '}
-                  {new Date(item.updatedAt).toLocaleDateString()}
+                  {new Date(item.updatedAt).toLocaleString(undefined, {
+                    dateStyle: 'medium',
+                    timeStyle: 'short',
+                  })}
                 </small>
               </button>
             ))}
@@ -1061,17 +1079,9 @@ function ConversationThread({
               message.citations ?? recoverCitations(message, conversation, recoveredMaterials);
             return (
               <div
-                className={`chat-message ${message.role}`}
+                className={`chat-entry ${message.role}`}
                 key={`${conversation.id}:message:${sequence}`}
               >
-                {message.turnKind === 'steering' && (
-                  <small className="tutor-message-state">{t.steeringInstruction}</small>
-                )}
-                {message.status && (
-                  <small className="tutor-message-state">
-                    {t[`turn_${message.status}`]} · {t.partialReplyNotice}
-                  </small>
-                )}
                 {message.role === 'user' && !!message.attachments?.length && (
                   <div className="message-attachments" aria-label={t.questionAttachments}>
                     {message.attachments.map((attachment) => (
@@ -1086,47 +1096,62 @@ function ConversationThread({
                     ))}
                   </div>
                 )}
-                {message.role === 'user' && message.context && (
-                  <div className="message-question-context">
-                    <button
-                      onClick={() =>
-                        void resolve(message.context!.sourceId, 'selected-passage', message.context)
-                      }
-                    >
-                      {message.context.sourceName}
-                      {message.context.location.page
-                        ? ` · ${t.page} ${message.context.location.page}`
-                        : message.context.location.seconds != null
-                          ? ` · ${Math.floor(message.context.location.seconds / 60)}:${String(Math.floor(message.context.location.seconds % 60)).padStart(2, '0')}`
-                          : ''}
-                    </button>
-                    {message.context.location.quote && (
-                      <blockquote>{message.context.location.quote}</blockquote>
-                    )}
-                  </div>
-                )}
-                {message.role === 'user' && message.concepts?.length ? (
-                  <div className="message-concepts" aria-label={t.attachedConcepts}>
-                    {message.concepts.map((ref) => (
-                      <button key={ref.id} onClick={() => setInspectedConcept(ref)}>
-                        {ref.term} · {t.revision} {ref.version}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-                <SavedTutorMessage
-                  content={message.content}
-                  references={references}
-                  labels={Object.fromEntries(
-                    references.map((reference) => [reference.id, citationLabel(reference)]),
+                <div className={`chat-message ${message.role}`}>
+                  {message.turnKind === 'steering' && (
+                    <small className="tutor-message-state">{t.steeringInstruction}</small>
                   )}
-                  t={t}
-                  open={citationAction}
-                />
-
+                  {message.status && (
+                    <small className="tutor-message-state">
+                      {t[`turn_${message.status}`]} · {t.partialReplyNotice}
+                    </small>
+                  )}
+                  {message.role === 'user' && message.context && (
+                    <div className="message-question-context">
+                      <button
+                        onClick={() =>
+                          void resolve(
+                            message.context!.sourceId,
+                            'selected-passage',
+                            message.context,
+                          )
+                        }
+                      >
+                        {message.context.sourceName}
+                        {message.context.location.page
+                          ? ` · ${t.page} ${message.context.location.page}`
+                          : message.context.location.seconds != null
+                            ? ` · ${Math.floor(message.context.location.seconds / 60)}:${String(Math.floor(message.context.location.seconds % 60)).padStart(2, '0')}`
+                            : ''}
+                      </button>
+                      {message.context.location.quote && (
+                        <blockquote>{message.context.location.quote}</blockquote>
+                      )}
+                    </div>
+                  )}
+                  {message.role === 'user' && message.concepts?.length ? (
+                    <div className="message-concepts" aria-label={t.attachedConcepts}>
+                      {message.concepts.map((ref) => (
+                        <button key={ref.id} onClick={() => setInspectedConcept(ref)}>
+                          {ref.term} · {t.revision} {ref.version}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                  <SavedTutorMessage
+                    content={message.content}
+                    references={references}
+                    labels={Object.fromEntries(
+                      references.map((reference) => [reference.id, citationLabel(reference)]),
+                    )}
+                    t={t}
+                    open={citationAction}
+                  />
+                </div>
                 {message.role === 'assistant' && (
                   <Button
                     variant="ghost"
+                    size="sm"
+                    className="message-action"
                     onClick={() =>
                       annotate(
                         message.status
@@ -1137,7 +1162,7 @@ function ConversationThread({
                       )
                     }
                   >
-                    <Pencil size={14} />
+                    <StickyNote />
                     {t.saveAsAnnotation}
                   </Button>
                 )}
@@ -1320,30 +1345,6 @@ function ConversationThread({
             })}
           </section>
         )}
-        <textarea
-          ref={composer}
-          aria-label={t.assistant}
-          placeholder={t.chatPlaceholder}
-          maxLength={8000}
-          value={draft}
-          aria-autocomplete="list"
-          aria-controls={mentionOpen ? `mentions-${conversation.id}` : undefined}
-          aria-expanded={mentionOpen}
-          onChange={(event) => {
-            changeDraft(event.target.value);
-            setMentionDismissed(false);
-          }}
-          onKeyDown={(event) => {
-            if (!mentionOpen) return;
-            if (event.key === 'Escape') {
-              event.preventDefault();
-              event.stopPropagation();
-              setMentionDismissed(true);
-              return;
-            }
-            if (!event.shiftKey && mentionPicker.current?.key(event.key)) event.preventDefault();
-          }}
-        />
         {mentionOpen && (
           <div id={`mentions-${conversation.id}`}>
             <TutorMentionPicker
@@ -1360,36 +1361,73 @@ function ConversationThread({
             />
           </div>
         )}
-        <div className="composer-actions">
-          <IconButton label={t.addQuestionAttachment} onClick={() => setAttachmentPicker(true)}>
-            <Plus size={16} />
-          </IconButton>
-          <Button
-            variant="ghost"
-            className="web-toggle"
-            aria-pressed={webDraft.enabled}
-            title={t.webOptInNotice}
-            onClick={() => writeWeb({ enabled: !webDraft.enabled, stamp: crypto.randomUUID() })}
-          >
-            <Globe size={14} />
-            {t.web}
-          </Button>
-          <GenerationControl
-            value={generationPreference}
-            defaultModel={catalog.settings.model}
-            change={changeGeneration}
-            t={t}
+        <div className="composer-card">
+          <textarea
+            ref={composer}
+            aria-label={t.assistant}
+            placeholder={t.chatPlaceholder}
+            maxLength={8000}
+            value={draft}
+            aria-autocomplete="list"
+            aria-controls={mentionOpen ? `mentions-${conversation.id}` : undefined}
+            aria-expanded={mentionOpen}
+            onChange={(event) => {
+              changeDraft(event.target.value);
+              setMentionDismissed(false);
+            }}
+            onKeyDown={(event) => {
+              if (!mentionOpen) return;
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                event.stopPropagation();
+                setMentionDismissed(true);
+                return;
+              }
+              if (!event.shiftKey && mentionPicker.current?.key(event.key)) event.preventDefault();
+            }}
           />
-          <Button
-            variant="primary"
-            type="submit"
-            disabled={pending || mentionPending || !draft.trim()}
-          >
-            <ArrowUp size={15} />
-            {conversation.pending ? t.queueQuestion : t.send}
-          </Button>
+          <div className="composer-actions">
+            <IconButton
+              label={t.addQuestionAttachment}
+              aria-pressed={attachmentPicker}
+              onClick={() => setAttachmentPicker(true)}
+            >
+              <Plus />
+            </IconButton>
+            <Button
+              variant="ghost"
+              className="web-toggle"
+              aria-pressed={webDraft.enabled}
+              title={t.webOptInNotice}
+              onClick={() => writeWeb({ enabled: !webDraft.enabled, stamp: crypto.randomUUID() })}
+            >
+              <Globe2 />
+              {t.web}
+            </Button>
+            <GenerationControl
+              value={generationPreference}
+              defaultModel={catalog.settings.model}
+              change={changeGeneration}
+              t={t}
+            />
+            <Button
+              variant="primary"
+              type="submit"
+              className="composer-send"
+              aria-label={conversation.pending ? t.queueQuestion : t.send}
+              title={conversation.pending ? t.queueQuestion : t.send}
+              disabled={pending || mentionPending || !draft.trim()}
+            >
+              {pending ? (
+                <LoaderCircle className="spin" />
+              ) : conversation.pending ? (
+                <ListPlus />
+              ) : (
+                <ArrowUp />
+              )}
+            </Button>
+          </div>
         </div>
-        {webDraft.enabled && <small className="web-opt-in-notice">{t.webOptInNotice}</small>}
       </form>
       {attachmentPicker && (
         <AttachmentPicker
