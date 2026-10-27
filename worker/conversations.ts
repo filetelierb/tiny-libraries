@@ -373,6 +373,7 @@ export async function conversationRoute({
           .max(20)
           .refine((ids) => new Set(ids).size === ids.length)
           .optional(),
+        pausedSourceIds: z.array(z.string().uuid()).max(20).optional(),
       })
       .parse(await body());
     for (const id of input.sourceIds || [])
@@ -380,6 +381,10 @@ export async function conversationRoute({
     const next = await storage.transaction(async (transaction) => {
       const current = (await transaction.get<Conversation>(key))!;
       const value = { ...current, ...input, updatedAt: new Date().toISOString() };
+      // A paused reference must still be one of the conversation's references.
+      value.pausedSourceIds = [
+        ...new Set((value.pausedSourceIds || []).filter((id) => value.sourceIds.includes(id))),
+      ];
       await transaction.put(key, value);
       return value;
     });

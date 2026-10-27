@@ -658,6 +658,8 @@ const en = {
     'Start a conversation with your tutor. Add references when you want to discuss library material.',
   references: 'Persistent references',
   removeReference: 'Remove reference',
+  pauseReference: 'Pause reference',
+  resumeReference: 'Use reference again',
   missingReference: 'Unavailable reference',
   referencesNotice:
     'These references stay available across questions. Changing open tabs does not change them. Prepare each reference before asking about it.',
@@ -1702,6 +1704,8 @@ const es: Dictionary = {
     'Inicia una conversación con el tutor. Añade referencias para hablar sobre material de la biblioteca.',
   references: 'Referencias permanentes',
   removeReference: 'Quitar referencia',
+  pauseReference: 'Pausar referencia',
+  resumeReference: 'Volver a usar referencia',
   missingReference: 'Referencia no disponible',
   referencesNotice:
     'Estas referencias están disponibles en todas las preguntas. Cambiar de pestaña no las modifica. Prepara cada referencia antes de preguntar sobre ella.',

@@ -7897,3 +7897,7 @@ body:has(.panel-resizer.resizing) {
 .study-panel .floating-resizer {
   left: -3px;
 }
+.reference-list li.paused > span {
+  color: var(--muted-text);
+  text-decoration: line-through;
+}

@@ -17,6 +17,8 @@ import {
   FileStack,
   FileText,
   StickyNote,
+  Pause,
+  Play,
 } from 'lucide-react';
 import { readWebDraft, type WebDraft } from '../../shared/tutor-web';
 import {
@@ -787,6 +789,7 @@ function ConversationThread({
       document.removeEventListener('visibilitychange', wake);
     };
   }, [conversation.id]);
+  const paused = new Set(conversation.pausedSourceIds || []);
   const patch = async (value: Partial<Conversation>) => {
     try {
       await receive(
@@ -869,6 +872,9 @@ function ConversationThread({
           return;
         }
         if (!(await patch({ sourceIds: [...conversation.sourceIds, file.id] }))) return;
+      } else if (paused.has(file.id)) {
+        // Mentioning a paused reference uses it again.
+        if (!(await patch({ pausedSourceIds: [...paused].filter((id) => id !== file.id) }))) return;
       }
       // A reference save may finish after the user has started a different draft.
       if (draftRef.current === before) {
@@ -889,7 +895,12 @@ function ConversationThread({
     const resource = event.dataTransfer.getData(RESOURCE_DRAG_TYPE);
     if (resource) {
       const file = catalog.files.find((entry) => entry.id === JSON.parse(resource).id);
-      if (!file || conversation.sourceIds.includes(file.id)) return;
+      if (!file) return;
+      if (conversation.sourceIds.includes(file.id)) {
+        if (paused.has(file.id))
+          await patch({ pausedSourceIds: [...paused].filter((id) => id !== file.id) });
+        return;
+      }
       if (conversation.sourceIds.length >= 20) return onError(t.referenceLimit);
       await patch({ sourceIds: [...conversation.sourceIds, file.id] });
       return;
@@ -1072,7 +1083,7 @@ function ConversationThread({
         prompt: text,
         concepts: conceptDraftRef.current.items.map(({ id, version }) => ({ id, version })),
         attachments: attachmentRef.current.map((item) => item.id),
-        references: [...conversation.sourceIds],
+        references: conversation.sourceIds.filter((id) => !paused.has(id)),
         generation: resolveTutorGeneration(generationRef.current, catalog.settings.model),
         ...(webRef.current.enabled ? { webSearch: true as const } : {}),
         ...(contextRef.current ? { context: contextRef.current } : {}),
@@ -1399,7 +1410,11 @@ function ConversationThread({
             >
               <FileStack />
               <span>
-                {t.references} ({conversation.sourceIds.length})
+                {t.references} (
+                {paused.size
+                  ? `${conversation.sourceIds.length - paused.size}/${conversation.sourceIds.length}`
+                  : conversation.sourceIds.length}
+                )
               </span>
               <ChevronDown />
             </button>
@@ -1615,10 +1630,25 @@ function ConversationThread({
             <ul className="reference-list" aria-label={t.references}>
               {conversation.sourceIds.map((id) => {
                 const file = catalog.files.find((item) => item.id === id);
+                const off = paused.has(id);
                 return (
-                  <li key={id}>
+                  <li key={id} className={off ? 'paused' : undefined}>
                     <FileText />
                     <span title={file?.name}>{file?.name || t.missingReference}</span>
+                    <IconButton
+                      label={`${off ? t.resumeReference : t.pauseReference}: ${file?.name || id}`}
+                      aria-pressed={off}
+                      disabled={pending}
+                      onClick={() =>
+                        void patch({
+                          pausedSourceIds: off
+                            ? [...paused].filter((value) => value !== id)
+                            : [...paused, id],
+                        })
+                      }
+                    >
+                      {off ? <Play /> : <Pause />}
+                    </IconButton>
                     <IconButton
                       label={`${t.removeReference}: ${file?.name || id}`}
                       disabled={pending}

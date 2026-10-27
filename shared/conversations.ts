@@ -63,6 +63,8 @@ export const conversationSchema = z.object({
     .array(z.string().uuid())
     .max(20)
     .refine((ids) => new Set(ids).size === ids.length),
+  /** References kept in the tray but left out of new questions until reactivated. */
+  pausedSourceIds: z.array(z.string().uuid()).max(20).optional(),
   messages: z.array(chatMessageSchema).max(100),
   createdAt: z.string(),
   updatedAt: z.string(),
