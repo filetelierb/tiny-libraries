@@ -111,7 +111,10 @@ const en = {
   assessmentSetup: 'Assessment setup',
   assessmentSetupHint:
     'Choose studied files, saved evidence, or both, then the kind of review you want. Questions use only this captured selection.',
-  assessmentGuidance: 'How would you like to review? (optional)',
+  assessmentGuidance: 'How would you like to review?',
+  optional: 'Optional',
+  selectedOf: 'selected of',
+  assessmentRefreshShort: 'Refresh files',
   assessmentGuidanceHint:
     'Topics, difficulty or question types. Leave blank for a mix of the four question types.',
   assessmentIncludedFiles: 'Files to include',
@@ -1143,7 +1146,10 @@ const es: Dictionary = {
   assessmentSetup: 'Configurar repaso',
   assessmentSetupHint:
     'Elige archivos estudiados, evidencia guardada o ambos, y después el tipo de repaso. Las preguntas usan solo esta selección.',
-  assessmentGuidance: '¿Cómo quieres repasar? (opcional)',
+  assessmentGuidance: '¿Cómo quieres repasar?',
+  optional: 'Opcional',
+  selectedOf: 'seleccionados de',
+  assessmentRefreshShort: 'Actualizar archivos',
   assessmentGuidanceHint:
     'Temas, dificultad o tipos de preguntas. Deja el campo vacío para combinar los cuatro tipos.',
   assessmentIncludedFiles: 'Archivos a incluir',

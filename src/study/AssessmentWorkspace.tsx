@@ -306,12 +306,11 @@ export function AssessmentWorkspace({
             </>
           ) : (
             <>
-              <h3>{t.assessmentSetup}</h3>
-              <p className="muted">{t.assessmentSetupHint}</p>
+              <p className="assessment-subtitle">{t.assessmentSetupHint}</p>
               {loading ? (
                 <p role="status">{t.loading}</p>
               ) : (
-                <>
+                <div className="assessment-setup-card">
                   {unfinished && (
                     <div className="notice">
                       <p>{t.assessmentUnfinishedNotice}</p>
@@ -319,8 +318,11 @@ export function AssessmentWorkspace({
                     </div>
                   )}
                   <label className="assessment-guidance">
-                    {t.assessmentGuidance}
+                    <span>
+                      {t.assessmentGuidance} <small>{t.optional}</small>
+                    </span>
                     <textarea
+                      rows={3}
                       value={config.guidance}
                       maxLength={4000}
                       onChange={(e) => update({ ...config, guidance: e.target.value })}
@@ -328,31 +330,21 @@ export function AssessmentWorkspace({
                     />
                   </label>
                   <div className="assessment-picker-heading">
-                    <h4>
-                      {t.assessmentIncludedFiles} · {config.sourceIds.length}
-                    </h4>
-                    <Button
-                      variant="ghost"
-                      disabled={busy}
-                      aria-label={t.assessmentRefreshSources}
-                      onClick={() => {
-                        setError('');
-                        void loadOptions().catch((e) => setError((e as Error).message));
-                      }}
-                    >
-                      <RefreshCw size={14} />
-                    </Button>
-                  </div>
-                  <div className="assessment-picker-actions">
-                    <Button
-                      variant="ghost"
-                      onClick={() => update({ ...config, sourceIds: [...eligible].slice(0, 40) })}
-                    >
-                      {t.assessmentSelectAll}
-                    </Button>
-                    <Button variant="ghost" onClick={() => update({ ...config, sourceIds: [] })}>
-                      {t.assessmentDeselectAll}
-                    </Button>
+                    <span className="assessment-field-label">{t.assessmentIncludedFiles}</span>
+                    <span className="assessment-picker-actions">
+                      <span>
+                        {config.sourceIds.length} {t.selectedOf} {eligible.size}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => update({ ...config, sourceIds: [...eligible].slice(0, 40) })}
+                      >
+                        {t.assessmentSelectAll}
+                      </button>
+                      <button type="button" onClick={() => update({ ...config, sourceIds: [] })}>
+                        {t.assessmentDeselectAll}
+                      </button>
+                    </span>
                   </div>
                   <label className="library-search">
                     <Search size={14} />
@@ -402,7 +394,20 @@ export function AssessmentWorkspace({
                       }
                     />
                   </div>
-                  <p className="muted">{t.assessmentFileLimit}</p>
+                  <p className="assessment-helper">
+                    {t.assessmentFileLimit}{' '}
+                    <button
+                      type="button"
+                      disabled={busy}
+                      title={t.assessmentRefreshSources}
+                      onClick={() => {
+                        setError('');
+                        void loadOptions().catch((e) => setError((e as Error).message));
+                      }}
+                    >
+                      {t.assessmentRefreshShort}
+                    </button>
+                  </p>
                   {options.some((o) => !o.prepared) && (
                     <details>
                       <summary>{t.assessmentUnpreparedFiles}</summary>
@@ -534,8 +539,7 @@ export function AssessmentWorkspace({
                               }
                             />
                             <span>
-                              {row.title}
-                              <small>{new Date(row.createdAt).toLocaleString()}</small>
+                              {row.title} <small>· {new Date(row.createdAt).toLocaleString()}</small>
                             </span>
                           </label>
                         ))}
@@ -559,7 +563,7 @@ export function AssessmentWorkspace({
                   >
                     {busy ? t.assessmentPreparing : t.assessmentPrepare}
                   </Button>
-                </>
+                </div>
               )}
             </>
           )}
@@ -592,7 +596,7 @@ export function AssessmentWorkspace({
             notice={t.assessmentSavedEvidenceNotice}
           />
         )}
-        <aside className="assessment-history">
+        <section className="assessment-history">
           <div className="assessment-picker-heading">
             <h3>{t.assessmentSavedReviews}</h3>
             <Button
@@ -603,10 +607,12 @@ export function AssessmentWorkspace({
               <RefreshCw size={14} />
             </Button>
           </div>
-          <Button variant="ghost" onClick={() => choose(null)}>
-            <Plus size={14} />
-            {t.assessmentNew}
-          </Button>
+          {selected && (
+            <Button variant="ghost" size="sm" onClick={() => choose(null)}>
+              <Plus size={14} />
+              {t.assessmentNew}
+            </Button>
+          )}
           {!history.length && !loading && <p className="muted">{t.assessmentNoHistory}</p>}
           {history.map((row) => (
             <button
@@ -621,7 +627,9 @@ export function AssessmentWorkspace({
                 {new Date(row.createdAt).toLocaleString()} · {row.config.count}{' '}
                 {t.assessmentQuestions}
               </small>
-              <span>{t[`assessmentStatus_${row.status}`]}</span>
+              <span className="assessment-history-status">
+                {t[`assessmentStatus_${row.status}`]}
+              </span>
             </button>
           ))}
           {cursor && (
@@ -631,7 +639,7 @@ export function AssessmentWorkspace({
               {t.assessmentLoadMore}
             </Button>
           )}
-        </aside>
+        </section>
       </div>
     </Modal>
   );
