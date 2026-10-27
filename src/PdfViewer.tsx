@@ -9,14 +9,15 @@ import {
 } from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import 'pdfjs-dist/web/pdf_viewer.css';
-import { ChevronLeft, ChevronRight, Minus, Plus, LoaderCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Minus, Plus, LoaderCircle, PenTool } from 'lucide-react';
 import type { Source } from '../shared/domain';
 import type { Annotation, SourceLocation, DrawingStroke } from '../shared/annotations';
 import { listAnnotations } from './annotations/api';
 import { api } from './api';
-import { StrokeLayer } from './annotations/Sketch';
+import { PinLayer, Sketch, StrokeLayer } from './annotations/Sketch';
+import { plainDocument } from '../shared/annotations';
 import { boundedPage, pdfScale, readPdfZoom, type PdfZoom } from '../shared/pdf-reader';
-import { IconButton } from './design/components';
+import { Button, IconButton, Modal } from './design/components';
 import type { T } from './i18n';
 
 GlobalWorkerOptions.workerSrc = workerUrl;
@@ -49,7 +50,15 @@ export default function PdfViewer({
     initialPage = useRef(Math.max(1, position || 1));
   positionCallback.current = onPosition;
   const storageKey = `tl:pdf-zoom:${source.id}:v${source.version}`;
-  const [markups, setMarkups] = useState<Annotation[]>([]);
+  const [markups, setMarkups] = useState<Annotation[]>([]),
+    [markupTick, setMarkupTick] = useState(0),
+    [pageDrawing, setPageDrawing] = useState<{
+      page: number;
+      image: { url: string; width: number; height: number };
+      strokes: DrawingStroke[];
+      saving: boolean;
+      error: string;
+    } | null>(null);
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
@@ -73,7 +82,48 @@ export default function PdfViewer({
       cancelled = true;
       clearInterval(timer);
     };
-  }, [sessionId, source.id, source.version, annotationTick]);
+  }, [sessionId, source.id, source.version, annotationTick, markupTick]);
+  /** Draw pen, highlight and numbered pins over a snapshot of the current page. */
+  const drawOnPage = () => {
+    const canvas = scroll.current?.querySelector<HTMLCanvasElement>(
+      `[data-pdf-page="${page}"] canvas`,
+    );
+    if (!canvas?.width) return;
+    setPageDrawing({
+      page,
+      image: { url: canvas.toDataURL('image/png'), width: canvas.width, height: canvas.height },
+      strokes: [],
+      saving: false,
+      error: '',
+    });
+  };
+  const savePageDrawing = async () => {
+    if (!pageDrawing?.strokes.length) return;
+    setPageDrawing({ ...pageDrawing, saving: true, error: '' });
+    try {
+      const id = crypto.randomUUID();
+      await api(`/annotations/${id}`, 'PUT', {
+        kind: 'annotation',
+        id,
+        sessionId,
+        sourceId: source.id,
+        sourceVersion: source.version,
+        title: `${t.page} ${pageDrawing.page}`,
+        document: plainDocument(''),
+        location: { page: pageDrawing.page },
+        strokes: pageDrawing.strokes,
+        expectedRevision: 0,
+      });
+      setPageDrawing(null);
+      setMarkupTick((value) => value + 1);
+    } catch (error) {
+      setPageDrawing((current) =>
+        current
+          ? { ...current, saving: false, error: error instanceof Error ? error.message : t.error }
+          : current,
+      );
+    }
+  };
   const [document, setDocument] = useState<PDFDocumentProxy | null>(null),
     [pages, setPages] = useState<Page[]>([]),
     [page, setPage] = useState(Math.max(1, position || 1)),
@@ -320,7 +370,45 @@ export default function PdfViewer({
         >
           <Plus />
         </IconButton>
+        <IconButton label={t.drawOnPage} disabled={!loaded} onClick={drawOnPage}>
+          <PenTool />
+        </IconButton>
       </div>
+      {pageDrawing && (
+        <Modal
+          title={`${t.drawOnPage} · ${t.page} ${pageDrawing.page}`}
+          close={() => setPageDrawing(null)}
+          closeLabel={t.close}
+          className="page-drawing"
+        >
+          <Sketch
+            image={pageDrawing.image}
+            strokes={pageDrawing.strokes}
+            change={(strokes) =>
+              setPageDrawing((current) => (current ? { ...current, strokes } : current))
+            }
+            t={t}
+          />
+          {pageDrawing.error && (
+            <p className="form-error" role="alert">
+              {pageDrawing.error}
+            </p>
+          )}
+          <div className="modal-actions">
+            <Button
+              variant="primary"
+              disabled={!pageDrawing.strokes.length || pageDrawing.saving}
+              onClick={() => void savePageDrawing()}
+            >
+              {pageDrawing.saving && <LoaderCircle size={14} className="spin" />}
+              {t.saveDrawing}
+            </Button>
+            <Button variant="ghost" onClick={() => setPageDrawing(null)}>
+              {t.cancel}
+            </Button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -433,6 +521,7 @@ function PdfPage({
           <StrokeLayer strokes={strokes} />
         </svg>
       )}
+      <PinLayer strokes={strokes} />
       {error && (
         <p role="alert" className="form-error">
           {t.pdfPageError} {page.number}

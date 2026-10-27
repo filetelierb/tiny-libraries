@@ -190,6 +190,8 @@ export function richText(node: RichNode): string {
   return text;
 }
 export const strokeSchema = z.object({
+  /** A pin marks one point for a numbered comment; strokes are freehand lines. */
+  kind: z.literal('pin').optional(),
   color: z.enum(['#007f76', '#e5913f', '#1f6bbb', '#c33d45', '#202f36']),
   width: z.number().min(1).max(12),
   points: z

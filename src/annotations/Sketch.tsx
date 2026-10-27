@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Pencil, Highlighter, Eraser, Undo2, Trash2 } from 'lucide-react';
+import { Pencil, Highlighter, Eraser, MapPin, Undo2, Trash2 } from 'lucide-react';
 import type { DrawingStroke } from '../../shared/annotations';
 import { IconButton } from '../design/components';
 import type { T } from '../i18n';
@@ -7,19 +7,44 @@ import type { T } from '../i18n';
 export function StrokeLayer({ strokes }: { strokes: DrawingStroke[] }) {
   return (
     <>
-      {strokes.map((stroke, index) => (
-        <polyline
-          key={index}
-          points={stroke.points.map((point) => `${point.x * 1000},${point.y * 1000}`).join(' ')}
-          fill="none"
-          stroke={stroke.color}
-          strokeWidth={stroke.width}
-          opacity={stroke.width >= 10 ? 0.3 : 1}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          vectorEffect="non-scaling-stroke"
-        />
-      ))}
+      {strokes.map((stroke, index) =>
+        stroke.kind === 'pin' ? null : (
+          <polyline
+            key={index}
+            points={stroke.points.map((point) => `${point.x * 1000},${point.y * 1000}`).join(' ')}
+            fill="none"
+            stroke={stroke.color}
+            strokeWidth={stroke.width}
+            opacity={stroke.width >= 10 ? 0.3 : 1}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            vectorEffect="non-scaling-stroke"
+          />
+        ),
+      )}
+    </>
+  );
+}
+/** Numbered comment pins, drawn as fixed-size markers over a scaled page or image. */
+export function PinLayer({ strokes }: { strokes: DrawingStroke[] }) {
+  return (
+    <>
+      {strokes
+        .filter((stroke) => stroke.kind === 'pin')
+        .map((stroke, index) => (
+          <span
+            key={index}
+            className="drawing-pin"
+            aria-hidden="true"
+            style={{
+              left: `${stroke.points[0].x * 100}%`,
+              top: `${stroke.points[0].y * 100}%`,
+              background: stroke.color,
+            }}
+          >
+            {index + 1}
+          </span>
+        ))}
     </>
   );
 }
@@ -34,7 +59,7 @@ export function Sketch({
   change: (value: DrawingStroke[]) => void;
   t: T;
 }) {
-  const [tool, setTool] = useState<'pen' | 'highlight' | 'eraser'>('pen'),
+  const [tool, setTool] = useState<'pen' | 'highlight' | 'pin' | 'eraser'>('pen'),
     [color, setColor] = useState<DrawingStroke['color']>('#007f76'),
     [live, setLive] = useState<DrawingStroke | null>(null),
     [undoCount, setUndoCount] = useState(0);
@@ -61,6 +86,13 @@ export function Sketch({
           onClick={() => setTool('highlight')}
         >
           <Highlighter />
+        </IconButton>
+        <IconButton
+          label={t.commentPin}
+          aria-pressed={tool === 'pin'}
+          onClick={() => setTool('pin')}
+        >
+          <MapPin />
         </IconButton>
         <IconButton
           label={t.eraseStroke}
@@ -125,6 +157,18 @@ export function Sketch({
               );
               return;
             }
+            if (tool === 'pin') {
+              replace([
+                ...strokesRef.current,
+                {
+                  kind: 'pin',
+                  color,
+                  width: 3,
+                  points: [{ x: Math.round(x * 1000) / 1000, y: Math.round(y * 1000) / 1000 }],
+                },
+              ]);
+              return;
+            }
             drawing.current = {
               color,
               width: tool === 'highlight' ? 12 : 3,
@@ -186,6 +230,7 @@ export function Sketch({
         >
           <StrokeLayer strokes={[...strokes, ...(live ? [live] : [])]} />
         </svg>
+        <PinLayer strokes={strokes} />
       </div>
       <p className="muted">{t.drawingHelp}</p>
     </div>
