@@ -629,6 +629,63 @@ export function App() {
       ...(references ? { references } : {}),
     });
   }
+  // Bookmarks are labelled inline in the bookmarks panel when it can show.
+  const bookmarkInline = right && !focus && tab === 'bookmarks';
+  useEffect(() => {
+    if (!bookmarkIntent) return;
+    setTab('bookmarks');
+    setRight(true);
+  }, [bookmarkIntent]);
+  const bookmarkEditor = (inline: boolean) =>
+    bookmarkIntent &&
+    session && (
+      <BookmarkEditor
+        intent={bookmarkIntent}
+        sessionId={session.id}
+        t={t}
+        inline={inline}
+        close={() => setBookmarkIntent(null)}
+        saved={() => {
+          setBookmarkIntent(null);
+          setBookmarkTick((value) => value + 1);
+          setRight(true);
+          setTab('bookmarks');
+        }}
+      />
+    );
+  // New and edited annotations open inline in the annotations panel when it can show.
+  const annotationInline = right && !focus && tab === 'notes';
+  useEffect(() => {
+    if (!annotationRequest) return;
+    setTab('notes');
+    setRight(true);
+  }, [annotationRequest?.id]);
+  const annotationEditor = (inline: boolean) =>
+    annotationRequest &&
+    catalog &&
+    session && (
+      <ContentBoundary t={t} close={() => setAnnotationRequest(null)}>
+        <Suspense fallback={<p role="status">{t.loadingAnnotations}</p>}>
+          <AnnotationEditor
+            catalog={catalog}
+            treeActions={treeActions}
+            key={annotationRequest.id}
+            request={annotationRequest}
+            sessionId={session.id}
+            source={catalog.files.find((file) => file.id === annotationRequest.sourceId) || null}
+            t={t}
+            inline={inline}
+            close={() => setAnnotationRequest(null)}
+            saved={() => {
+              setAnnotationTick((value) => value + 1);
+              setAnnotationRequest(null);
+              setTab('notes');
+              setRight(true);
+            }}
+          />
+        </Suspense>
+      </ContentBoundary>
+    );
   function navigateAnnotation(sourceId: string, location: SourceLocation, label = 'annotation') {
     citeFrom(sourceId, {
       id: label,
@@ -1515,6 +1572,7 @@ export function App() {
                 })
               }
               navigate={navigateAnnotation}
+              composer={annotationInline ? annotationEditor(true) : null}
               attach={(item) =>
                 void run(async () => {
                   const prepared = await api<QuestionAttachment>('/tutor-attachments', 'POST', {
@@ -1723,6 +1781,7 @@ export function App() {
               {tab === 'bookmarks' && (
                 <BookmarksPanel
                   items={activeBookmarks}
+                  composer={bookmarkInline ? bookmarkEditor(true) : null}
                   sourceName={active?.name}
                   filter={bookmarkFilter}
                   changeFilter={(value) => {
@@ -1817,20 +1876,7 @@ export function App() {
           }}
         />
       )}
-      {bookmarkIntent && (
-        <BookmarkEditor
-          intent={bookmarkIntent}
-          sessionId={session.id}
-          t={t}
-          close={() => setBookmarkIntent(null)}
-          saved={() => {
-            setBookmarkIntent(null);
-            setBookmarkTick((value) => value + 1);
-            setRight(true);
-            setTab('bookmarks');
-          }}
-        />
-      )}
+      {bookmarkIntent && !bookmarkInline && bookmarkEditor(false)}
       {assessmentOpen && (
         <ContentBoundary t={t} close={() => setAssessmentOpen(false)}>
           <Suspense
@@ -1878,28 +1924,7 @@ export function App() {
           </Suspense>
         </ContentBoundary>
       )}
-      {annotationRequest && (
-        <ContentBoundary t={t} close={() => setAnnotationRequest(null)}>
-          <Suspense fallback={<p role="status">{t.loadingAnnotations}</p>}>
-            <AnnotationEditor
-              catalog={catalog}
-              treeActions={treeActions}
-              key={annotationRequest.id}
-              request={annotationRequest}
-              sessionId={session.id}
-              source={catalog.files.find((file) => file.id === annotationRequest.sourceId) || null}
-              t={t}
-              close={() => setAnnotationRequest(null)}
-              saved={() => {
-                setAnnotationTick((value) => value + 1);
-                setAnnotationRequest(null);
-                setTab('notes');
-                setRight(true);
-              }}
-            />
-          </Suspense>
-        </ContentBoundary>
-      )}
+      {annotationRequest && !annotationInline && annotationEditor(false)}
       {modal === 'settings' && (
         <SettingsModal
           initial={catalog.settings}

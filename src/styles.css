@@ -6987,3 +6987,111 @@ body:has(.panel-resizer.resizing) {
   font-size: 12px;
   line-height: 1.625;
 }
+
+/* Inline annotation editor inside the annotations panel. */
+.annotation-composer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid color-mix(in oklch, var(--primary) 30%, transparent);
+  border-radius: var(--radius-xl);
+  background: color-mix(in oklch, var(--primary) 5%, transparent);
+  font-size: 12px;
+}
+.annotation-composer > h2 {
+  margin: 0;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+}
+.annotation-composer .annotation-source {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted-text);
+}
+.annotation-composer .annotation-edit-fields > label {
+  font-size: 12px;
+  font-weight: 500;
+}
+.annotation-composer input {
+  min-height: 32px;
+  font-size: 12px;
+}
+.annotation-composer .rich-toolbar,
+.annotation-composer .table-tools {
+  gap: 2px;
+  margin: 0;
+  padding: 4px;
+  border-radius: 14px 14px 0 0;
+  background: var(--card);
+}
+.annotation-composer .rich-toolbar .icon-button,
+.annotation-composer .table-tools .icon-button {
+  width: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+}
+.annotation-composer .rich-toolbar select {
+  min-height: 28px;
+  font-size: 12px;
+}
+.annotation-composer .annotation-body,
+.annotation-composer .annotation-markdown {
+  border-radius: 0 0 14px 14px;
+  background: var(--card);
+  font-size: 12px;
+}
+.annotation-composer .annotation-markdown {
+  border: 0;
+  font-family: var(--font-mono);
+}
+.annotation-composer .selected-quote {
+  margin: 0;
+  font-size: 11px;
+}
+.annotation-composer .modal-actions {
+  margin-top: 0;
+}
+.annotation-composer .rich-toolbar {
+  margin-bottom: 0;
+  border-bottom: 0;
+}
+.annotation-composer .rich-toolbar ~ :is(.annotation-body, .annotation-markdown) {
+  margin-top: 0;
+  max-height: 240px;
+}
+.annotation-composer .annotation-body .ProseMirror,
+.annotation-composer .annotation-body [contenteditable] {
+  min-height: 96px;
+  padding: 10px 12px;
+  font-size: 12px;
+}
+.annotation-composer :is(.capture-collection, .capture-gallery-tools) .button {
+  min-height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+.bookmark-composer > p,
+.bookmark-composer blockquote {
+  margin: 0;
+  font-size: 12px;
+}
+.bookmark-composer form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.bookmark-composer textarea {
+  min-height: 96px;
+  max-height: 240px;
+  field-sizing: content;
+  resize: none;
+  background: var(--card);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.bookmark-composer label {
+  font-size: 12px;
+}

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   FileText,
   Paperclip,
@@ -34,6 +34,7 @@ export function AnnotationsPanel({
   edit,
   navigate,
   attach,
+  composer,
   onError,
 }: {
   sessionId: string;
@@ -47,6 +48,7 @@ export function AnnotationsPanel({
   edit: (value: Annotation) => void;
   navigate: (sourceId: string, location: SourceLocation) => void;
   attach: (item: AnnotationSummary) => void;
+  composer?: ReactNode;
   onError: (message: string) => void;
 }) {
   const [items, setItems] = useState<AnnotationSummary[]>([]),
@@ -241,6 +243,7 @@ export function AnnotationsPanel({
         )}
       </div>
       <div className="annotation-list">
+        {composer}
         {loading && <p role="status">{t.loadingAnnotations}</p>}
         <p className="sr-only" role="status">
           {!loading

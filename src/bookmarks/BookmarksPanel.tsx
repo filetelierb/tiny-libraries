@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Bookmark, Plus, Pencil, Trash2, RotateCcw, Play } from 'lucide-react';
 import type { AnnotationSummary } from '../../shared/annotations';
 import { Button, IconButton } from '../design/components';
@@ -14,6 +14,7 @@ export function BookmarksPanel({
   navigate,
   remove,
   sourceName,
+  composer,
 }: {
   items: AnnotationSummary[];
   filter: BookmarkFilter;
@@ -24,6 +25,7 @@ export function BookmarksPanel({
   navigate: (value: AnnotationSummary) => void;
   remove: (value: AnnotationSummary) => Promise<void>;
   sourceName?: string;
+  composer?: ReactNode;
 }) {
   const [deleted, setDeleted] = useState(false),
     [target, setTarget] = useState<string | null>(null),
@@ -67,6 +69,7 @@ export function BookmarksPanel({
         </label>
       </div>
       <div className="annotation-list">
+        {composer}
         {!visible.length && (
           <div className="panel-empty">
             <Bookmark />

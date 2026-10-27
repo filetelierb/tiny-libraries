@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useEditor, useEditorState, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { TableKit } from '@tiptap/extension-table';
@@ -65,7 +65,45 @@ type EditorProps = {
   t: T;
   close: () => void;
   saved: (value: Annotation) => void;
+  /** Renders inside the annotations panel instead of a dialog. */
+  inline?: boolean;
 };
+/** The editor frame: a dialog, or a tinted card inside the annotations panel. */
+function EditorShell({
+  inline,
+  title,
+  close,
+  t,
+  children,
+}: {
+  inline?: boolean;
+  title: string;
+  close: () => void;
+  t: T;
+  children: ReactNode;
+}) {
+  if (!inline)
+    return (
+      <Modal title={title} close={close} closeLabel={t.close}>
+        {children}
+      </Modal>
+    );
+  return (
+    <section
+      className="annotation-composer"
+      aria-label={title}
+      onKeyDown={(event) => {
+        if (event.key !== 'Escape' || (event.target as HTMLElement).closest('dialog')) return;
+        event.preventDefault();
+        event.stopPropagation();
+        close();
+      }}
+    >
+      <h2>{title}</h2>
+      {children}
+    </section>
+  );
+}
 export default function AnnotationEditor(props: EditorProps) {
   const [session, setSession] = useState<EditorSession | null>(null),
     [error, setError] = useState('');
@@ -86,13 +124,14 @@ export default function AnnotationEditor(props: EditorProps) {
   return session ? (
     <EditorForm {...props} session={session} />
   ) : (
-    <Modal
+    <EditorShell
+      inline={props.inline}
       title={props.request.initial ? props.t.editAnnotation : props.t.newAnnotation}
       close={props.close}
-      closeLabel={props.t.close}
+      t={props.t}
     >
       <p role={error ? 'alert' : 'status'}>{error || props.t.loadingAnnotations}</p>
-    </Modal>
+    </EditorShell>
   );
 }
 function EditorForm({
@@ -104,6 +143,7 @@ function EditorForm({
   close,
   saved,
   session,
+  inline,
 }: { session: EditorSession } & EditorProps) {
   const [draft, setDraft] = useState(session.note),
     [pending, setPending] = useState(false),
@@ -398,12 +438,13 @@ function EditorForm({
     ).slice(0, 600);
   }
   return (
-    <Modal
+    <EditorShell
+      inline={inline}
       title={request.initial ? t.editAnnotation : t.newAnnotation}
       close={() => {
         if (!pending) void leave();
       }}
-      closeLabel={t.close}
+      t={t}
     >
       <div className="annotation-editor" aria-busy={pending}>
         <fieldset className="annotation-edit-fields" disabled={pending || !!conflict}>
@@ -665,7 +706,7 @@ function EditorForm({
           >
             {pending ? t.working : draft.pending ? t.captureRetrySave : t.saveAnnotation}
           </Button>
-          <Button disabled={pending} onClick={() => void leave()}>
+          <Button variant="ghost" disabled={pending} onClick={() => void leave()}>
             {t.cancel}
           </Button>
         </div>
@@ -706,6 +747,6 @@ function EditorForm({
           </form>
         </Modal>
       )}
-    </Modal>
+    </EditorShell>
   );
 }

@@ -12,12 +12,15 @@ export function BookmarkEditor({
   t,
   close,
   saved,
+  inline = false,
 }: {
   intent: BookmarkIntent;
   sessionId: string;
   t: T;
   close: () => void;
   saved: () => void;
+  /** Renders as a tinted card in the bookmarks panel instead of a dialog. */
+  inline?: boolean;
 }) {
   const [id] = useState(() => intent.initial?.id || crypto.randomUUID());
   const key = `tl:bookmark-draft:${id}`;
@@ -36,12 +39,9 @@ export function BookmarkEditor({
       close();
     }
   };
-  return (
-    <Modal
-      title={intent.initial ? t.editBookmark : t.newBookmark}
-      close={cancel}
-      closeLabel={t.close}
-    >
+  const title = intent.initial ? t.editBookmark : t.newBookmark;
+  const content = (
+    <>
       <p className="muted">
         {intent.source.name}
         {intent.location.page
@@ -81,11 +81,18 @@ export function BookmarkEditor({
       >
         <label>
           {t.bookmarkLabel}
-          <input
+          <textarea
             autoFocus
             maxLength={240}
             disabled={pending}
             value={label}
+            placeholder={t.bookmarkPlaceholder}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                event.preventDefault();
+                event.currentTarget.form?.requestSubmit();
+              }
+            }}
             onChange={(event) => {
               setLabel(event.target.value);
               try {
@@ -103,11 +110,32 @@ export function BookmarkEditor({
           <Button variant="primary" type="submit" disabled={pending || !label.trim()}>
             {pending ? t.working : t.save}
           </Button>
-          <Button disabled={pending} onClick={cancel}>
+          <Button variant="ghost" disabled={pending} onClick={cancel}>
             {t.cancel}
           </Button>
         </div>
       </form>
-    </Modal>
+    </>
+  );
+  if (!inline)
+    return (
+      <Modal title={title} close={cancel} closeLabel={t.close}>
+        {content}
+      </Modal>
+    );
+  return (
+    <section
+      className="annotation-composer bookmark-composer"
+      aria-label={title}
+      onKeyDown={(event) => {
+        if (event.key !== 'Escape') return;
+        event.preventDefault();
+        event.stopPropagation();
+        cancel();
+      }}
+    >
+      <h2>{title}</h2>
+      {content}
+    </section>
   );
 }
