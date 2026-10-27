@@ -9,8 +9,6 @@ import {
   MapPin,
   Pencil,
   Trash2,
-  ZoomIn,
-  ZoomOut,
 } from 'lucide-react';
 import { stampIdentity, type PublishedCapture } from '../../shared/captures';
 import type { Catalog, Source } from '../../shared/domain';
@@ -347,6 +345,7 @@ export function CaptureCollectionEditor({
     </section>
   );
 }
+const CAPTURE_ZOOMS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
 export function CaptureGallery({
   owner,
   items,
@@ -407,23 +406,18 @@ export function CaptureGallery({
           >
             <ChevronRight />
           </IconButton>
-          <IconButton
-            label={t.captureZoomOut}
-            disabled={zoom <= 0.5}
-            onClick={() => setZoom((v) => Math.max(0.5, v / 1.25))}
+          <select
+            className="capture-zoom"
+            aria-label={t.zoom}
+            value={zoom}
+            onChange={(e) => setZoom(Number(e.target.value))}
           >
-            <ZoomOut />
-          </IconButton>
-          <Button onClick={() => setZoom(1)}>
-            {t.captureFit} · {Math.round(zoom * 100)}%
-          </Button>
-          <IconButton
-            label={t.captureZoomIn}
-            disabled={zoom >= 4}
-            onClick={() => setZoom((v) => Math.min(4, v * 1.25))}
-          >
-            <ZoomIn />
-          </IconButton>
+            {CAPTURE_ZOOMS.map((value) => (
+              <option key={value} value={value}>
+                {value === 1 ? `${t.captureFit} · 100%` : `${Math.round(value * 100)}%`}
+              </option>
+            ))}
+          </select>
           <a
             className="button"
             href={capturePreviewUrl(owner, item)}
@@ -439,6 +433,24 @@ export function CaptureGallery({
             style={{ width: `${zoom * 100}%`, maxWidth: 'none' }}
           />
         </div>
+        {items.length > 1 && (
+          <div className="capture-filmstrip" role="group" aria-label={t.captureGallery}>
+            {items.map((entry, i) => (
+              <button
+                type="button"
+                key={entry.id}
+                aria-current={entry.id === item.id ? 'true' : undefined}
+                onClick={() => {
+                  setId(entry.id);
+                  setZoom(1);
+                }}
+              >
+                <img src={capturePreviewUrl(owner, entry)} alt="" loading="lazy" />
+                <span>{entry.label || `${t.captureImage} ${i + 1}`}</span>
+              </button>
+            ))}
+          </div>
+        )}
         {item.stamp && <p>{stampLabel(item.stamp, t)}</p>}
         {!item.stamp && item.originSource && (
           <p>
