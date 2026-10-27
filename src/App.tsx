@@ -59,7 +59,7 @@ import { StudyReader } from './study/StudyReader';
 import { ChapterQuiz, type ChapterQuizRequest } from './study/ChapterQuiz';
 import { FlashcardDeck, type DeckRequest } from './study/FlashcardDeck';
 import { ReviewPanel } from './study/ReviewPanel';
-import { reinforcementLearning, type ReviewScope } from '../shared/review';
+import { reinforcementLearning } from '../shared/review';
 import { GeneratedArtifact } from './GeneratedArtifact';
 import { SignalExplorer } from './SignalExplorer';
 import { PanelResizer, useDrawerFocus, usePanels } from './workspace/Panels';
@@ -94,6 +94,9 @@ import { BookmarksPanel, type BookmarkFilter } from './bookmarks/BookmarksPanel'
 import { GlossaryPanel } from './glossary/GlossaryPanel';
 import { ResourceConceptSuggestions } from './glossary/ResourceConceptSuggestions';
 const AnnotationEditor = lazy(() => import('./annotations/AnnotationEditor'));
+const AssessmentWorkspace = lazy(() =>
+  import('./study/AssessmentWorkspace').then((module) => ({ default: module.AssessmentWorkspace })),
+);
 import { sessionPreview, type QuestionContext } from '../shared/conversations';
 import { ActionMenu } from './design/ActionMenu';
 import { ContentBoundary } from './design/ContentBoundary';
@@ -115,9 +118,7 @@ export function App() {
   const [glossaryFocus, setGlossaryFocus] = useState<{ id: string; nonce: string } | null>(null);
   const [annotationTick, setAnnotationTick] = useState(0);
   const [quizRequest, setQuizRequest] = useState<ChapterQuizRequest | null>(null);
-  const [reviewIntent, setReviewIntent] = useState<{ scope: ReviewScope; nonce: number } | null>(
-    null,
-  );
+  const [assessmentOpen, setAssessmentOpen] = useState(false);
   const [deckRequest, setDeckRequest] = useState<DeckRequest | null>(null),
     [cardTick, setCardTick] = useState(0);
   const [resumePlayback, setResumePlayback] = useState<{ sourceId: string; nonce: number } | null>(
@@ -795,9 +796,7 @@ export function App() {
             label={t.reviewLearning}
             onClick={() => {
               setFocus(false);
-              setRight(true);
-              setTab('review');
-              setReviewIntent({ scope: 'session', nonce: Date.now() });
+              setAssessmentOpen(true);
             }}
           >
             <Activity />
@@ -1101,7 +1100,10 @@ export function App() {
                             setDeckRequest({ source, learning: material, chapterId, dueOnly });
                           }}
                           suspended={
-                            !!quizRequest || !!deckRequest || (right && !focus && tab === 'review')
+                            !!quizRequest ||
+                            !!deckRequest ||
+                            assessmentOpen ||
+                            (right && !focus && tab === 'review')
                           }
                           resumeSignal={
                             resumePlayback?.sourceId === source.id ? resumePlayback.nonce : 0
@@ -1341,7 +1343,7 @@ export function App() {
               session={session}
               active={active}
               t={t}
-              intent={reviewIntent}
+              assess={() => setAssessmentOpen(true)}
               refresh={refresh}
               practice={(id) => {
                 const file = catalog.files.find((f) => f.id === id);
@@ -1597,6 +1599,51 @@ export function App() {
             setTab('bookmarks');
           }}
         />
+      )}
+      {assessmentOpen && (
+        <ContentBoundary t={t} close={() => setAssessmentOpen(false)}>
+          <Suspense
+            fallback={
+              <Modal title={t.assessmentTitle} close={() => setAssessmentOpen(false)}>
+                <p>{t.loading}</p>
+              </Modal>
+            }
+          >
+            <AssessmentWorkspace
+              sessionId={session.id}
+              catalog={catalog}
+              actions={treeActions}
+              t={t}
+              close={() => setAssessmentOpen(false)}
+              beforeCreate={() => saveChain.current}
+              changed={() => {
+                setBookmarkTick((value) => value + 1);
+                void refresh().catch((e) => setError((e as Error).message));
+              }}
+              navigate={(id, segment) => {
+                setAssessmentOpen(false);
+                citeFrom(id, segment);
+              }}
+              bookmark={(id) => {
+                setAssessmentOpen(false);
+                void run(async () => {
+                  const note = await api<Annotation>(`/annotations/${id}`);
+                  if (!note.sourceId || note.deleted) throw new Error(t.evidenceUnavailable);
+                  navigateAnnotation(note.sourceId, note.location, note.title);
+                });
+              }}
+              prepareFile={(id) => {
+                setAssessmentOpen(false);
+                const file = catalog.files.find((file) => file.id === id);
+                if (file) {
+                  openFile(file, 'retain');
+                  setRight(true);
+                  setTab('chapters');
+                }
+              }}
+            />
+          </Suspense>
+        </ContentBoundary>
       )}
       {annotationRequest && (
         <ContentBoundary t={t} close={() => setAnnotationRequest(null)}>

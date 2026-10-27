@@ -139,6 +139,7 @@ export type AssessmentGrade = {
     correctAnswer: string;
     correct: boolean;
     feedback: string;
+    citations: AssessmentCitation[];
   }>;
 };
 export const assessmentAnalysisSchema = z.object({
@@ -256,6 +257,7 @@ export function validateAssessmentBatch(
         q.acceptedAnswers.length ||
         rows.size !== q.prompts.length ||
         q.prompts.length < 3 ||
+        new Set(q.prompts.map((p) => normalizeAssessmentText(p.text))).size !== q.prompts.length ||
         q.matches.length !== q.prompts.length ||
         new Set(q.matches.map((m) => m.promptId)).size !== rows.size ||
         new Set(q.matches.map((m) => m.optionId)).size !== rows.size ||
@@ -291,6 +293,12 @@ export function validateAssessmentBatch(
         throw new Error('Use two true/false options or four choice options.');
       if (q.type === 'fill_blank' && q.prompt.split('____').length !== 2)
         throw new Error('A fill-blank question needs one ____ blank.');
+      if (
+        q.type === 'fill_blank' &&
+        q.difficulty === 'hard' &&
+        q.options.find((o) => o.id === q.correctOptionId)!.text.length > 300
+      )
+        throw new Error('A written fill-blank solution must fit the answer field.');
       if (q.type !== 'fill_blank' && q.acceptedAnswers.length)
         throw new Error('Only fill-blank questions can accept equivalent terms.');
       if (
@@ -382,6 +390,7 @@ export function gradeAssessmentQuestion(
             correctAnswer: q.options.find((o) => o.id === solution.optionId)!.text,
             correct: responses[p.id] === solution.optionId,
             feedback: solution.explanation,
+            citations: p.citations,
           };
         })
       : [];
@@ -499,7 +508,7 @@ export function assessmentMarkdown(detail: AssessmentDetail) {
     '## Answers',
     ...detail.grades.map(
       (g) =>
-        `### ${g.prompt}\n${g.type} · ${g.difficulty}\n\nYour answer: ${g.responseText || 'Unknown'}\nConfidence: ${g.confidence}\nScore: ${Math.round(g.score * 100)}%\nCorrect answer: ${g.correctAnswer}\n\n${g.feedback}\n\n${g.citations.map(cite).join('\n')}`,
+        `### ${g.prompt}\n${g.type} · ${g.difficulty}\n\nYour answer: ${g.responseText || 'Unknown'}\nConfidence: ${g.confidence}\nScore: ${Math.round(g.score * 100)}%\nCorrect answer: ${g.correctAnswer}\n\n${g.feedback}\n\n${g.pairs.map((p) => `#### ${p.prompt}\n${p.correct ? 'Correct' : 'Incorrect'}\nYour answer: ${p.response || 'Unanswered'}\nCorrect answer: ${p.correctAnswer}\n\n${p.feedback}\n\n${p.citations.map(cite).join('\n')}`).join('\n\n')}\n\n${g.citations.map(cite).join('\n')}`,
     ),
     '## Recommended next steps',
     ...detail.report.recommendations.map(

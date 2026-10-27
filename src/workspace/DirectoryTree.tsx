@@ -58,6 +58,8 @@ export function DirectoryTree({
   selectedFileIds,
   fileCounts,
   toggleFile,
+  disabledFileIds,
+  fileStatuses,
 }: {
   directories: Directory[];
   files: Source[];
@@ -74,6 +76,8 @@ export function DirectoryTree({
   selectedFileIds?: Set<string>;
   fileCounts?: Map<string, number>;
   toggleFile?: (file: Source, checked: boolean) => void;
+  disabledFileIds?: Set<string>;
+  fileStatuses?: Map<string, string>;
 }) {
   const [collapsed, setCollapsed] = useState<Set<string>>(() => {
     try {
@@ -340,10 +344,12 @@ export function DirectoryTree({
                       type="checkbox"
                       aria-label={`${t.includeResource}: ${file.name}`}
                       checked={!!selectedFileIds?.has(file.id)}
+                      disabled={disabledFileIds?.has(file.id)}
                       onChange={(event) => toggleFile?.(file, event.target.checked)}
                     />
                     <Icon size={18} />
                     <span title={file.name}>{file.name}</span>
+                    {fileStatuses?.has(file.id) && <small>{fileStatuses.get(file.id)}</small>}
                     <small
                       aria-label={`${fileCounts?.get(file.id) || 0} ${fileCounts?.get(file.id) === 1 ? t.annotationSingular : t.annotationCount}`}
                     >

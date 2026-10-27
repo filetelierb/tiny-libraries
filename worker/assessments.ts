@@ -303,18 +303,24 @@ async function runAssessment(storage: GlossaryStorage, reserved: Stored, options
         });
         if (!current) return;
         const previous = await loadPlan(storage, current),
+          alreadyAsked = [
+            ...new Set([
+              ...context.prior.map((result) => result.prompt),
+              ...(previous?.questions.map((q) => q.prompt) || []),
+            ]),
+          ],
           raw = validateAssessmentBatch(
             await options.generate(
               context,
               reserved.config,
-              previous?.questions.map((q) => q.prompt) || [],
+              alreadyAsked,
               i,
               reserved.locale,
               reserved.model,
             ),
             context,
             reserved.config,
-            previous?.questions.map((q) => q.prompt) || [],
+            alreadyAsked,
           ),
           batch = finalizeBatch(raw, i);
         await storage.transaction(async (tx) => {

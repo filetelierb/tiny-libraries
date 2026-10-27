@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import { useEffect, useRef, useId, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 
 export function Button({
@@ -55,13 +55,16 @@ export function Modal({
   close,
   children,
   closeLabel = 'Close',
+  className = '',
 }: {
   title: string;
   close: () => void;
   children: ReactNode;
   closeLabel?: string;
+  className?: string;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
   useEffect(() => {
     const dialog = ref.current;
     const previous = document.activeElement as HTMLElement | null;
@@ -82,10 +85,11 @@ export function Modal({
       onClick={(e) => {
         if (e.target === e.currentTarget) close();
       }}
-      className="modal"
+      className={`modal ${className}`}
+      aria-labelledby={titleId}
     >
       <div className="modal-title">
-        <h2>{title}</h2>
+        <h2 id={titleId}>{title}</h2>
         <IconButton label={closeLabel} onClick={close}>
           <X />
         </IconButton>

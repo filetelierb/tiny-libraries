@@ -25,23 +25,23 @@ export function ReviewPanel({
   session,
   active,
   t,
-  intent,
   practice,
   cite,
   practiceReinforcement,
   persist,
   refresh,
+  assess,
 }: {
   catalog: Catalog;
   session: StudySession;
   active: Source | null;
   t: T;
-  intent: { nonce: number; scope: ReviewScope } | null;
   practice: (id: string) => void;
   cite: (id: string, segment: Segment) => void;
   practiceReinforcement: (record: PublicReinforcement) => void;
   persist: (key: string, parameters: Parameters) => void;
   refresh: () => Promise<unknown>;
+  assess: () => void;
 }) {
   const [scope, setScope] = useState<ReviewScope>(() => {
     try {
@@ -71,12 +71,6 @@ export function ReviewPanel({
   useEffect(() => {
     root.current?.closest('.study-content')?.scrollTo({ top: 0 });
   }, [selected, scope]);
-  useEffect(() => {
-    if (intent) {
-      setScope(intent.scope);
-      setSelected(null);
-    }
-  }, [intent?.nonce]);
   useEffect(() => {
     try {
       localStorage.setItem(`tl:review-scope:${session.id}`, scope);
@@ -171,6 +165,9 @@ export function ReviewPanel({
   }
   return (
     <div className="review-panel" ref={root}>
+      <Button variant="primary" onClick={assess}>
+        {t.assessments}
+      </Button>
       <div className="section-label">
         <Activity size={16} />
         {t.review}

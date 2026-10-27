@@ -27,6 +27,37 @@ import {
 import { captureAssessmentContext, captureStudyProgress } from '../worker/assessment-context';
 import { generateAssessmentBatch, analyzeAssessment } from '../worker/meta';
 import { MemoryStore } from './storage';
+import { acknowledgeAssessmentAnswer, type AssessmentDraft } from '../src/study/assessmentDrafts';
+
+test('late answer acknowledgements preserve newer draft work and advance only once', () => {
+  const requestId = crypto.randomUUID();
+  const draft: AssessmentDraft = {
+    step: 0,
+    responses: { q1: 'a', q2: 'unfinished text' },
+    operation: {
+      requestId,
+      questionId: 'q1',
+      expectedRevision: 0,
+      response: 'a',
+      confidence: 'sure',
+    },
+    conflict: false,
+  };
+  const answer: AssessmentAnswer = {
+    questionId: 'q1',
+    response: 'a',
+    confidence: 'sure',
+    revision: 1,
+    updatedAt: 'today',
+  };
+  assert.equal(acknowledgeAssessmentAnswer(draft, crypto.randomUUID(), answer, 1), draft);
+  const accepted = acknowledgeAssessmentAnswer(draft, requestId, answer, 1);
+  assert.deepEqual(accepted.responses, { q2: 'unfinished text' });
+  assert.equal(accepted.operation, null);
+  assert.equal(accepted.step, 1);
+  const moved = { ...accepted, step: 5 };
+  assert.equal(acknowledgeAssessmentAnswer(moved, requestId, answer, 1), moved);
+});
 
 const sourceId = '31c90f6e-93ee-4018-87ab-03964476cb22',
   sessionId = '11c90f6e-93ee-4018-87ab-03964476cb22',
@@ -424,6 +455,27 @@ test('grading computes scores, creates source bookmarks once and exports a compl
   });
   assert.equal(nextContext.prior.length, 1);
   assert.equal(nextContext.prior[0].confidence, 'unknown');
+  const followupId = crypto.randomUUID();
+  const followupOps = operations(tasks, {
+    generate: async (_context, _config, previous) => {
+      assert.ok(previous.includes(nextContext.prior[0].prompt));
+      return batch(1);
+    },
+  });
+  await createAssessment(
+    store.storage(),
+    {
+      requestId: followupId,
+      sessionId,
+      config: { ...config, priorReportIds: [id] },
+    },
+    followupOps,
+  );
+  await Promise.all(tasks);
+  assert.equal(
+    (await assessmentDetail(store.storage(), followupId, followupOps.owner)).status,
+    'ready',
+  );
 });
 test('failed later batches resume without replacing saved questions or shuffled options', async () => {
   const store = await setup(),
