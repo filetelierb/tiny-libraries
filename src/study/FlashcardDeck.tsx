@@ -169,22 +169,29 @@ export function FlashcardDeck({
           </Button>
         ) : card && draft ? (
           <>
-            <p className="muted" aria-live="polite">
+            <p className="card-counter" aria-live="polite">
               {draft.done} {t.cardsReviewed} · {draft.queue.length} {t.cardsRemaining}
             </p>
-            <div className="recall-card">
-              <small>{deck?.title}</small>
-              <h3>{card.front}</h3>
+            <button
+              type="button"
+              className="flashcard"
+              aria-label={draft.revealed ? undefined : t.revealAnswer}
+              onClick={() => !draft.revealed && commit({ ...draft, revealed: true })}
+            >
+              <span className="flashcard-chapter">{deck?.title}</span>
+              <span className="flashcard-front">{card.front}</span>
               {draft.revealed ? (
-                <div className="recall-answer">
-                  <p>{card.back}</p>
-                </div>
+                <span className="flashcard-back">{card.back}</span>
               ) : (
-                <p className="muted">{t.recallBeforeReveal}</p>
+                <span className="flashcard-hint">{t.recallBeforeReveal}</span>
               )}
-            </div>
+            </button>
             {!draft.revealed ? (
-              <Button variant="primary" onClick={() => commit({ ...draft, revealed: true })}>
+              <Button
+                variant="primary"
+                className="card-reveal"
+                onClick={() => commit({ ...draft, revealed: true })}
+              >
                 {t.revealAnswer}
               </Button>
             ) : (
@@ -222,7 +229,9 @@ export function FlashcardDeck({
                     {cardGrades.map((grade) => (
                       <Button
                         key={grade}
-                        variant={grade === 'good' ? 'primary' : 'default'}
+                        variant={
+                          grade === 'good' ? 'primary' : grade === 'easy' ? 'secondary' : 'default'
+                        }
                         disabled={busy}
                         onClick={() => void rate(grade)}
                       >
@@ -256,14 +265,14 @@ export function FlashcardDeck({
             )}
           </>
         ) : (
-          <div className="small-empty">
-            <Layers size={28} />
-            <h3>{t.cardReviewComplete}</h3>
-            <p>
-              {draft?.done || 0} {t.cardsReviewed}
+          <div className="card-complete">
+            <p className="card-complete-title">{t.cardReviewComplete}</p>
+            <p className="muted">
+              {draft?.done || 0} {t.cardsReviewed} · {t.cardReviewCompleteHint}
             </p>
-            <p className="muted">{t.cardReviewCompleteHint}</p>
-            <Button onClick={close}>{t.continueStudying}</Button>
+            <Button variant="primary" onClick={close}>
+              {t.close}
+            </Button>
           </div>
         )}
       </div>

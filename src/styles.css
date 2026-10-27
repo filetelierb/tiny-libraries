@@ -4326,26 +4326,68 @@ body:has(.panel-resizer.resizing) {
 .card-deck > p {
   margin: 0;
 }
-.recall-card {
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--surface);
-  padding: 24px;
-  min-height: 180px;
-  overflow-wrap: anywhere;
-}
-.recall-card h3 {
-  font-size: 21px;
-  font-weight: 500;
-  line-height: 1.5;
-}
-.recall-card small {
+.card-deck > .card-counter {
+  font-size: 12px;
   color: var(--muted-text);
 }
-.recall-answer {
-  border-top: 1px solid var(--border);
-  margin-top: 20px;
-  line-height: 1.7;
+.flashcard {
+  display: flex;
+  width: 100%;
+  min-height: 14rem;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) * 1.4);
+  background: linear-gradient(
+    180deg,
+    var(--card),
+    color-mix(in oklch, var(--secondary), transparent 70%)
+  );
+  padding: 1.4rem;
+  text-align: center;
+  color: var(--foreground);
+  box-shadow: 0 10px 30px rgb(21 45 52 / 8%);
+  overflow-wrap: anywhere;
+}
+.flashcard-chapter {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted-text);
+}
+.flashcard-front {
+  font-size: 1.2rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+.flashcard-back {
+  border-top: 1px dashed var(--border);
+  padding-top: 0.9rem;
+  font-size: 1rem;
+  line-height: 1.6;
+}
+.flashcard-hint {
+  font-size: 0.8rem;
+  color: var(--muted-text);
+}
+.card-reveal {
+  width: 100%;
+  justify-content: center;
+}
+.card-complete {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  text-align: center;
+}
+.card-complete p {
+  margin: 0;
+  font-size: 14px;
+}
+.card-complete-title {
+  font-weight: 500;
 }
 .card-grades {
   display: grid;
@@ -4354,7 +4396,7 @@ body:has(.panel-resizer.resizing) {
 }
 .card-grades .button {
   justify-content: center;
-  min-height: 44px;
+  min-height: 32px;
 }
 .card-evidence {
   font-size: 14px;
@@ -4363,6 +4405,9 @@ body:has(.panel-resizer.resizing) {
 .card-evidence summary {
   cursor: pointer;
   color: var(--primary);
+  font-size: 12px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 .card-evidence blockquote {
   margin: 12px 0;
@@ -4372,9 +4417,6 @@ body:has(.panel-resizer.resizing) {
 @media (max-width: 480px) {
   .card-deck {
     padding: 4px 12px 18px;
-  }
-  .recall-card {
-    padding: 16px;
   }
   .card-grades {
     grid-template-columns: repeat(2, minmax(0, 1fr));
