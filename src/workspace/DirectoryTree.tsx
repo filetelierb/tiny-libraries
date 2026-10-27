@@ -39,7 +39,12 @@ export type TreeActions = {
   archiveFile: (source: Source, restore: boolean) => void;
   trashFile: (source: Source) => void;
   restoreFile: (source: Source) => void;
+  moveFile?: (source: Source, folder: string) => void;
+  moveDirectory?: (directory: Directory, parentPath: string) => void;
 };
+/** Drag payload for a library file; the tutor composer accepts it as a reference. */
+export const RESOURCE_DRAG_TYPE = 'application/x-tailored-resource';
+type TreeDrag = { kind: 'file'; item: Source } | { kind: 'directory'; item: Directory };
 
 export function DirectoryTree({
   directories,
@@ -89,6 +94,66 @@ export function DirectoryTree({
     }
   });
   const scroller = useRef<HTMLDivElement>(null);
+  const [dragged, setDragged] = useState<TreeDrag | null>(null),
+    [dropTarget, setDropTarget] = useState<string | null>(null);
+  const movable = editable && mode === 'manage' && view === 'files';
+  const canDrop = (destination: string) =>
+    !!dragged &&
+    (dragged.kind === 'file'
+      ? dragged.item.folder !== destination
+      : parentPath(dragged.item.path) !== destination &&
+        !containsPath(dragged.item.path, destination));
+  const drop = (destination: string) => {
+    if (!dragged || !canDrop(destination)) return;
+    if (dragged.kind === 'file') actions.moveFile?.(dragged.item, destination);
+    else actions.moveDirectory?.(dragged.item, destination);
+    setDragged(null);
+    setDropTarget(null);
+  };
+  const dropZone = (destination: string) =>
+    movable
+      ? {
+          onDragOver: (event: React.DragEvent) => {
+            if (!dragged) return;
+            event.stopPropagation();
+            if (!canDrop(destination)) return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'move';
+            setDropTarget(destination);
+          },
+          onDragLeave: (event: React.DragEvent) => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node | null))
+              setDropTarget((current) => (current === destination ? null : current));
+          },
+          onDrop: (event: React.DragEvent) => {
+            if (!dragged) return;
+            event.preventDefault();
+            event.stopPropagation();
+            drop(destination);
+          },
+        }
+      : {};
+  const dragSource = (drag: TreeDrag) => ({
+    draggable: mode === 'manage' && view === 'files',
+    onDragStart: (event: React.DragEvent) => {
+      event.stopPropagation();
+      event.dataTransfer.effectAllowed = 'copyMove';
+      if (drag.kind === 'file')
+        event.dataTransfer.setData(
+          RESOURCE_DRAG_TYPE,
+          JSON.stringify({ id: drag.item.id, name: drag.item.name }),
+        );
+      event.dataTransfer.setData(
+        'text/plain',
+        drag.kind === 'file' ? drag.item.name : drag.item.path,
+      );
+      if (movable) setDragged(drag);
+    },
+    onDragEnd: () => {
+      setDragged(null);
+      setDropTarget(null);
+    },
+  });
   useLayoutEffect(() => {
     const node = scroller.current;
     if (!node) return;
@@ -285,13 +350,15 @@ export function DirectoryTree({
             <li
               className={`directory-node ${contextOnly ? 'context-directory' : ''}`}
               key={directory.id}
+              {...(contextOnly ? {} : dropZone(directory.path))}
             >
               <div
-                className={`tree-row directory-row ${selectedFolderId === directory.id ? 'selected' : ''}`}
+                className={`tree-row directory-row ${selectedFolderId === directory.id ? 'selected' : ''} ${dropTarget === directory.path ? 'drop-target' : ''}`}
                 onContextMenu={context}
               >
                 <button
                   type="button"
+                  {...(contextOnly ? {} : dragSource({ kind: 'directory', item: directory }))}
                   className="directory-label"
                   title={directory.path}
                   onClick={() =>
@@ -356,6 +423,7 @@ export function DirectoryTree({
                 ) : (
                   <button
                     type="button"
+                    {...dragSource({ kind: 'file', item: file })}
                     data-file-choice={file.id}
                     title={
                       view === 'trash'
@@ -401,8 +469,9 @@ export function DirectoryTree({
   );
   return (
     <div
-      className="directory-tree"
+      className={`directory-tree ${dropTarget === '' ? 'drop-root' : ''}`}
       ref={scroller}
+      {...dropZone('')}
       onScroll={(event) => {
         if (!event.currentTarget.clientHeight) return;
         try {

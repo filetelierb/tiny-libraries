@@ -239,6 +239,7 @@ export class Library extends DurableObject<Env> {
           ? z
               .discriminatedUnion('action', [
                 z.object({ action: z.literal('rename'), name: z.string() }),
+                z.object({ action: z.literal('move'), parentPath: z.string().max(240) }),
                 z.object({ action: z.enum(['archive', 'unarchive', 'trash', 'restore']) }),
               ])
               .parse(await boundedJson(request))
@@ -251,6 +252,7 @@ export class Library extends DurableObject<Env> {
             ? {
                 ...(input as
                   | { action: 'rename'; name: string }
+                  | { action: 'move'; parentPath: string }
                   | { action: 'archive' | 'unarchive' | 'trash' | 'restore' }),
                 id: directoryMatch[1],
               }

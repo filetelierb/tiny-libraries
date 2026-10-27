@@ -70,6 +70,7 @@ export function ensureDirectories(existing: Directory[], paths: string[]): Direc
 export type DirectoryOperation =
   | { action: 'create'; parentPath: string; name: string }
   | { action: 'rename'; id: string; name: string }
+  | { action: 'move'; id: string; parentPath: string }
   | { action: 'archive' | 'unarchive' | 'trash' | 'restore'; id: string };
 
 export function changeDirectory(
@@ -94,13 +95,25 @@ export function changeDirectory(
   }
   const directory = directories.find((entry) => entry.id === operation.id);
   if (!directory) throw new DirectoryError('Directory not found', 404);
-  if (operation.action === 'rename') {
+  if (operation.action === 'rename' || operation.action === 'move') {
     if (directoryState(directory.path, directories) === 'trash')
       throw new DirectoryError('Restore this directory before renaming it', 409);
-    const name = normalizePath(operation.name);
-    if (!name || name.includes('/')) throw new DirectoryError('Enter one directory name');
-    const parent = parentPath(directory.path),
+    let path: string;
+    if (operation.action === 'move') {
+      const parent = normalizePath(operation.parentPath);
+      if (parent && !directories.some((entry) => entry.path === parent))
+        throw new DirectoryError('Parent directory not found', 404);
+      if (containsPath(directory.path, parent))
+        throw new DirectoryError('A directory cannot move into itself', 409);
+      assertWritableDirectory(parent, directories);
+      const name = directoryName(directory.path);
       path = normalizePath(parent ? `${parent}/${name}` : name);
+    } else {
+      const name = normalizePath(operation.name);
+      if (!name || name.includes('/')) throw new DirectoryError('Enter one directory name');
+      const parent = parentPath(directory.path);
+      path = normalizePath(parent ? `${parent}/${name}` : name);
+    }
     const rewritten = directories.map((entry) =>
       containsPath(directory.path, entry.path)
         ? { ...entry, path: normalizePath(path + entry.path.slice(directory.path.length)) }

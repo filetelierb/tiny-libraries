@@ -543,10 +543,14 @@ export function App() {
   }
   async function directoryMutation(
     directory: Directory,
-    action: 'archive' | 'unarchive' | 'trash' | 'restore' | 'rename',
+    action: 'archive' | 'unarchive' | 'trash' | 'restore' | 'rename' | 'move',
     name?: string,
   ) {
-    await api(`/directories/${directory.id}`, 'PATCH', { action, ...(name ? { name } : {}) });
+    await api(
+      `/directories/${directory.id}`,
+      'PATCH',
+      action === 'move' ? { action, parentPath: name } : { action, ...(name ? { name } : {}) },
+    );
     await saveChain.current;
     const data = await refresh();
     if (sessionRef.current) commitWorkspace(usable(sessionRef.current, data));
@@ -579,6 +583,9 @@ export function App() {
     archiveFile: (file, restore) => void run(() => editFile(file, { archived: !restore })),
     trashFile: (file) => setDirectoryDialog({ action: 'trashFile', file }),
     restoreFile: (file) => void run(() => editFile(file, { trashed: false })),
+    moveFile: (file, folder) => void run(() => editFile(file, { folder })),
+    moveDirectory: (directory, parentPath) =>
+      void run(() => directoryMutation(directory, 'move', parentPath)),
   };
   const position = active ? session?.positions[active.id] || 0 : 0;
   function resourceLocation(source: Source): SourceLocation {

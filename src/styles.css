@@ -7850,3 +7850,14 @@ body:has(.panel-resizer.resizing) {
   border-top: 1px solid var(--border);
   background: var(--card);
 }
+
+/* Tree drag-and-drop: highlighted destination folder or library root. */
+.tree-row.drop-target {
+  background: color-mix(in oklch, var(--primary), transparent 85%);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+.directory-tree.drop-root {
+  background: color-mix(in oklch, var(--primary), transparent 92%);
+  box-shadow: inset 0 0 0 1px var(--primary);
+  border-radius: var(--radius-lg);
+}

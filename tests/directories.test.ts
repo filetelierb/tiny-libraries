@@ -141,3 +141,39 @@ test('archived and trashed directories reject creation and restore retains stabl
   assert.equal(directories[0].id, root.id);
   assert.equal(directories[0].archived, true);
 });
+test('moving a directory carries descendants and refuses moves into itself', () => {
+  const files = [file('Course/Week 1'), file('Archive')];
+  const directories = ensureDirectories(
+    [],
+    files.map((source) => source.folder),
+  );
+  const week = directories.find((directory) => directory.path === 'Course/Week 1')!;
+  const course = directories.find((directory) => directory.path === 'Course')!;
+  const next = changeDirectory(directories, files, {
+    action: 'move',
+    id: week.id,
+    parentPath: 'Archive',
+  });
+  assert.equal(
+    next.directories.find((directory) => directory.id === week.id)?.path,
+    'Archive/Week 1',
+  );
+  assert.equal(next.files[0].folder, 'Archive/Week 1');
+  assert.equal(next.files[0].id, files[0].id);
+  const root = changeDirectory(directories, files, { action: 'move', id: week.id, parentPath: '' });
+  assert.equal(root.directories.find((directory) => directory.id === week.id)?.path, 'Week 1');
+  assert.throws(
+    () =>
+      changeDirectory(directories, files, {
+        action: 'move',
+        id: course.id,
+        parentPath: 'Course/Week 1',
+      }),
+    /cannot move into itself/,
+  );
+  assert.throws(
+    () =>
+      changeDirectory(directories, files, { action: 'move', id: week.id, parentPath: 'Missing' }),
+    /not found/,
+  );
+});
