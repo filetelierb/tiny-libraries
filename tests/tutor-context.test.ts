@@ -14,7 +14,11 @@ import {
   tutorCitationSchema,
   type TutorCitation,
 } from '../shared/tutor-context';
-import { citationFromHref, remarkTutorCitations } from '../src/tutor/citations';
+import {
+  citationFromHref,
+  isTemporaryFileHref,
+  remarkTutorCitations,
+} from '../src/tutor/citations';
 import { loadTutorConcepts } from '../worker/tutor-context';
 import { saveConcept } from '../worker/glossary';
 import { runAssistant } from '../worker/meta';
@@ -279,6 +283,19 @@ test('citation extraction and Markdown rendering preserve ordinary labels, code,
   assert.equal(citationFromHref('#tutor/%', new Map([[id, ref]])), undefined);
   assert.equal(citationFromHref(`#tutor/${encodeURIComponent(id)}`, new Map([[id, ref]])), ref);
   assert.deepEqual(citedReferences(`\`[${id}]\``, [ref]), []);
+});
+
+test('files from the tutor sandbox are recognized as temporary, library links are not', () => {
+  for (const href of [
+    'sandbox:/mnt/data/plot.png',
+    '/mnt/data/notes.md',
+    'workspace/report.csv',
+    'file:///tmp/x.txt',
+    'sandbox:%2Fmnt%2Fdata%2Fa.png',
+  ])
+    assert.equal(isTemporaryFileHref(href), true, href);
+  for (const href of ['https://example.com/mnt/data', '#tutor/abc', '/api/files/1/content', '%'])
+    assert.equal(isTemporaryFileHref(href), false, href);
 });
 
 test('historical citation recovery uses recorded source scope and rejects ambiguous or invented IDs', () => {

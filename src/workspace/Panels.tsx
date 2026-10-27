@@ -220,6 +220,7 @@ export function PanelResizer({
         drag.current = null;
         setResizing(false);
       }}
+      onDoubleClick={() => change(PANEL_DEFAULT[side])}
       onKeyDown={(event) => {
         const step = event.shiftKey ? 40 : 10;
         const direction = side === 'left' ? 1 : -1;

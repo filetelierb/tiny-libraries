@@ -7393,6 +7393,12 @@ body:has(.panel-resizer.resizing) {
 .panel-section.grow > .panel-section-body {
   flex: 1;
 }
+.panel-section-hint {
+  margin: 0;
+  padding: 0 var(--space-2) var(--space-1);
+  font-size: 11px;
+  color: var(--muted-text);
+}
 .panel-section:not(.grow) .file-tree {
   max-height: 32vh;
 }
@@ -8522,7 +8528,7 @@ body:has(.panel-resizer.resizing) {
   display: grid;
   gap: 0.5rem;
 }
-.artifact-references button {
+.artifact-references a {
   display: block;
   padding: 0;
   border: 0;
@@ -8538,6 +8544,9 @@ body:has(.panel-resizer.resizing) {
 .artifact-references span {
   color: var(--muted-text);
   line-height: 1.5;
+}
+.artifact-references p {
+  margin: 0.5rem 0 0;
 }
 .artifact-outline {
   margin: 0.75rem 0 1rem;
@@ -9299,4 +9308,25 @@ body:has(.panel-resizer.resizing) {
 .artifact-tutor-hint {
   margin: 8px 0 0;
   font-size: 12px;
+}
+
+.preview-unavailable {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: var(--space-2);
+  height: 100%;
+  padding: var(--space-6, 32px);
+  text-align: center;
+}
+.preview-unavailable > svg {
+  width: 40px;
+  height: 40px;
+  color: var(--muted-text);
+}
+.preview-unavailable p {
+  margin: 0;
+}
+.preview-unavailable-title {
+  font-weight: 600;
 }

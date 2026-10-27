@@ -762,6 +762,12 @@ export function App() {
       void run(() => directoryMutation(directory, 'move', parentPath)),
   };
   const position = active ? session?.positions[active.id] || 0 : 0;
+  const archivedCount =
+    catalog?.files.filter((f) => sourceState(f, catalog.directories) === 'archived').length || 0;
+  // Archived folders show even when empty, so they can still be restored.
+  const archivedAny =
+    archivedCount > 0 ||
+    !!catalog?.directories.some((directory) => directory.archived && !directory.trashed);
   function resourceLocation(source: Source): SourceLocation {
     if (selection?.sourceId === source.id) return selection.location;
     const position = sessionRef.current?.positions[source.id] || 0;
@@ -1041,31 +1047,31 @@ export function App() {
                   t={t}
                 />
               </PanelSection>
-              <PanelSection
-                id="library-archived"
-                title={t.archived}
-                icon={<Archive size={13} />}
-                count={
-                  catalog.files.filter((f) => sourceState(f, catalog.directories) === 'archived')
-                    .length
-                }
-                t={t}
-                defaultOpen={false}
-              >
-                <div className="file-tree">
-                  <DirectoryTree
-                    directories={catalog.directories}
-                    files={catalog.files}
-                    t={t}
-                    active={active?.id}
-                    view="archived"
-                    query={query}
-                    chooseFile={openFile}
-                    actions={treeActions}
-                    storageKey="tl:tree:sidebar"
-                  />
-                </div>
-              </PanelSection>
+              {archivedAny && (
+                <PanelSection
+                  id="library-archived"
+                  title={t.archived}
+                  icon={<Archive size={13} />}
+                  count={archivedCount}
+                  t={t}
+                  defaultOpen={false}
+                >
+                  <p className="panel-section-hint">{t.archivedHint}</p>
+                  <div className="file-tree">
+                    <DirectoryTree
+                      directories={catalog.directories}
+                      files={catalog.files}
+                      t={t}
+                      active={active?.id}
+                      view="archived"
+                      query={query}
+                      chooseFile={openFile}
+                      actions={treeActions}
+                      storageKey="tl:tree:sidebar"
+                    />
+                  </div>
+                </PanelSection>
+              )}
               <PanelSection
                 id="library-trash"
                 title={t.trash}
@@ -1625,6 +1631,7 @@ export function App() {
                                   segments={material.segments}
                                   onCite={(segment) => citeFromArtifact(source.id, segment)}
                                   sourceName={source.name}
+                                  sourceUrl={`/api/files/${source.id}/content`}
                                   pictures={`/api/visuals/${source.id}/${material.sourceVersion}`}
                                   concepts={catalog.concepts}
                                   openConcept={openGlossaryConcept}
@@ -2989,6 +2996,7 @@ function TrashModal({
       <p className="muted">
         {t.affectedItems.replace('{files}', String(files)).replace('{folders}', String(folders))}
       </p>
+      {archive && <p className="muted">{t.archiveHint}</p>}
       {error && (
         <p role="alert" className="form-error">
           {error}

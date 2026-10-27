@@ -291,6 +291,9 @@ const en = {
   cardReviewCompleteHint:
     'Your ratings are saved. Due cards will be available for review when their scheduled time arrives.',
   readerUnavailable: 'Reader unavailable',
+  previewUnavailable: 'Preview not available',
+  temporaryFileNotice: '(temporary file; ask the tutor to save it as an artifact)',
+  openOriginalFile: 'Open the original file',
   studyToolUnavailable: 'Study tool unavailable',
   contentLoadRecovery: 'This view could not load. Reload the app to load the current version.',
   reloadApp: 'Reload app',
@@ -435,6 +438,7 @@ const en = {
   addSourceReference: 'Add source reference',
   sourceReferences: 'Source references',
   artifactReferences: 'References',
+  artifactNoReferences: 'No references to session materials.',
   showAllSessions: 'Show all sessions',
   sessionChoiceTitle: 'Resume a session?',
   sessionChoiceBody:
@@ -731,12 +735,13 @@ const en = {
   deletePermanently: 'Delete permanently',
   deletePermanentlyTitle: 'Delete permanently',
   deletePermanentlyExplanation:
-    'This permanently deletes the selected item and everything inside it, including original files, study preparation and captions. This cannot be undone.',
+    'This permanently deletes the selected item and everything inside it: original files, captions, chapters, glossary, artifact versions and chapter quizzes and cards. This cannot be undone.',
   trashDirectoryTitle: 'Delete folder',
   trashFileTitle: 'Delete file',
   trashExplanation:
     'This moves the selected item and its contents to Trash. You can restore them later; original files and study data are retained.',
   affectedItems: 'Files: {files} · Subfolders: {folders}',
+  archiveHint: 'To keep it for later, archive it instead: it leaves the tree and keeps everything.',
   destination: 'Upload destination',
   destinationHint: 'Choose the folder that will hold the new files.',
   uploadFiles: 'Files',
@@ -755,6 +760,7 @@ const en = {
   files: 'Files',
   sessions: 'Study sessions',
   archived: 'Archived',
+  archivedHint: 'Hidden from the tree; open and consult them as usual.',
   search: 'Search files…',
   upload: 'Add files',
   uploaded: 'Uploaded',
@@ -771,7 +777,8 @@ const en = {
   dismissPanels: 'Close floating panels',
   filePanelWidth: 'File panel width',
   studyPanelWidth: 'Study panel width',
-  resizeHelp: 'Drag or use arrow keys. Shift changes by 40px; Home/End set limits; Enter resets.',
+  resizeHelp:
+    'Drag or use arrow keys. Shift changes by 40px; Home/End set limits; Enter or double-click resets.',
   preview: 'Preview',
   previewHint: 'Double-click to keep this resource open',
   keepOpen: 'Keep open',
@@ -1425,6 +1432,9 @@ const es: Dictionary = {
   cardReviewCompleteHint:
     'Tus valoraciones están guardadas. Las tarjetas estarán disponibles cuando llegue su próximo repaso.',
   readerUnavailable: 'Visor no disponible',
+  previewUnavailable: 'Vista previa no disponible',
+  temporaryFileNotice: '(archivo temporal; pide al tutor que lo guarde como artefacto)',
+  openOriginalFile: 'Abrir el archivo original',
   studyToolUnavailable: 'Herramienta de estudio no disponible',
   contentLoadRecovery:
     'No se pudo cargar esta vista. Recarga la aplicación para cargar la versión actual.',
@@ -1569,6 +1579,7 @@ const es: Dictionary = {
   addSourceReference: 'Añadir referencia',
   sourceReferences: 'Referencias',
   artifactReferences: 'Referencias',
+  artifactNoReferences: 'Sin referencias a materiales de la sesión.',
   showAllSessions: 'Mostrar todas las sesiones',
   sessionChoiceTitle: '¿Retomar una sesión?',
   sessionChoiceBody:
@@ -1869,12 +1880,14 @@ const es: Dictionary = {
   deletePermanently: 'Eliminar definitivamente',
   deletePermanentlyTitle: 'Eliminar definitivamente',
   deletePermanentlyExplanation:
-    'Esto elimina para siempre el elemento seleccionado y todo su contenido, incluidos los archivos originales, la preparación de estudio y los subtítulos. No se puede deshacer.',
+    'Esto elimina para siempre el elemento seleccionado y todo su contenido: archivos originales, subtítulos, capítulos, glosario, versiones del artefacto y quizzes y tarjetas por capítulo. No se puede deshacer.',
   trashDirectoryTitle: 'Eliminar carpeta',
   trashFileTitle: 'Eliminar archivo',
   trashExplanation:
     'El elemento seleccionado y su contenido se moverán a la papelera. Podrás restaurarlos después; se conservan los originales y los datos de estudio.',
   affectedItems: 'Archivos: {files} · Subcarpetas: {folders}',
+  archiveHint:
+    'Si quieres conservarlo para más adelante, archívalo: se oculta del árbol y mantiene todo.',
   destination: 'Carpeta de destino',
   destinationHint: 'Elige la carpeta donde se guardarán los archivos.',
   uploadFiles: 'Archivos',
@@ -1893,6 +1906,7 @@ const es: Dictionary = {
   files: 'Archivos',
   sessions: 'Sesiones de estudio',
   archived: 'Archivados',
+  archivedHint: 'Ocultos del árbol; se abren y consultan con normalidad.',
   search: 'Buscar archivos…',
   upload: 'Añadir archivos',
   uploaded: 'Subido',
@@ -1910,7 +1924,7 @@ const es: Dictionary = {
   filePanelWidth: 'Ancho del panel de archivos',
   studyPanelWidth: 'Ancho del panel de estudio',
   resizeHelp:
-    'Arrastra o usa las flechas. Mayús cambia 40px; Inicio/Fin fijan límites; Intro restablece.',
+    'Arrastra o usa las flechas. Mayús cambia 40px; Inicio/Fin fijan límites; Intro o doble clic restablece.',
   preview: 'Vista previa',
   previewHint: 'Doble clic para mantener abierto este recurso',
   keepOpen: 'Mantener abierto',

@@ -9,6 +9,18 @@ export function citationFromHref(href: string | undefined, references: Map<strin
     return undefined;
   }
 }
+/** Files the tutor wrote in its own sandbox are not library resources and cannot be opened. */
+export function isTemporaryFileHref(href: string) {
+  let path = href.replace(/^sandbox:/i, '');
+  if (/^file:/i.test(path)) return true;
+  try {
+    path = decodeURIComponent(path);
+  } catch {
+    return false;
+  }
+  return /^\/?(?:workspace|mnt\/data)(?:\/|$)/i.test(path);
+}
+export const temporaryFileHref = '#temporary-file';
 export function remarkTutorCitations(options: {
   references: TutorCitation[];
   label?: (reference: TutorCitation) => string;

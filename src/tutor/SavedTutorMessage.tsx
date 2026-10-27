@@ -1,7 +1,13 @@
 import { memo, type RefObject } from 'react';
 import type { TutorCitation } from '../../shared/tutor-context';
 import { StudyMarkdown } from '../study/StudyMarkdown';
-import { citationFromHref, remarkTutorCitations } from './citations';
+import { defaultUrlTransform } from 'react-markdown';
+import {
+  citationFromHref,
+  isTemporaryFileHref,
+  remarkTutorCitations,
+  temporaryFileHref,
+} from './citations';
 import type { T } from '../i18n';
 
 /** Stored rich content stays mounted while separate live progress changes. */
@@ -29,8 +35,17 @@ export const SavedTutorMessage = memo(
             { references, label: (reference: TutorCitation) => labels[reference.id] },
           ],
         ]}
+        urlTransform={(url) =>
+          isTemporaryFileHref(url) ? temporaryFileHref : defaultUrlTransform(url)
+        }
         components={{
           a: ({ href, children }) => {
+            if (href === temporaryFileHref)
+              return (
+                <span className="temporary-file-link">
+                  <span>{children}</span> <span className="muted">{t.temporaryFileNotice}</span>
+                </span>
+              );
             const reference = citationFromHref(href, byId);
             if (reference?.kind === 'web')
               return (

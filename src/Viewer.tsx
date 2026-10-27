@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, lazy, Suspense } from 'react';
+import { FileWarning } from 'lucide-react';
 import { StudyMarkdown } from './study/StudyMarkdown';
 import type { Source, PublicLearning, Bookmark, Segment } from '../shared/domain';
 import type { ReadingProgress } from '../shared/chapters';
@@ -149,16 +150,24 @@ export function Viewer({
     }
   }, [text, learning?.createdAt, seek?.nonce]);
   const url = `/api/files/${source.id}/content`;
+  const [failed, setFailed] = useState(false);
   useEffect(() => {
+    setFailed(false);
     if (source.kind === 'text' || source.kind === 'markdown') {
       const controller = new AbortController();
       fetch(url, { signal: controller.signal })
-        .then((r) => r.text())
+        .then((r) => {
+          if (!r.ok) throw new Error(r.statusText);
+          return r.text();
+        })
         .then(setText)
-        .catch(() => {});
+        .catch(() => {
+          if (!controller.signal.aborted) setFailed(true);
+        });
       return () => controller.abort();
     }
   }, [source.id]);
+  if (failed) return <PreviewUnavailable name={source.name} url={url} t={t} />;
   if (source.kind === 'video' || source.kind === 'audio')
     return (
       <MediaPlayer
@@ -198,7 +207,7 @@ export function Viewer({
   if (source.kind === 'image')
     return (
       <div className="image-stage">
-        <img src={url} alt={source.name} />
+        <img src={url} alt={source.name} onError={() => setFailed(true)} />
       </div>
     );
   return (
@@ -253,5 +262,19 @@ export function Viewer({
         </pre>
       )}
     </article>
+  );
+}
+
+/** Shown when a file cannot be previewed here; the original stays reachable. */
+function PreviewUnavailable({ name, url, t }: { name: string; url: string; t: T }) {
+  return (
+    <div className="preview-unavailable" role="status">
+      <FileWarning aria-hidden="true" />
+      <p className="preview-unavailable-title">{t.previewUnavailable}</p>
+      <p className="muted">{name}</p>
+      <a className="text-link" href={url} target="_blank" rel="noreferrer">
+        {t.openOriginalFile}
+      </a>
+    </div>
   );
 }

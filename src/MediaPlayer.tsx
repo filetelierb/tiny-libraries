@@ -356,9 +356,7 @@ export function MediaPlayer({
       className="player-captions"
       aria-label={t.subtitle}
       value={preferences.track}
-      onChange={(event) =>
-        setPreferences((current) => ({ ...current, track: event.target.value }))
-      }
+      onChange={(event) => setPreferences((current) => ({ ...current, track: event.target.value }))}
     >
       <option value="off">{t.captionsOff}</option>
       <option value="original">{t.original}</option>

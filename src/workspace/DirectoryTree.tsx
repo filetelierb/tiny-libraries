@@ -95,6 +95,14 @@ export function DirectoryTree({
       return new Set();
     }
   });
+  // Deep folders start collapsed; this remembers the ones the student opened.
+  const [expandedDeep, setExpandedDeep] = useState<Set<string>>(() => {
+    try {
+      return new Set(JSON.parse(localStorage.getItem(`${storageKey}:expanded`) || '[]'));
+    } catch {
+      return new Set();
+    }
+  });
   const scroller = useRef<HTMLDivElement>(null);
   const [dragged, setDragged] = useState<TreeDrag | null>(null),
     [dropTarget, setDropTarget] = useState<string | null>(null);
@@ -174,16 +182,24 @@ export function DirectoryTree({
     restore();
     return () => observer.disconnect();
   }, [storageKey, view]);
-  const toggle = (directory: Directory) =>
-    setCollapsed((previous) => {
-      const next = new Set(previous);
-      if (next.has(directory.id)) next.delete(directory.id);
-      else next.add(directory.id);
+  const isCollapsed = (directory: Directory) =>
+    collapsed.has(directory.id) ||
+    (collapsedByDefault(directory) && !expandedDeep.has(directory.id));
+  const toggle = (directory: Directory) => {
+    const open = isCollapsed(directory);
+    const update = (set: Set<string>, add: boolean, key: string) => {
+      const next = new Set(set);
+      if (add) next.add(directory.id);
+      else next.delete(directory.id);
       try {
-        localStorage.setItem(`${storageKey}:collapsed`, JSON.stringify([...next]));
+        localStorage.setItem(`${storageKey}:${key}`, JSON.stringify([...next]));
       } catch {}
       return next;
-    });
+    };
+    setCollapsed((previous) => update(previous, !open, 'collapsed'));
+    if (collapsedByDefault(directory))
+      setExpandedDeep((previous) => update(previous, open, 'expanded'));
+  };
   const needle = fold(query);
   const visibleFiles =
     mode === 'folder'
@@ -365,7 +381,7 @@ export function DirectoryTree({
         .filter((directory) => parentPath(directory.path) === parent && paths.has(directory.path))
         .sort((a, b) => a.path.localeCompare(b.path))
         .map((directory) => {
-          const expanded = !!needle || !collapsed.has(directory.id),
+          const expanded = !!needle || !isCollapsed(directory),
             contextOnly = mode !== 'filter' && directoryState(directory.path, directories) !== view;
           const Icon = expanded ? FolderOpen : Folder;
           return (
@@ -527,5 +543,13 @@ export function DirectoryTree({
         <p className="small-empty">{needle ? t.noResults : t.noFiles}</p>
       )}
     </div>
+  );
+}
+
+/** Below the second level only resource and class folders open by default, to keep the tree short. */
+function collapsedByDefault(directory: Directory) {
+  return (
+    directory.path.split('/').length > 2 &&
+    !/recursos|clases|resources|classes/i.test(directory.path.split('/').at(-1)!)
   );
 }

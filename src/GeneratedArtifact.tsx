@@ -48,6 +48,7 @@ export function GeneratedArtifact({
   persist,
   storageKey = 'tl:generated-signal',
   sourceName,
+  sourceUrl,
   pictures,
   concepts = noConcepts,
   openConcept,
@@ -61,6 +62,8 @@ export function GeneratedArtifact({
   persist: (p: Parameters) => void;
   storageKey?: string;
   sourceName?: string;
+  /** Original file; references link to it so a modified click opens it in a new tab. */
+  sourceUrl?: string;
   /** Base URL of the source's stored pictures, for image widgets. */
   pictures?: string;
   concepts?: LinkableConcept[];
@@ -358,15 +361,28 @@ export function GeneratedArtifact({
           </table>
         </figure>
       )}
-      {cited.length > 0 && (
-        <section className="artifact-references" aria-label={t.artifactReferences}>
-          <h3>{t.artifactReferences}</h3>
+      <footer className="artifact-references" aria-label={t.artifactReferences}>
+        <h3>{t.artifactReferences}</h3>
+        {cited.length ? (
           <ol>
             {cited.map((segment) => (
               <li key={segment.id}>
-                <button type="button" onClick={() => onCite(segment)}>
+                <a
+                  href={sourceUrl || '#'}
+                  target={sourceUrl ? '_blank' : undefined}
+                  rel="noreferrer"
+                  onClick={(event) => {
+                    if (
+                      sourceUrl &&
+                      (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+                    )
+                      return;
+                    event.preventDefault();
+                    onCite(segment);
+                  }}
+                >
                   {label(segment)}
-                </button>
+                </a>
                 <span>
                   {segment.text.slice(0, 160)}
                   {segment.text.length > 160 ? '…' : ''}
@@ -374,8 +390,11 @@ export function GeneratedArtifact({
               </li>
             ))}
           </ol>
-        </section>
-      )}
+        ) : (
+          <p className="muted">{t.artifactNoReferences}</p>
+        )}
+        <p className="muted artifact-edit-hint">{t.artifactTutorHint}</p>
+      </footer>
     </section>
   );
 }
