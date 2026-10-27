@@ -8486,3 +8486,80 @@ body:has(.panel-resizer.resizing) {
     border-top: 1px solid var(--border);
   }
 }
+.artifact-references {
+  margin-top: 1.6rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.86rem;
+}
+.artifact-references h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+.artifact-references ol {
+  margin: 0;
+  padding-left: 1.4rem;
+  display: grid;
+  gap: 0.5rem;
+}
+.artifact-references button {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--primary);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.artifact-references span {
+  color: var(--muted-text);
+  line-height: 1.5;
+}
+.artifact-outline {
+  margin: 0.75rem 0 1rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--background);
+  font-size: 0.86rem;
+}
+.artifact-outline > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.artifact-outline ol {
+  margin: 0.4rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 2px;
+}
+.artifact-outline li.nested {
+  padding-left: 1rem;
+}
+.artifact-outline a {
+  display: block;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  color: var(--muted-text);
+  text-decoration: none;
+}
+.artifact-outline a:hover {
+  background: var(--muted);
+}
+.artifact-outline a[aria-current='location'] {
+  color: var(--primary);
+  font-weight: 600;
+}

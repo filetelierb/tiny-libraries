@@ -1514,6 +1514,7 @@ export function App() {
                                 t={t}
                                 segments={material.segments}
                                 onCite={(segment) => citeFromArtifact(source.id, segment)}
+                                sourceName={source.name}
                                 saved={session.artifacts?.[source.id]}
                                 persist={(value) =>
                                   updateSession({
