@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { mkdir, readFile, writeFile, readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Kind, Segment, NormalizedSource } from '../shared/domain';
+import { parseTranscript, transcriptSegments } from '../shared/transcript';
 
 export const CHUNK_SECONDS = 300;
 export function command(binary: string, args: string[], timeout = 180000): Promise<string> {
@@ -207,8 +208,11 @@ export async function normalize(
   if ((await stat(input)).size > 2 * 1024 * 1024)
     throw new Error('Text documents for preparation must be 2 MB or smaller');
   const value = new TextDecoder('utf-8', { fatal: true }).decode(await readFile(input));
-  const segments =
-    value.match(/[\s\S]{1,4000}/g)?.map((text, i) => ({ id: `section-${i + 1}`, text })) || [];
   if (!value.trim()) throw new Error('Document contains no text');
+  // Subtitle files become timed passages, so their chapters point at moments of the talk.
+  const cues = kind === 'text' ? parseTranscript(value) : [];
+  const segments = cues.length
+    ? transcriptSegments(cues)
+    : value.match(/[\s\S]{1,4000}/g)?.map((text, i) => ({ id: `section-${i + 1}`, text })) || [];
   return { segments, chunks: [] };
 }

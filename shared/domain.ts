@@ -303,7 +303,7 @@ export function kindFor(name: string): Kind | null {
   if (ext === 'pdf') return 'pdf';
   if (['png', 'jpg', 'jpeg', 'webp'].includes(ext || '')) return 'image';
   if (ext === 'md') return 'markdown';
-  if (['txt', 'csv'].includes(ext || '')) return 'text';
+  if (['txt', 'csv', 'vtt', 'srt'].includes(ext || '')) return 'text';
   return null;
 }
 export const fold = (value: string) =>

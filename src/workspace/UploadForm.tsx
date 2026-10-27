@@ -115,7 +115,7 @@ export function UploadForm({
           hidden
           aria-label={t.chooseFiles}
           disabled={busy}
-          accept=".pdf,.mp4,.webm,.mov,.mkv,.wav,.mp3,.m4a,.ogg,.flac,.png,.jpg,.jpeg,.webp,.md,.txt,.csv"
+          accept=".pdf,.mp4,.webm,.mov,.mkv,.wav,.mp3,.m4a,.ogg,.flac,.png,.jpg,.jpeg,.webp,.md,.txt,.csv,.vtt,.srt"
           onChange={(event) => {
             setFiles([...(event.target.files || [])]);
             setDone(new Set());

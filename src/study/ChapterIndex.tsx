@@ -146,7 +146,10 @@ export function ChapterIndex({
                 ? `${formatTime(range.start)}–${formatTime(range.end)}`
                 : range.kind === 'page'
                   ? `${t.page} ${range.start}${range.end !== range.start ? `–${range.end}` : ''}`
-                  : `${t.source} ${range.segment.id}`;
+                  : range.segment.start != null
+                    ? // Transcript passages carry the time they were said.
+                      formatTime(range.segment.start)
+                    : `${t.source} ${range.segment.id}`;
             return (
               <section key={range.chapter.id} className="chapter-index-item">
                 <button
