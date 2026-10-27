@@ -1665,13 +1665,16 @@ function ConversationThread({
               })}
             </ul>
           )}
-          <input
-            type="search"
-            aria-label={t.search}
-            placeholder={t.search}
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
+          <label className="search-field">
+            <Search size={16} aria-hidden="true" />
+            <input
+              type="search"
+              aria-label={t.search}
+              placeholder={t.search}
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </label>
           <DirectoryTree
             actions={treeActions}
             mode="file"

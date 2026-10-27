@@ -892,7 +892,7 @@ export function App() {
           {libraryTab === 'library' && (
             <>
               <div className="library-search">
-                <Search size={15} />
+                <Search size={16} />
                 <input
                   aria-label={t.search}
                   placeholder={t.search}
@@ -2312,12 +2312,15 @@ export function App() {
           close={() => setModal(null)}
           closeLabel={t.close}
         >
-          <input
-            aria-label={t.search}
-            placeholder={t.search}
-            value={splitQuery}
-            onChange={(event) => setSplitQuery(event.target.value)}
-          />
+          <label className="search-field">
+            <Search size={16} aria-hidden="true" />
+            <input
+              aria-label={t.search}
+              placeholder={t.search}
+              value={splitQuery}
+              onChange={(event) => setSplitQuery(event.target.value)}
+            />
+          </label>
           <DirectoryTree
             mode="file"
             directories={catalog.directories}

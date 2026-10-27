@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy } from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-import { ChevronLeft, ChevronRight, ImagePlus, MapPin, Pencil } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ImagePlus, MapPin, Pencil, Search } from 'lucide-react';
 import type { Catalog, Source } from '../../shared/domain';
 import { sourceState } from '../../shared/directories';
 import type { SourceLocation } from '../../shared/locations';
@@ -94,13 +94,16 @@ export function CaptureSourcePicker({
       <fieldset disabled={busy} className="capture-picker-fields">
         <div className="capture-picker-layout">
           <div className="capture-picker-tree">
-            <input
-              type="search"
-              aria-label={t.search}
-              placeholder={t.search}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
+            <label className="search-field">
+              <Search size={16} aria-hidden="true" />
+              <input
+                type="search"
+                aria-label={t.search}
+                placeholder={t.search}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </label>
             <div className="capture-picker-views">
               <Button aria-pressed={view === 'files'} onClick={() => setView('files')}>
                 {t.files}

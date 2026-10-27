@@ -6,6 +6,7 @@ import {
   Play,
   Plus,
   RotateCcw,
+  Search,
   StickyNote,
   Trash2,
 } from 'lucide-react';
@@ -202,13 +203,16 @@ export function AnnotationsPanel({
                   {selectedIds.size} / {openFiles.length} {t.resourcesSelected}
                 </span>
               </div>
-              <input
-                type="search"
-                aria-label={t.search}
-                placeholder={t.search}
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-              />
+              <label className="search-field">
+                <Search size={16} aria-hidden="true" />
+                <input
+                  type="search"
+                  aria-label={t.search}
+                  placeholder={t.search}
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                />
+              </label>
               <DirectoryTree
                 directories={catalog.directories}
                 files={openFiles}

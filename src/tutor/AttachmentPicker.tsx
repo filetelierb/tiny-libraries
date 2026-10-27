@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { FilePlus, Upload, PenLine } from 'lucide-react';
+import { FilePlus, Upload, PenLine, Search } from 'lucide-react';
 import { api, uploadFile, ApiResponseError } from '../api';
 import { Button, Modal } from '../design/components';
 import type { T } from '../i18n';
@@ -274,13 +274,16 @@ export function AttachmentPicker({
               }}
             />
           </div>
-          <input
-            type="search"
-            aria-label={t.searchQuestionAttachments}
-            placeholder={t.searchQuestionAttachments}
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
+          <label className="search-field">
+            <Search size={16} aria-hidden="true" />
+            <input
+              type="search"
+              aria-label={t.searchQuestionAttachments}
+              placeholder={t.searchQuestionAttachments}
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </label>
           <div className="attachment-picker-tabs" role="group" aria-label={t.attachmentTypes}>
             <Button aria-pressed={mode === 'files'} onClick={() => setMode('files')}>
               {t.files}

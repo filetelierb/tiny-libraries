@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { CircleCheck, FileText, LoaderCircle, Upload, X } from 'lucide-react';
+import { CircleCheck, FileText, LoaderCircle, Search, Upload, X } from 'lucide-react';
 import type { Catalog } from '../../shared/domain';
 import { directoryState } from '../../shared/directories';
 import { Button } from '../design/components';
@@ -61,13 +61,16 @@ export function UploadForm({
       <fieldset className="destination-picker" disabled={busy}>
         <legend>{t.destination}</legend>
         <p className="destination-path">{selected?.path || t.libraryRoot}</p>
-        <input
-          type="search"
-          aria-label={t.searchFolders}
-          placeholder={t.searchFolders}
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-        />
+        <label className="search-field">
+          <Search size={16} aria-hidden="true" />
+          <input
+            type="search"
+            aria-label={t.searchFolders}
+            placeholder={t.searchFolders}
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </label>
         <DirectoryTree
           mode="folder"
           directories={catalog.directories}
