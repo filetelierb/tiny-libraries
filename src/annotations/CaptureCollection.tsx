@@ -204,7 +204,6 @@ export function CaptureCollectionEditor({
           }}
         />
       </header>
-      {value.items.length === 0 && <p className="small-empty">{t.captureEmpty}</p>}
       <div className="capture-collection-grid">
         {value.items.map((item, index) => (
           <article className="capture-tile" key={item.descriptor.id}>

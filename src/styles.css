@@ -1063,16 +1063,16 @@ hr {
   justify-content: center;
   flex-direction: column;
   flex: 1;
-  padding: 50px 8%;
+  padding: 24px;
   text-align: center;
 }
 .empty-icon {
-  color: color-mix(in oklch, var(--primary), transparent 35%);
-  height: 52px;
-  width: 52px;
+  color: color-mix(in oklch, var(--primary) 50%, transparent);
+  height: 40px;
+  width: 40px;
   display: grid;
   place-items: center;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 .empty-icon svg {
   width: 40px;
@@ -1080,22 +1080,25 @@ hr {
 }
 .empty h1 {
   font-family: var(--font-body);
-  font-size: 23px;
+  font-size: 16px;
   font-weight: 600;
-  line-height: 1.3;
-  max-width: 430px;
-  margin-bottom: 14px;
+  line-height: 1.5;
+  max-width: 384px;
+  margin: 0;
 }
 .empty > p {
   color: var(--muted-text);
-  font-size: 16px;
-  line-height: 1.6;
-  max-width: 470px;
-  margin-bottom: 26px;
+  font-size: 14px;
+  line-height: 1.5;
+  max-width: 384px;
+  margin: 8px 0 0;
 }
 .welcome-actions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 8px;
+  margin-top: 20px;
 }
 .study-panel {
   width: var(--study-width);
@@ -1382,9 +1385,9 @@ body:has(.panel-resizer.resizing) {
 }
 .small-empty {
   color: var(--muted-text);
-  font-size: var(--font-size-control);
-  line-height: 1.8;
-  padding: 30px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 16px 8px;
   text-align: center;
 }
 .small-empty svg {
@@ -7176,19 +7179,20 @@ body:has(.panel-resizer.resizing) {
   text-align: center;
 }
 .panel-empty > svg {
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
   margin-bottom: 8px;
-  color: color-mix(in oklch, var(--primary) 50%, transparent);
+  color: color-mix(in oklch, var(--primary) 45%, transparent);
 }
 .panel-empty > strong {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 500;
 }
 .panel-empty > p {
   max-width: 260px;
   margin: 0;
-  font-size: 14px;
+  font-size: 12px;
+  line-height: 1.5;
   color: var(--muted-text);
 }
 .annotation-card {

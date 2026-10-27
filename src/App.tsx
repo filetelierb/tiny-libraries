@@ -1160,7 +1160,7 @@ export function App() {
                   if (!catalog.files.length) showUpload();
                 }}
               >
-                <Folder size={16} />
+                <FolderOpen size={16} />
                 {t.exploreFiles}
               </Button>
               <Button
