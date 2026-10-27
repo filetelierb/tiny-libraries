@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { widgetInstructions } from '../shared/artifact-widgets';
 import type { Learning, Segment, reviewSummary } from '../shared/domain';
 import { conceptName } from '../shared/glossary';
 import {
@@ -49,6 +50,7 @@ export type TutorAgentInput = {
     }
   >;
   canCreateBookmark?: boolean;
+  canSaveArtifact?: boolean;
   webSearch?: true;
 };
 export type BookmarkWriter = (value: {
@@ -56,6 +58,11 @@ export type BookmarkWriter = (value: {
   sourceVersion: number;
   segment: Segment;
   label: string;
+}) => Promise<unknown>;
+export type ArtifactWriter = (value: {
+  sourceId: string;
+  title: string;
+  markdown: string;
 }) => Promise<unknown>;
 const resultSchema = z.object({
   text: z.string().max(16000),
@@ -80,6 +87,7 @@ export const tutorAgentCheckpointSchema = z.object({
   used: z.array(z.string().max(160)).max(161),
   eligible: z.array(tutorCitationSchema).max(4096),
   bookmarks: z.array(z.string().max(500)).max(3),
+  artifacts: z.array(z.string().max(80)).max(1).optional(),
   steers: z.array(z.string().uuid()).max(20),
   webSearched: z.boolean().optional(),
   pending: z
@@ -275,6 +283,24 @@ export async function createTutorAgent(input: TutorAgentInput, previous?: TutorA
         },
       },
     });
+  if (actions.canSaveArtifact && materials.some((material) => material.synthesis.artifact))
+    tools.push({
+      type: 'function',
+      function: {
+        name: 'save_artifact',
+        description: `Save a new version of the study artifact of a selected source, only when the user explicitly asks to create, rewrite, extend or improve it. Earlier versions stay available to the student. Write the whole artifact: a title and markdown grounded in the selected source. ${widgetInstructions}`,
+        parameters: {
+          type: 'object',
+          properties: {
+            sourceId: { type: 'string' },
+            title: { type: 'string' },
+            markdown: { type: 'string' },
+          },
+          required: ['sourceId', 'title', 'markdown'],
+          additionalProperties: false,
+        },
+      },
+    });
   const initialMessages: Message[] = [
     ...(input.webSearch
       ? [
@@ -346,7 +372,8 @@ export async function createTutorAgent(input: TutorAgentInput, previous?: TutorA
     });
   const messages = state.messages,
     used = state.used;
-  const createdBookmarks = new Set(state.bookmarks);
+  const createdBookmarks = new Set(state.bookmarks),
+    savedArtifacts = new Set(state.artifacts || []);
   return {
     get result() {
       return state.result;
@@ -366,6 +393,7 @@ export async function createTutorAgent(input: TutorAgentInput, previous?: TutorA
           ...state,
           eligible: [...eligible.values()],
           bookmarks: [...createdBookmarks],
+          artifacts: [...savedArtifacts],
         }),
       );
     },
@@ -416,7 +444,7 @@ export async function createTutorAgent(input: TutorAgentInput, previous?: TutorA
       }
       return state.result;
     },
-    async executeNextTool(writeBookmark?: BookmarkWriter) {
+    async executeNextTool(writeBookmark?: BookmarkWriter, writeArtifact?: ArtifactWriter) {
       const pending = state.pending;
       if (!pending) return null;
       const call = pending.calls[pending.next];
@@ -517,6 +545,34 @@ export async function createTutorAgent(input: TutorAgentInput, previous?: TutorA
               label: input.label,
             });
             createdBookmarks.add(segment.id);
+          }
+        } else if (
+          call.function.name === 'save_artifact' &&
+          actions.canSaveArtifact &&
+          writeArtifact
+        ) {
+          const input = z
+            .object({
+              sourceId: z.string(),
+              title: z.string().trim().min(1).max(180),
+              markdown: z.string().trim().min(1).max(60000),
+            })
+            .parse(JSON.parse(call.function.arguments));
+          const material =
+            materials.find((item) => item.sourceId === input.sourceId) ||
+            (materials.length === 1 ? materials[0] : undefined);
+          if (!material?.synthesis.artifact)
+            output = { error: 'Choose a selected source that already has a study artifact' };
+          // Saves are idempotent per turn, so a second save would silently repeat the first.
+          else if (savedArtifacts.size >= 1)
+            output = { error: 'Only one artifact version can be saved per reply' };
+          else {
+            output = await writeArtifact({
+              sourceId: material.sourceId,
+              title: input.title,
+              markdown: input.markdown,
+            });
+            savedArtifacts.add(material.sourceId);
           }
         } else output = { error: 'Tool is not permitted' };
       } catch (error) {

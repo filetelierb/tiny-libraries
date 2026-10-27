@@ -45,6 +45,7 @@ import {
   listRevisions,
   recordGenerated,
   saveEdit,
+  saveTutorVersion,
 } from './artifact-revisions';
 import { reinforcementSnapshot, startReinforcement, ReinforcementError } from './reinforcements';
 import type { Reinforcement } from '../shared/review';
@@ -179,6 +180,21 @@ export class Library extends DurableObject<Env> {
     try {
       if (path === '/internal/key')
         return json({ key: (await this.ctx.storage.get<string>('apiKey')) || null });
+      if (path === '/internal/tutor-artifact' && request.method === 'POST') {
+        const value = z
+          .object({
+            conversationId: z.string().min(1).max(200),
+            requestId: z.string().min(1).max(240),
+            sourceId: z.string().uuid(),
+            title: z.string().trim().min(1).max(180),
+            markdown: z.string().trim().min(1).max(60000),
+          })
+          .parse(await boundedJson(request));
+        if (!(await this.ctx.storage.get(`conversation:${value.conversationId}`)))
+          throw new ApiError('Conversation not found', 404);
+        const saved = await saveTutorVersion(this.ctx.storage, value.sourceId, value);
+        return json({ saved: true, revision: saved.revision, title: saved.title });
+      }
       if (path === '/internal/tutor-bookmark' && request.method === 'POST') {
         const value = z
           .object({
@@ -958,22 +974,6 @@ export default {
                 : 'application/x-subrip; charset=utf-8',
             'Cache-Control': 'no-store',
           },
-        });
-      }
-      if (url.pathname.startsWith('/api/code/')) {
-        const response = await fetch(`${env.MEDIA_BRIDGE_URL}${url.pathname}`, {
-          method: request.method,
-          headers: {
-            Authorization: `Bearer ${env.MEDIA_BRIDGE_TOKEN}`,
-            'Content-Type': 'application/json',
-          },
-          ...(request.method === 'POST'
-            ? { body: JSON.stringify(await boundedJson(request)) }
-            : {}),
-        });
-        return new Response(response.body, {
-          status: response.status,
-          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
         });
       }
       if (

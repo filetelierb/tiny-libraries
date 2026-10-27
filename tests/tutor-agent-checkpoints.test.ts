@@ -7,6 +7,7 @@ import {
   type BookmarkWriter,
 } from '../worker/tutor-agent';
 import type { CompletionMessage } from '../shared/tutor-transport';
+import type { Learning } from '../shared/domain';
 
 const sourceId = '8b3e207a-cfb4-4e24-bc84-cfb4d584ab60';
 const input: TutorAgentInput = {
@@ -187,4 +188,59 @@ test('the model-step bound retains the last completed result when a later instru
   assert.deepEqual(agent.result, result);
   const saved = await createTutorAgent(input, roundTrip(agent.snapshot()));
   assert.deepEqual(saved.result, result);
+});
+
+test('the tutor saves one artifact version for a selected source', async () => {
+  const [material] = input.learning as Learning[];
+  const withArtifact: TutorAgentInput = {
+    ...input,
+    canSaveArtifact: true,
+    learning: [
+      {
+        ...material,
+        synthesis: {
+          ...material.synthesis,
+          artifact: {
+            kind: 'signal',
+            title: 'Aliasing',
+            explanation: 'Old text.',
+            segmentIds: ['section-1'],
+            frequency: 8,
+            sampling: 12,
+            amplitude: 0.8,
+          },
+        },
+      },
+    ],
+  };
+  const agent = await createTutorAgent(withArtifact);
+  assert.ok(
+    JSON.stringify(agent.request().tools).includes('save_artifact'),
+    'the tool is offered when a selected source has an artifact',
+  );
+  const markdown = `## Sampling\n\n\`\`\`widget\n{"type":"summary","points":[{"text":"Twice f","segmentId":"${sourceId}:section-1"}]}\n\`\`\``;
+  agent.acceptCompletion({
+    content: null,
+    tool_calls: [
+      call('one', 'save_artifact', { sourceId, title: 'Aliasing, rewritten', markdown }),
+      call('two', 'save_artifact', { sourceId: 'elsewhere', title: 'x', markdown: 'y' }),
+    ],
+  });
+  const writes: unknown[] = [];
+  const writer = async (value: unknown) => {
+    writes.push(value);
+    return { saved: true, revision: 2 };
+  };
+  await agent.executeNextTool(undefined, writer);
+  const second = await agent.executeNextTool(undefined, writer);
+  assert.deepEqual(writes, [
+    {
+      sourceId,
+      title: 'Aliasing, rewritten',
+      markdown,
+    },
+  ]);
+  assert.deepEqual(second?.output, { error: 'Only one artifact version can be saved per reply' });
+  const withoutTool = await createTutorAgent({ ...withArtifact, canSaveArtifact: false });
+  assert.ok(!JSON.stringify(withoutTool.request().tools).includes('save_artifact'));
 });

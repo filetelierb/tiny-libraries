@@ -2715,14 +2715,6 @@ body:has(.panel-resizer.resizing) {
 .assistant form textarea {
   min-height: 80px;
 }
-.code-output {
-  overflow: auto;
-  max-height: 400px;
-  font-size: var(--font-size-small);
-  white-space: pre-wrap;
-  background: var(--muted);
-  padding: 10px;
-}
 .notice {
   border: 1px solid var(--border);
   background: var(--accent);
@@ -9290,4 +9282,21 @@ body:has(.panel-resizer.resizing) {
   display: flex;
   justify-content: space-between;
   gap: 8px;
+}
+.artifact-source {
+  max-width: 800px;
+  margin: 20px auto;
+  padding: 16px 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.artifact-tutor-hint {
+  margin: 8px 0 0;
+  font-size: 12px;
 }

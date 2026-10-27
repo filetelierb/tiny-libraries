@@ -7,6 +7,7 @@ import {
   revisionSummary,
   type ArtifactRevision,
 } from '../shared/artifact-revisions';
+import { normalizeTutorMarkdown, sanitizeWidgets } from '../shared/artifact-widgets';
 import type { GlossaryStorage, GlossaryStore } from './glossary';
 
 export class ArtifactRevisionError extends Error {
@@ -107,7 +108,50 @@ export async function saveEdit(storage: GlossaryStorage, sourceId: string, body:
   });
 }
 
+/**
+ * The tutor writes a whole new version on the student's request. A retried tool call
+ * returns the version it already saved, and widgets citing unknown passages are dropped.
+ */
+export async function saveTutorVersion(
+  storage: GlossaryStorage,
+  sourceId: string,
+  input: { requestId: string; title: string; markdown: string },
+) {
+  return storage.transaction(async (tx) => {
+    const requestKey = `artifact-tutor-request:${sourceId}:${input.requestId}`;
+    const done = await tx.get<number>(requestKey);
+    if (done) return revisionSummary(await getRevision(tx, sourceId, done));
+    const learning = await tx.get<Learning>(`learning:${sourceId}`);
+    if (!learning?.synthesis.artifact)
+      throw new ArtifactRevisionError('This source has no artifact to revise', 404);
+    const ids = learning.segments.map((segment) => segment.id),
+      normalized = normalizeTutorMarkdown(input.markdown, sourceId, ids),
+      explanation = sanitizeWidgets(normalized.markdown, new Set(ids));
+    if (!input.title.trim() || !explanation)
+      throw new ArtifactRevisionError('The artifact needs a title and content', 422);
+    const revisions = await stored(tx, sourceId),
+      head = revisions.at(-1)!;
+    for (const item of revisions) await tx.put(revisionKey(sourceId, item.revision), item);
+    const saved: ArtifactRevision = {
+      sourceId,
+      sourceVersion: learning.sourceVersion,
+      revision: head.revision + 1,
+      origin: 'tutor',
+      createdAt: new Date().toISOString(),
+      artifact: {
+        ...head.artifact,
+        title: input.title.trim(),
+        explanation,
+        segmentIds: [...new Set([...head.artifact.segmentIds, ...normalized.cited])],
+      },
+    };
+    await tx.put(revisionKey(sourceId, saved.revision), saved);
+    await tx.put(requestKey, saved.revision);
+    return revisionSummary(saved);
+  });
+}
+
 export async function deleteRevisions(tx: GlossaryStore, sourceId: string) {
-  for (const key of (await tx.list({ prefix: revisionPrefix(sourceId) })).keys())
-    await tx.delete(key);
+  for (const prefix of [revisionPrefix(sourceId), `artifact-tutor-request:${sourceId}:`])
+    for (const key of (await tx.list({ prefix })).keys()) await tx.delete(key);
 }

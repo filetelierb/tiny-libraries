@@ -1235,6 +1235,7 @@ function ConversationThread({
                               list_concepts: t.toolListConcepts,
                               read_concepts: t.toolReadConcepts,
                               create_bookmark: t.toolCreateBookmark,
+                              save_artifact: t.toolSaveArtifact,
                               web_search: t.toolWebSearch,
                             }) as Record<string, string>
                           )[tool] || t.studyTool,

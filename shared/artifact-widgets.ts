@@ -426,3 +426,28 @@ export function widgetSegments(markdown: string) {
     return widget ? widgetCitations(widget) : [];
   });
 }
+
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Tutor-written artifacts arrive in chat conventions: source-prefixed evidence ids, inline
+ * `[evidence]` and `[concept.…]` citations, and LaTeX escaped twice through JSON. Artifacts
+ * cite through their reference list instead, so inline citations become references.
+ */
+export function normalizeTutorMarkdown(markdown: string, sourceId: string, segmentIds: string[]) {
+  const prefix = escapeRegExp(`${sourceId}:`),
+    known = new Set(segmentIds),
+    cited = new Set<string>();
+  const text = markdown
+    .replace(new RegExp(`("segmentId"\\s*:\\s*")${prefix}`, 'g'), '$1')
+    .replace(new RegExp(`[ \\t]*\\[(?:${prefix})?([^\\]\\s]+)\\]`, 'g'), (match, id: string) => {
+      if (!known.has(id)) return match;
+      cited.add(id);
+      return '';
+    })
+    .replace(/[ \t]*\[concept\.[0-9a-f-]{36}\.v\d+\]/g, '')
+    .replace(/\$\$[\s\S]+?\$\$|\\\([\s\S]+?\\\)|\\\[[\s\S]+?\\\]/g, (math) =>
+      math.replace(/\\\\(?=[A-Za-z])/g, '\\'),
+    );
+  return { markdown: text, cited: [...cited] };
+}

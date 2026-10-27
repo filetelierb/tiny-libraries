@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   compileExpression,
+  normalizeTutorMarkdown,
   parseWidget,
   sanitizeWidgets,
   widgetImages,
@@ -83,4 +84,29 @@ test('generated markdown keeps valid widgets and drops broken or uncited ones', 
   const withPicture = sanitizeWidgets(markdown, new Set(['s1', 's2']), new Set(['s2']));
   assert.deepEqual(widgetImages(withPicture), ['s2']);
   assert.deepEqual(widgetSegments(withPicture), ['s1', 's2']);
+});
+
+test('tutor markdown is normalized to artifact conventions', () => {
+  const source = '40e7704f-8447-4026-b24a-4240df014380';
+  const raw = [
+    `Samples count per second [${source}:section-1]. A [link](x) stays.`,
+    `> [!definition]\n> Nyquist limit [concept.bd8b7004-4170-4001-9844-eab4e35d4e61.v3].`,
+    '$$ f_s > 2 \\\\times 8 \\\\text{ Hz} \\\\\\\\ 16 $$ and \\(12 \\\\text{ Hz}\\) but prose \\\\keeps.',
+    '```widget\n{"type": "summary", "points": [{"text": "x", "segmentId": "' +
+      source +
+      ':section-1"}]}\n```',
+    'Unknown [other] stays.',
+  ].join('\n\n');
+  const { markdown, cited } = normalizeTutorMarkdown(raw, source, ['section-1']);
+  assert.deepEqual(cited, ['section-1']);
+  assert.equal(
+    markdown,
+    [
+      'Samples count per second. A [link](x) stays.',
+      '> [!definition]\n> Nyquist limit.',
+      '$$ f_s > 2 \\times 8 \\text{ Hz} \\\\\\\\ 16 $$ and \\(12 \\text{ Hz}\\) but prose \\\\keeps.',
+      '```widget\n{"type": "summary", "points": [{"text": "x", "segmentId": "section-1"}]}\n```',
+      'Unknown [other] stays.',
+    ].join('\n\n'),
+  );
 });

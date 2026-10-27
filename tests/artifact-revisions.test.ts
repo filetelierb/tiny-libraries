@@ -7,6 +7,7 @@ import {
   listRevisions,
   recordGenerated,
   saveEdit,
+  saveTutorVersion,
 } from '../worker/artifact-revisions';
 import { MemoryStore } from './storage';
 
@@ -120,5 +121,34 @@ test('a new preparation is appended after earlier edits', async () => {
       [2, 'edited', 1],
       [1, 'generated', 1],
     ],
+  );
+});
+
+test('a tutor version is saved once per request and drops uncited widgets', async () => {
+  const memory = await setup();
+  const widget = (segmentId: string) =>
+    '```widget\n' +
+    JSON.stringify({ type: 'summary', points: [{ text: 'Point', segmentId }] }) +
+    '\n```';
+  const request = {
+    requestId: 'turn-1:r1',
+    title: 'Tutor rewrite',
+    markdown: `## Aliasing\n\n${widget('alias')}\n\n${widget('invented')}`,
+  };
+  const saved = await saveTutorVersion(memory.storage(), sourceId, request);
+  assert.equal(saved.revision, 2);
+  assert.equal(saved.origin, 'tutor');
+  const again = await saveTutorVersion(memory.storage(), sourceId, request);
+  assert.equal(again.revision, 2);
+  const stored = await getRevision(memory, sourceId, 2);
+  assert.equal(stored.artifact.explanation, `## Aliasing\n\n${widget('alias')}`);
+  assert.equal(stored.artifact.kind === 'signal' && stored.artifact.frequency, 8);
+  await assert.rejects(
+    saveTutorVersion(memory.storage(), sourceId, {
+      ...request,
+      requestId: 'turn-2:r1',
+      markdown: widget('invented'),
+    }),
+    { status: 422 },
   );
 });

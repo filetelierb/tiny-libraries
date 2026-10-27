@@ -9,7 +9,7 @@ export const primaryStudyTools = [
   'glossary',
   'artifacts',
 ] as const;
-export const auxiliaryStudyTools = ['chapters', 'practice', 'review', 'miniapp'] as const;
+export const auxiliaryStudyTools = ['chapters', 'practice', 'review'] as const;
 export const studyTools = [...primaryStudyTools, ...auxiliaryStudyTools] as const;
 export type StudyTab = (typeof studyTools)[number];
 export function isPrimaryStudyTool(value: StudyTab) {

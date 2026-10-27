@@ -14,12 +14,17 @@ export type WidgetHost = {
 };
 export const WidgetHostContext = createContext<WidgetHost>({});
 
-/** Widget fields are plain text whose only markup is inline `$latex$`. */
+/** Widget fields are plain text whose only markup is inline math: `$latex$` or `\(latex\)`. */
 function WidgetText({ text }: { text: string }) {
-  const parts = text.split(/\$([^$]+)\$/);
-  return (
-    <>{parts.map((part, index) => (index % 2 ? <Formula key={index} source={part} /> : part))}</>
-  );
+  const pieces: ReactNode[] = [];
+  let last = 0;
+  for (const match of text.matchAll(/\$([^$\n]+)\$|\\\(([\s\S]+?)\\\)/g)) {
+    pieces.push(text.slice(last, match.index));
+    pieces.push(<Formula key={match.index} source={match[1] ?? match[2]} />);
+    last = match.index + match[0].length;
+  }
+  pieces.push(text.slice(last));
+  return <>{pieces}</>;
 }
 
 function Cite({ segmentId, t }: { segmentId?: string; t: T }) {

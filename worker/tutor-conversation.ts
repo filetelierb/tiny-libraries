@@ -154,6 +154,12 @@ export class TutorConversation extends DurableObject<Env> {
           conversationId: record.conversationId,
           requestId: `${record.id}:r${record.intentRevision}`,
         }),
+      artifact: (record, _intent, value) =>
+        this.library('/internal/tutor-artifact', {
+          ...value,
+          conversationId: record.conversationId,
+          requestId: `${record.id}:r${record.intentRevision}`,
+        }),
     };
   }
   private async run() {

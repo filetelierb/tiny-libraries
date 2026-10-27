@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { PencilLine } from 'lucide-react';
+import { Code2, Download, Eye, PencilLine } from 'lucide-react';
 import type { Artifact } from '../../shared/domain';
 import type { ArtifactRevision, ArtifactRevisionSummary } from '../../shared/artifact-revisions';
 import { api } from '../api';
@@ -27,6 +27,7 @@ export function ArtifactVersions({
   const [versions, setVersions] = useState<ArtifactRevisionSummary[]>([]),
     [selected, setSelected] = useState<ArtifactRevision | null>(null),
     [editing, setEditing] = useState(false),
+    [source, setSource] = useState(false),
     [error, setError] = useState(''),
     [tick, setTick] = useState(0);
   const latestKey = `${latest.title}\n${latest.explanation}`;
@@ -76,7 +77,13 @@ export function ArtifactVersions({
             {error}
           </p>
         )}
-        {render(shown, !selected)}
+        {source ? (
+          <pre className="artifact-source" tabIndex={0} aria-label={t.viewSource}>
+            {`# ${shown.title}\n\n${shown.explanation}`}
+          </pre>
+        ) : (
+          render(shown, !selected)
+        )}
       </div>
       <footer className="artifact-versions" aria-label={t.artifactVersions}>
         <span>
@@ -96,7 +103,12 @@ export function ArtifactVersions({
           {versions.slice(1).map((version) => (
             <option key={version.revision} value={version.revision}>
               v{version.revision} ·{' '}
-              {version.origin === 'edited' ? t.versionEdited : t.versionGenerated} ·{' '}
+              {version.origin === 'edited'
+                ? t.versionEdited
+                : version.origin === 'tutor'
+                  ? t.versionTutor
+                  : t.versionGenerated}{' '}
+              ·{' '}
               {new Date(version.createdAt).toLocaleString(undefined, {
                 dateStyle: 'medium',
                 timeStyle: 'short',
@@ -104,6 +116,32 @@ export function ArtifactVersions({
             </option>
           ))}
         </select>
+        <Button
+          size="sm"
+          variant={source ? 'secondary' : 'ghost'}
+          aria-pressed={source}
+          onClick={() => setSource(!source)}
+        >
+          {source ? <Eye /> : <Code2 />}
+          {source ? t.viewPreview : t.viewSource}
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => {
+            const url = URL.createObjectURL(
+              new Blob([`# ${shown.title}\n\n${shown.explanation}\n`], { type: 'text/markdown' }),
+            );
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${shown.title.replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '') || 'artifact'}-v${selected?.revision ?? head?.revision ?? 1}.md`;
+            link.click();
+            URL.revokeObjectURL(url);
+          }}
+        >
+          <Download />
+          {t.downloadArtifact}
+        </Button>
         {!selected && head && (
           <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>
             <PencilLine />

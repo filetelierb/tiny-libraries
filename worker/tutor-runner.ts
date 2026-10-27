@@ -9,6 +9,7 @@ import {
   createTutorAgent,
   type TutorAgentInput,
   type TutorAgentCheckpoint,
+  type ArtifactWriter,
   type BookmarkWriter,
 } from './tutor-agent';
 import { TutorJournal } from './tutor-journal';
@@ -23,6 +24,11 @@ export type TutorRunnerServices = {
     record: TurnRecord,
     intent: TurnIntent,
     input: Parameters<BookmarkWriter>[0],
+  ): Promise<unknown>;
+  artifact?(
+    record: TurnRecord,
+    intent: TurnIntent,
+    input: Parameters<ArtifactWriter>[0],
   ): Promise<unknown>;
 };
 class ControlCheckpoint extends Error {}
@@ -224,7 +230,8 @@ export class TutorRunner {
           control.steering.length
         )
           return;
-        await agent.executeNextTool(async (value) => {
+        // Writes happen only while this turn is still the active, unsteered one.
+        const guard = async () => {
           const current = await this.journal.active();
           if (
             !current ||
@@ -233,8 +240,19 @@ export class TutorRunner {
             current.steering.length
           )
             throw new ControlCheckpoint();
-          return this.services.bookmark(record!, intent, value);
-        });
+        };
+        const artifact = this.services.artifact?.bind(this.services);
+        await agent.executeNextTool(
+          async (value) => {
+            await guard();
+            return this.services.bookmark(record!, intent, value);
+          },
+          artifact &&
+            (async (value) => {
+              await guard();
+              return artifact(record!, intent, value);
+            }),
+        );
         const checkpointObject = await this.journal.objects.put(agent.snapshot());
         await this.journal.progress(record, { checkpointObject, toolNames: agent.snapshot().used });
         return;

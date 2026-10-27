@@ -191,6 +191,7 @@ async function prepareIntent(
     attachments: attachedContent,
     context,
     canCreateBookmark: true,
+    canSaveArtifact: true,
     ...(input.webSearch ? { webSearch: true } : {}),
   };
   const objects = new TutorObjects(

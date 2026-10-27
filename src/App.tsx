@@ -27,7 +27,6 @@ import {
   ArrowUp,
   ArrowLeft,
   CircleHelp,
-  Code2,
   LoaderCircle,
   Pin,
   PinOff,
@@ -1962,8 +1961,6 @@ export function App() {
                 });
               }}
             />
-          ) : tab === 'miniapp' ? (
-            <CodePanel t={t} onError={setError} />
           ) : !active ? (
             <div className="small-empty">
               <BookOpen size={24} />
@@ -1991,10 +1988,7 @@ export function App() {
                   ) : (
                     <p className="muted">{t.noSourceArtifacts}</p>
                   )}
-                  <Button variant="ghost" onClick={() => selectStudyTool('miniapp')}>
-                    <Code2 size={14} />
-                    {t.miniapp}
-                  </Button>
+                  <p className="muted artifact-tutor-hint">{t.artifactTutorHint}</p>
                 </section>
               )}
               {tab === 'chapters' && (
@@ -2783,51 +2777,6 @@ function Practice({
           )}
         </section>
       ))}
-    </>
-  );
-}
-function CodePanel({ t, onError }: { t: T; onError: (s: string) => void }) {
-  const [available, setAvailable] = useState<boolean | null>(null),
-    [draft, setDraft] = useState(''),
-    [pending, setPending] = useState(false),
-    [result, setResult] = useState('');
-  useEffect(() => {
-    api<{ available: boolean }>('/code/status')
-      .then((s) => setAvailable(s.available))
-      .catch(() => setAvailable(false));
-  }, []);
-  return (
-    <>
-      <div className="section-label">
-        <Code2 size={15} />
-        {t.miniapp}
-      </div>
-      <p className="muted">{t.miniappNotice}</p>
-      {available === false && <div className="notice">{t.codeUnavailable}</div>}
-      <textarea
-        aria-label={t.miniapp}
-        placeholder={t.codePrompt}
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-      />
-      <Button
-        disabled={!available || pending || !draft.trim()}
-        onClick={async () => {
-          setPending(true);
-          try {
-            const proposal = await api<unknown>('/code/sessions', 'POST', { prompt: draft });
-            setResult(JSON.stringify(proposal, null, 2));
-          } catch (e) {
-            onError(e instanceof Error ? e.message : t.error);
-          } finally {
-            setPending(false);
-          }
-        }}
-      >
-        {pending ? <LoaderCircle className="spin" size={14} /> : <Code2 size={14} />} {t.startCode}
-      </Button>
-      <p className="muted">{t.readOnly}</p>
-      {result && <pre className="code-output">{result}</pre>}
     </>
   );
 }

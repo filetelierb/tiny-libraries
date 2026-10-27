@@ -5,7 +5,7 @@ export type ArtifactRevision = {
   sourceId: string;
   sourceVersion: number;
   revision: number;
-  origin: 'generated' | 'edited';
+  origin: 'generated' | 'edited' | 'tutor';
   createdAt: string;
   artifact: Artifact;
 };
