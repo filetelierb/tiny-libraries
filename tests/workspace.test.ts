@@ -17,6 +17,7 @@ import {
   reorderResourceTabs,
   splitWithResource,
   openArtifact,
+  sessionsWithResource,
 } from '../src/workspace/tabs';
 import { splitLimits } from '../src/workspace/SplitWorkspace';
 import {
@@ -304,4 +305,21 @@ test('artifacts open in their own tab without replacing the source tab', () => {
   const back = openResource(state, 'a', 'preview');
   assert.equal(back.activeTabId, state.resourceTabs[0].id);
   assert.equal(back.resourceTabs.length, 2);
+});
+
+test('the resume chooser lists other sessions holding the file, newest first', () => {
+  const older = { ...saved, id: 'older', createdAt: '2026-10-20' };
+  const newer = { ...saved, id: 'newer', createdAt: '2026-10-25' };
+  const unrelated = {
+    ...saved,
+    id: 'unrelated',
+    tabs: ['notes'],
+    active: 'notes',
+    split: null,
+  };
+  assert.deepEqual(
+    sessionsWithResource([older, unrelated, newer, saved], saved.id, 'slides').map((s) => s.id),
+    ['newer', 'older'],
+  );
+  assert.deepEqual(sessionsWithResource([saved], saved.id, 'slides'), []);
 });

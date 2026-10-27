@@ -226,3 +226,18 @@ export function replacePane(
     ),
   };
 }
+
+/** Other sessions that already have this file open, newest first, for the resume chooser. */
+export function sessionsWithResource(
+  sessions: StudySession[],
+  currentId: string,
+  fileId: string,
+): StudySession[] {
+  return sessions
+    .filter(
+      (session) =>
+        session.id !== currentId &&
+        readWorkspace(session).resourceTabs.some((tab) => tab.sources.includes(fileId)),
+    )
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}

@@ -436,6 +436,10 @@ const en = {
   sourceReferences: 'Source references',
   artifactReferences: 'References',
   showAllSessions: 'Show all sessions',
+  sessionChoiceTitle: 'Resume a session?',
+  sessionChoiceBody:
+    '{file} is already open in these sessions. Resume one, or open it in this session.',
+  sessionChoiceHere: 'Open in this session',
   reviewArtifact: 'Review',
   sourceArtifacts: 'Artifacts using this source',
   sourcePassage: 'Source passage',
@@ -1512,6 +1516,10 @@ const es: Dictionary = {
   sourceReferences: 'Referencias',
   artifactReferences: 'Referencias',
   showAllSessions: 'Mostrar todas las sesiones',
+  sessionChoiceTitle: '¿Retomar una sesión?',
+  sessionChoiceBody:
+    '{file} ya está abierto en estas sesiones. Retoma una o ábrelo en esta sesión.',
+  sessionChoiceHere: 'Abrir en esta sesión',
   reviewArtifact: 'Repaso',
   sourceArtifacts: 'Artefactos que usan esta fuente',
   sourcePassage: 'Pasaje de la fuente',

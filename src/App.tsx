@@ -74,6 +74,7 @@ import {
   readWorkspace,
   workspacePatch,
   openResource,
+  sessionsWithResource,
   openArtifact,
   closeResourceTab,
   reorderResourceTabs,
@@ -242,6 +243,11 @@ export function App() {
     [busy, setBusy] = useState(false),
     [sessionExpired, setSessionExpired] = useState(false),
     [reviewing, setReviewing] = useState(false),
+    [sessionChoice, setSessionChoice] = useState<{
+      file: Source;
+      mode: 'preview' | 'retain';
+      sessions: StudySession[];
+    } | null>(null),
     [uploadProgress, setUploadProgress] = useState<number | null>(null),
     [uploading, setUploading] = useState<{ name: string; index: number; total: number } | null>(
       null,
@@ -465,8 +471,17 @@ export function App() {
     }
     if (panels.drawer === 'left') setLeft(false);
   }
-  function openFile(file: Source, mode: 'preview' | 'retain' = 'preview') {
+  function openFile(file: Source, mode: 'preview' | 'retain' = 'preview', here = false) {
     if (!sessionRef.current) return;
+    // A fresh, empty session first offers to resume a session that already studies this file.
+    const others =
+      !here && catalog && !usable(sessionRef.current).resourceTabs.length
+        ? sessionsWithResource(catalog.sessions, sessionRef.current.id, file.id)
+        : [];
+    if (others.length) {
+      setSessionChoice({ file, mode, sessions: others });
+      return;
+    }
     commitWorkspace(openResource(usable(sessionRef.current), file.id, mode));
     setArtifact(false);
     setArtifactSplit(null);
@@ -2350,6 +2365,50 @@ export function App() {
             />
           );
         })()}
+      {sessionChoice && (
+        <Modal
+          title={t.sessionChoiceTitle}
+          close={() => setSessionChoice(null)}
+          closeLabel={t.close}
+          className="session-choice"
+        >
+          <p>{t.sessionChoiceBody.replace('{file}', sessionChoice.file.name)}</p>
+          <ul className="session-choice-list">
+            {sessionChoice.sessions.map((item) => {
+              const preview = sessionPreview(item, catalog.files, catalog.conversations);
+              return (
+                <li key={item.id}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSessionChoice(null);
+                      selectSession(item);
+                      if (panels.drawer === 'left') setLeft(false);
+                    }}
+                  >
+                    <strong>{item.name}</strong>
+                    <small>
+                      {new Date(item.createdAt).toLocaleDateString(locale)} · {preview.count}{' '}
+                      {t.messagesShort}
+                    </small>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="modal-actions">
+            <Button
+              onClick={() => {
+                const { file, mode } = sessionChoice;
+                setSessionChoice(null);
+                openFile(file, mode, true);
+              }}
+            >
+              {t.sessionChoiceHere}
+            </Button>
+          </div>
+        </Modal>
+      )}
       {modal === 'upload' && (
         <Modal
           title={t.upload}
