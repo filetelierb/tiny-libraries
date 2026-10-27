@@ -3562,7 +3562,6 @@ body:has(.panel-resizer.resizing) {
   min-height: 280px;
   gap: 12px;
 }
-.glossary-panel > header,
 .glossary-detail > header,
 .glossary-editor > header,
 .glossary-edit-sense > header,
@@ -3577,67 +3576,10 @@ body:has(.panel-resizer.resizing) {
 .glossary-editor h3 {
   margin: 0;
 }
-.glossary-panel > header .button {
-  font-size: var(--font-size-small);
-}
-.glossary-search span {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-.glossary-filters {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-.glossary-filters label:first-child {
-  grid-column: 1/-1;
-}
-.glossary-filters select {
-  padding: 6px 8px;
-  font-size: var(--font-size-control);
-}
-.glossary-total {
-  margin: 0;
-  color: var(--muted-text);
-  font-size: var(--font-size-small);
-}
 .glossary-list {
   flex: 1;
   min-height: 100px;
   overflow: auto;
-}
-.glossary-summary {
-  display: block;
-  width: 100%;
-  text-align: left;
-  border-bottom: 1px solid var(--border);
-  padding: 16px 2px;
-}
-.glossary-summary strong {
-  font-size: 18px;
-}
-.glossary-summary p {
-  margin: 7px 0;
-  font-size: var(--font-size-control);
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.glossary-summary > small {
-  display: block;
-  color: var(--primary);
-}
-.glossary-summary:hover {
-  background: var(--muted);
-}
-.glossary-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 12px;
-  color: var(--muted-text);
-  font-size: var(--font-size-small);
 }
 .glossary-actions {
   display: flex;
@@ -7094,4 +7036,133 @@ body:has(.panel-resizer.resizing) {
 }
 .bookmark-composer label {
   font-size: 12px;
+}
+
+/* Glossary list: search with a filter toggle and compact concept cards. */
+.glossary-panel {
+  gap: 0;
+}
+.glossary-search-row {
+  display: flex;
+  gap: 8px;
+}
+.glossary-search-row > .search-field {
+  flex: 1;
+  min-width: 0;
+}
+.glossary-filter-toggle {
+  position: relative;
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  min-height: 36px;
+}
+.glossary-filter-toggle[aria-expanded='true'] {
+  background: var(--muted);
+}
+.filter-count {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  display: grid;
+  place-items: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: var(--on-primary);
+  font-size: 10px;
+  font-weight: 600;
+}
+.glossary-filters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--background);
+}
+.glossary-filters label {
+  gap: 4px;
+  font-size: 12px;
+}
+.glossary-filters label:first-child {
+  grid-column: 1 / -1;
+}
+.glossary-filters select {
+  min-height: 32px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+.glossary-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 0;
+}
+.glossary-summary {
+  display: block;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: color-mix(in oklch, var(--muted) 25%, transparent);
+  text-align: left;
+  transition:
+    background 150ms,
+    border-color 150ms;
+}
+.glossary-summary:hover {
+  border-color: color-mix(in oklch, var(--primary) 30%, transparent);
+  background: color-mix(in oklch, var(--primary) 5%, transparent);
+}
+.glossary-summary-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.glossary-summary-head strong {
+  font-size: 16px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.glossary-summary-head svg {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin-top: 3px;
+  color: var(--muted-text);
+}
+.glossary-summary:hover .glossary-summary-head svg {
+  color: var(--primary);
+}
+.glossary-summary > small {
+  display: block;
+  font-size: 11px;
+  color: var(--primary);
+}
+.glossary-summary > p {
+  display: -webkit-box;
+  margin: 6px 0 10px;
+  overflow: hidden;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  font-size: 14px;
+  line-height: 1.625;
+  color: var(--muted-text);
+}
+.glossary-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.glossary-meta .badge svg {
+  width: 12px;
+  height: 12px;
+}
+.glossary-more {
+  width: 100%;
 }

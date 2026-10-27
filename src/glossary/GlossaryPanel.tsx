@@ -9,12 +9,17 @@ import {
   RotateCcw,
   Search,
   Link as LinkIcon,
+  ArrowUpRight,
+  BookOpen,
+  FileText,
+  Network,
+  SlidersHorizontal,
 } from 'lucide-react';
 import type { Catalog, ConceptSource, PublicLearning, Source } from '../../shared/domain';
 import type { SourceLocation } from '../../shared/annotations';
 import { normalizeConcept, type GlossaryEntry, type GlossarySummary } from '../../shared/glossary';
 import { api } from '../api';
-import { Badge, Button } from '../design/components';
+import { Badge, Button, IconButton } from '../design/components';
 import { GlossaryEditor } from './GlossaryEditor';
 import type { TreeActions } from '../workspace/DirectoryTree';
 import type { T } from '../i18n';
@@ -86,6 +91,7 @@ export function GlossaryPanel({
   const [query, setQuery] = useState(() => preference('query', ''));
   const [archived, setArchived] = useState(() => preference('archived', 'false') === 'true');
   const [reviewed, setReviewed] = useState(() => preference('reviewed', 'all'));
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [search, setSearch] = useState(query),
     [page, setPage] = useState<Page>({ items: [], nextCursor: null, total: 0 });
   const [loading, setLoading] = useState(false),
@@ -638,48 +644,74 @@ export function GlossaryPanel({
         )}
       </div>
     );
+  const activeFilters = Number(scope !== 'all') + Number(archived) + Number(reviewed !== 'all');
   return (
     <div className="glossary-panel">
-      <header>
-        <h3>{t.glossary}</h3>
-        <Button onClick={newEntry}>
-          <Plus size={14} />
-          {t.newConcept}
-        </Button>
-      </header>
-      <label className="glossary-search">
-        <span>
-          <Search size={14} />
-          {t.searchConcepts}
-        </span>
-        <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} />
-      </label>
-      <div className="glossary-filters">
-        <label>
-          {t.glossaryScope}
-          <select value={scope} onChange={(e) => setScope(e.target.value)}>
-            <option value="all">{t.entireLibrary}</option>
-            <option value="active">{t.currentFile}</option>
-            <option value="open">{t.openResourcesScope}</option>
-          </select>
-        </label>
-        <label>
-          {t.status}
-          <select value={String(archived)} onChange={(e) => setArchived(e.target.value === 'true')}>
-            <option value="false">{t.activeConcepts}</option>
-            <option value="true">{t.archived}</option>
-          </select>
-        </label>
-        <label>
-          {t.definitionReview}
-          <select value={reviewed} onChange={(e) => setReviewed(e.target.value)}>
-            <option value="all">{t.all}</option>
-            <option value="true">{t.reviewed}</option>
-            <option value="false">{t.notReviewed}</option>
-          </select>
-        </label>
+      <div className="annotation-panel-head">
+        <div className="panel-title-row">
+          <div>
+            <p>{t.glossary}</p>
+            <small>{t.glossarySubtitle}</small>
+          </div>
+          <IconButton label={t.newConcept} onClick={newEntry}>
+            <Plus />
+          </IconButton>
+        </div>
+        <div className="glossary-search-row">
+          <div className="search-field">
+            <Search />
+            <input
+              type="search"
+              aria-label={t.searchConcepts}
+              placeholder={t.searchConcepts}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </div>
+          <button
+            type="button"
+            className="button button-default icon-button glossary-filter-toggle"
+            aria-label={t.glossaryFilters}
+            title={t.glossaryFilters}
+            aria-expanded={filtersOpen}
+            onClick={() => setFiltersOpen(!filtersOpen)}
+          >
+            <SlidersHorizontal />
+            {activeFilters > 0 && <span className="filter-count">{activeFilters}</span>}
+          </button>
+        </div>
+        {filtersOpen && (
+          <div className="glossary-filters">
+            <label>
+              {t.glossaryScope}
+              <select value={scope} onChange={(e) => setScope(e.target.value)}>
+                <option value="all">{t.entireLibrary}</option>
+                <option value="active">{t.currentFile}</option>
+                <option value="open">{t.openResourcesScope}</option>
+              </select>
+            </label>
+            <label>
+              {t.status}
+              <select
+                value={String(archived)}
+                onChange={(e) => setArchived(e.target.value === 'true')}
+              >
+                <option value="false">{t.activeConcepts}</option>
+                <option value="true">{t.archived}</option>
+              </select>
+            </label>
+            <label>
+              {t.definitionReview}
+              <select value={reviewed} onChange={(e) => setReviewed(e.target.value)}>
+                <option value="all">{t.all}</option>
+                <option value="true">{t.reviewed}</option>
+                <option value="false">{t.notReviewed}</option>
+              </select>
+            </label>
+          </div>
+        )}
       </div>
-      <p className="glossary-total" role="status">
+      <p className="sr-only" role="status">
         {loading
           ? t.loading
           : `${page.total} ${page.total === 1 ? t.conceptSingular : t.conceptsCount}`}
@@ -691,7 +723,13 @@ export function GlossaryPanel({
           listScroll.current = e.currentTarget.scrollTop;
         }}
       >
-        {!loading && !page.items.length && <p className="small-empty">{t.noConcepts}</p>}
+        {!loading && !page.items.length && (
+          <div className="panel-empty">
+            <BookOpen />
+            <strong>{t.noConceptsTitle}</strong>
+            <p>{t.noConcepts}</p>
+          </div>
+        )}
         {page.items.map((item) => (
           <button
             className="glossary-summary"
@@ -699,26 +737,33 @@ export function GlossaryPanel({
             onClick={() => void open(item.id)}
             disabled={pending}
           >
-            <strong>{item.term}</strong>
+            <span className="glossary-summary-head">
+              <strong>{item.term}</strong>
+              <ArrowUpRight aria-hidden="true" />
+            </span>
             {item.match === 'synonym' && <small>{t.synonymMatch}</small>}
             <p>{item.preview}</p>
-            <div className="glossary-meta">
-              <span>
+            <span className="glossary-meta">
+              <Badge>
+                <BookOpen />
                 {item.senseCount}{' '}
                 {item.senseCount === 1 ? t.meaning.toLocaleLowerCase() : t.meaningsCount}
-              </span>
-              <span>
+              </Badge>
+              <Badge tone="outline">
+                <LinkIcon />
                 {item.synonymCount} {item.synonymCount === 1 ? t.synonymSingular : t.synonymsCount}
-              </span>
-              <span>
-                {item.relationCount}{' '}
-                {item.relationCount === 1 ? t.relationSingular : t.relationsCount}
-              </span>
-              <span>
+              </Badge>
+              <Badge tone="outline">
+                <FileText />
                 {item.sourceIds.length}{' '}
                 {item.sourceIds.length === 1 ? t.source.toLocaleLowerCase() : t.sourcesCount}
-              </span>
-            </div>
+              </Badge>
+              <Badge tone="outline">
+                <Network />
+                {item.relationCount}{' '}
+                {item.relationCount === 1 ? t.relationSingular : t.relationsCount}
+              </Badge>
+            </span>
             {item.proposalCount > 0 && (
               <Badge tone="warning">
                 {item.proposalCount} {t.proposedDefinitions}
@@ -727,7 +772,11 @@ export function GlossaryPanel({
           </button>
         ))}
         <div ref={sentinel} />
-        {page.nextCursor && <Button onClick={() => void more()}>{t.loadMore}</Button>}
+        {page.nextCursor && (
+          <Button variant="ghost" size="sm" className="glossary-more" onClick={() => void more()}>
+            {t.loadMore}
+          </Button>
+        )}
       </div>
     </div>
   );
