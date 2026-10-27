@@ -9,7 +9,9 @@ import {
   Pencil,
   X,
   Paperclip,
+  Globe,
 } from 'lucide-react';
+import { readWebDraft, type WebDraft } from '../../shared/tutor-web';
 import {
   questionContextSchema,
   type Conversation,
@@ -28,6 +30,8 @@ import {
 } from '../../shared/tutor-turns';
 import {
   acknowledgeTutorDraft,
+  acknowledgeWebDraft,
+  restoreWebDraft,
   acknowledgeTutorAttachments,
   restoreTutorDraft,
   readTutorDraft,
@@ -382,6 +386,14 @@ function ConversationThread({
   const attachmentKey = `tl:attachment-draft:${conversation.id}`;
   const attachmentStampKey = `tl:attachment-selection:${conversation.id}`;
   const generationKey = `tl:generation-draft:${conversation.id}`;
+  const webKey = `tl:web-draft:${conversation.id}`;
+  const [webDraft, setWebDraft] = useState(() => readWebDraft(stored(webKey)));
+  const webRef = useRef(webDraft);
+  const writeWeb = (value: WebDraft) => {
+    webRef.current = value;
+    setWebDraft(value);
+    store(webKey, JSON.stringify(value));
+  };
   const [generationPreference, setGenerationPreference] = useState<TutorPreference>(() => {
     try {
       const parsed = tutorPreferenceSchema.safeParse(JSON.parse(stored(generationKey) || 'null'));
@@ -548,6 +560,9 @@ function ConversationThread({
     setDraft(text);
   };
   const syncDraft = () => {
+    const web = readWebDraft(stored(webKey));
+    webRef.current = web;
+    setWebDraft(web);
     const value = readTutorDraft(stored(draftStateKey), stored(draftKey));
     draftState.current = value;
     draftRef.current = value.text;
@@ -579,6 +594,7 @@ function ConversationThread({
   };
   const notifyDraft = () => window.dispatchEvent(new Event('tl:tutor-draft-sync'));
   useEffect(() => {
+    if (!stored(webKey)) store(webKey, JSON.stringify(webRef.current));
     if (!stored(draftStateKey)) writeDraft(draftState.current);
     if (!stored(contextStampKey)) store(contextStampKey, contextStamp.current);
     if (!stored(conceptKey)) store(conceptKey, JSON.stringify(conceptDraftRef.current));
@@ -603,6 +619,9 @@ function ConversationThread({
     const current = readTutorDraft(stored(draftStateKey), stored(draftKey));
     const next = acknowledgeTutorDraft(current, sent);
     if (next !== current) writeDraft(next);
+    const web = readWebDraft(stored(webKey));
+    const nextWeb = acknowledgeWebDraft(web, sent);
+    if (nextWeb !== web) store(webKey, JSON.stringify(nextWeb));
     try {
       const concepts = JSON.parse(stored(conceptKey) || '{}');
       if (sent.conceptStamp && concepts.stamp === sent.conceptStamp)
@@ -811,16 +830,19 @@ function ConversationThread({
     composer.current?.focus();
   };
   const citationLabel = (ref: TutorCitation) =>
-    ref.kind === 'attachment'
-      ? ref.attachmentName
-      : ref.kind === 'concept'
-        ? ref.term
-        : ref.location.page
-          ? `${t.page} ${ref.location.page}`
-          : ref.location.seconds != null
-            ? `${Math.floor(ref.location.seconds / 60)}:${String(Math.floor(ref.location.seconds % 60)).padStart(2, '0')}`
-            : catalog.files.find((f) => f.id === ref.sourceId)?.name || t.source;
+    ref.kind === 'web'
+      ? `${t.webSource} · ${new URL(ref.url).hostname}`
+      : ref.kind === 'attachment'
+        ? ref.attachmentName
+        : ref.kind === 'concept'
+          ? ref.term
+          : ref.location.page
+            ? `${t.page} ${ref.location.page}`
+            : ref.location.seconds != null
+              ? `${Math.floor(ref.location.seconds / 60)}:${String(Math.floor(ref.location.seconds % 60)).padStart(2, '0')}`
+              : catalog.files.find((f) => f.id === ref.sourceId)?.name || t.source;
   const openCitation = (ref: TutorCitation) => {
+    if (ref.kind === 'web') return;
     if (ref.kind === 'attachment') {
       setInspectedAttachment(ref.attachmentId);
       return;
@@ -884,16 +906,20 @@ function ConversationThread({
           JSON.parse(stored(conceptKey) || '{}').stamp === sent.conceptStamp &&
           JSON.stringify(JSON.parse(stored(attachmentStampKey) || '{}')) ===
             JSON.stringify(sent.attachmentStamps || {});
-        const restored = restoreTutorDraft(
-          readTutorDraft(stored(draftStateKey), stored(draftKey)),
-          sent,
-          unchangedContext,
+        const currentDraft = readTutorDraft(stored(draftStateKey), stored(draftKey));
+        const restored = restoreTutorDraft(currentDraft, sent, unchangedContext);
+        const currentWeb = readWebDraft(stored(webKey));
+        const restoredWeb = restoreWebDraft(
+          currentWeb,
+          restored.submission,
+          restored.draft !== currentDraft,
         );
+        if (restoredWeb.draft !== currentWeb) store(webKey, JSON.stringify(restoredWeb.draft));
         writeDraft(restored.draft);
         store(
           retryKey,
           JSON.stringify({
-            ...restored.submission,
+            ...restoredWeb.submission,
             error: (error instanceof Error ? error.message : t.error).slice(0, 500),
             rejected: error instanceof ApiResponseError && error.status < 500,
           }),
@@ -928,10 +954,13 @@ function ConversationThread({
       }
     }
     const emptyStamp = crypto.randomUUID();
+    const emptyWebStamp = crypto.randomUUID();
     const sent: TutorSubmission = {
       format: 2,
       draftStamp: draftState.current.stamp,
       emptyStamp,
+      webStamp: webRef.current.stamp,
+      emptyWebStamp,
       conceptStamp: conceptDraftRef.current.stamp,
       contextStamp: contextStamp.current,
       attachmentStamps: { ...attachmentStamps.current },
@@ -942,11 +971,13 @@ function ConversationThread({
         attachments: attachmentRef.current.map((item) => item.id),
         references: [...conversation.sourceIds],
         generation: resolveTutorGeneration(generationRef.current, catalog.settings.model),
+        ...(webRef.current.enabled ? { webSearch: true as const } : {}),
         ...(contextRef.current ? { context: contextRef.current } : {}),
       },
     };
     store(retryKey, JSON.stringify(sent));
     setSubmission(sent);
+    writeWeb({ enabled: false, stamp: emptyWebStamp });
     const empty = { text: '', stamp: emptyStamp };
     draftState.current = empty;
     draftRef.current = '';
@@ -1116,6 +1147,7 @@ function ConversationThread({
                               list_concepts: t.toolListConcepts,
                               read_concepts: t.toolReadConcepts,
                               create_bookmark: t.toolCreateBookmark,
+                              web_search: t.toolWebSearch,
                             }) as Record<string, string>
                           )[tool] || t.studyTool,
                       )
@@ -1127,6 +1159,23 @@ function ConversationThread({
                     <GenerationLabel value={message.generation} t={t} />
                   </small>
                 )}
+                {message.webSearch && (
+                  <small className="message-web-permission">
+                    <Globe size={12} />{' '}
+                    {message.role === 'user'
+                      ? t.webEnabledQuestion
+                      : message.webSearched
+                        ? t.webSearched
+                        : message.status
+                          ? t.webUnconfirmed
+                          : t.webNotSearched}
+                  </small>
+                )}
+                {message.role === 'assistant' &&
+                  message.webSearched &&
+                  !references.some((ref) => ref.kind === 'web') && (
+                    <small className="muted">{t.webNoCitations}</small>
+                  )}
               </div>
             );
           })}
@@ -1152,6 +1201,7 @@ function ConversationThread({
                 <GenerationLabel value={submission.payload.generation} t={t} />
               </small>
             )}
+            {submission.payload.webSearch && <small>{t.webEnabledQuestion}</small>}
             {submission.error && <p className="tutor-turn-error">{submission.error}</p>}
             <p className="muted">
               {submission.rejected ? t.rejectedQuestionNotice : t.unconfirmedQuestionNotice}
@@ -1303,6 +1353,16 @@ function ConversationThread({
           <IconButton label={t.addQuestionAttachment} onClick={() => setAttachmentPicker(true)}>
             <Plus size={16} />
           </IconButton>
+          <Button
+            variant="ghost"
+            className="web-toggle"
+            aria-pressed={webDraft.enabled}
+            title={t.webOptInNotice}
+            onClick={() => writeWeb({ enabled: !webDraft.enabled, stamp: crypto.randomUUID() })}
+          >
+            <Globe size={14} />
+            {t.web}
+          </Button>
           <GenerationControl
             value={generationPreference}
             defaultModel={catalog.settings.model}
@@ -1318,6 +1378,7 @@ function ConversationThread({
             {conversation.pending ? t.queueQuestion : t.send}
           </Button>
         </div>
+        {webDraft.enabled && <small className="web-opt-in-notice">{t.webOptInNotice}</small>}
       </form>
       {attachmentPicker && (
         <AttachmentPicker

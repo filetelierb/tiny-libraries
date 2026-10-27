@@ -20,6 +20,7 @@ export function tutorToolLabel(name: string, t: T) {
         list_concepts: t.toolListConcepts,
         read_concepts: t.toolReadConcepts,
         create_bookmark: t.toolCreateBookmark,
+        web_search: t.toolWebSearch,
       } as Record<string, string>
     )[name] || t.studyTool
   );
@@ -58,6 +59,7 @@ export function TurnProgress({
       </div>
       <small>
         <GenerationLabel value={turn.generation} t={t} />
+        {turn.webSearch && <> · {t.webEnabledQuestion}</>}
       </small>
       {!!turn.toolNames.length && (
         <p className="tutor-run-tools">
@@ -124,6 +126,7 @@ export function TurnOutbox({
               <strong>{t[`turn_${turn.status}`]}</strong>
               <small>
                 <GenerationLabel value={turn.effectiveGeneration || turn.generation} t={t} />
+                {turn.webSearch && <> · {t.webEnabledQuestion}</>}
               </small>
             </div>
             <p>{turn.prompt}</p>

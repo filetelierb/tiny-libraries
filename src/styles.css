@@ -5087,3 +5087,23 @@ body:has(.panel-resizer.resizing) {
     max-height: 65%;
   }
 }
+
+.web-toggle[aria-pressed='true'] {
+  color: var(--primary);
+  background: var(--secondary);
+}
+.web-opt-in-notice {
+  display: block;
+  margin: 6px 2px 0;
+  line-height: 1.35;
+  color: var(--muted-text);
+}
+.message-web-permission {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.web-evidence-link {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

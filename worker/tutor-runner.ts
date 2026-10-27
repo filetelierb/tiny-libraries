@@ -40,6 +40,7 @@ export class TutorRunner {
       requestId: record.id,
       generation: record.generation,
       sourceIds: intent.userMessage.sourceIds,
+      ...(intent.input.webSearch ? { webSearch: true } : {}),
       tools: record.toolNames,
     };
   }
@@ -147,6 +148,7 @@ export class TutorRunner {
           ...(await this.message(record, result.text)),
           tools: result.tools,
           citations: result.citations,
+          ...(intent.input.webSearch ? { webSearched: result.webSearched === true } : {}),
         });
         return;
       }

@@ -9,6 +9,7 @@ import {
   type TutorCompletion,
 } from '../shared/tutor-transport';
 import { TutorStream } from './tutor-stream';
+import { TutorResponsesStream, webResponsesRequest } from './tutor-responses';
 
 export class TutorTransportError extends Error {
   constructor(
@@ -19,7 +20,11 @@ export class TutorTransportError extends Error {
   }
 }
 type Saved = TransportSnapshot & { owner: string; preempted?: true };
-type Active = { controller: AbortController; stream: TutorStream; task?: Promise<void> };
+type Active = {
+  controller: AbortController;
+  stream: TutorStream | TutorResponsesStream;
+  task?: Promise<void>;
+};
 export type TutorProvider = (url: string, options: RequestInit) => Promise<Response>;
 class ProviderRejection extends Error {}
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -183,7 +188,10 @@ export class TutorTransport {
         updatedAt: now,
       };
       await this.publish(accepted);
-      const active: Active = { controller: new AbortController(), stream: new TutorStream() };
+      const active: Active = {
+        controller: new AbortController(),
+        stream: body.webSearch ? new TutorResponsesStream() : new TutorStream(),
+      };
       this.active.set(id, active);
       active.task = this.run(id, credential, body, active).catch(() => {
         this.faults.add(id);
@@ -214,12 +222,19 @@ export class TutorTransport {
     try {
       await this.update(id, active, { status: 'running' });
       if (active.controller.signal.aborted) return;
-      const response = await this.provider('https://api.meta.ai/v1/chat/completions', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${credential}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...body, stream: true }),
-        signal: AbortSignal.any([active.controller.signal, AbortSignal.timeout(this.timeoutMs)]),
-      });
+      const response = await this.provider(
+        body.webSearch
+          ? 'https://api.meta.ai/v1/responses'
+          : 'https://api.meta.ai/v1/chat/completions',
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${credential}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(
+            body.webSearch ? webResponsesRequest(body) : { ...body, stream: true },
+          ),
+          signal: AbortSignal.any([active.controller.signal, AbortSignal.timeout(this.timeoutMs)]),
+        },
+      );
       if (!response.ok) {
         let detail = '';
         const reader = response.body?.getReader();

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { reasoningEffortSchema, tutorModelSchema } from './tutor-generation';
+import { webCitationSchema } from './tutor-web';
 
 export const completionCallSchema = z.object({
   id: z.string().min(1).max(200),
@@ -13,6 +14,8 @@ export const completionMessageSchema = z
   .object({
     content: z.string().max(16000).nullable().optional(),
     tool_calls: z.array(completionCallSchema).max(8).optional(),
+    webSources: z.array(webCitationSchema).max(40).optional(),
+    webSearched: z.boolean().optional(),
   })
   .refine(
     (message) =>
@@ -27,6 +30,7 @@ export const tutorCompletionSchema = z
     messages: z.array(z.unknown()).min(1).max(400),
     tools: z.array(z.unknown()).max(40).optional(),
     reasoning_effort: reasoningEffortSchema.exclude(['auto']).optional(),
+    webSearch: z.literal(true).optional(),
   })
   .strict();
 export type TutorCompletion = z.infer<typeof tutorCompletionSchema>;

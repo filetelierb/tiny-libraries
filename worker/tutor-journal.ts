@@ -664,6 +664,7 @@ export class TutorJournal {
       revision: record.revision,
       prompt: intent.input.prompt,
       generation: record.generation,
+      ...(intent.input.webSearch ? { webSearch: true } : {}),
       effectiveGeneration: record.effectiveGeneration,
       attachments: intent.userMessage.attachments,
       context: intent.userMessage.context,

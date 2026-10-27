@@ -32,6 +32,18 @@ export const SavedTutorMessage = memo(
         components={{
           a: ({ href, children }) => {
             const reference = citationFromHref(href, byId);
+            if (reference?.kind === 'web')
+              return (
+                <a
+                  className="evidence-link web-evidence-link"
+                  href={reference.url}
+                  title={`${t.webSource}: ${reference.title}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {children}
+                </a>
+              );
             if (reference)
               return (
                 <button

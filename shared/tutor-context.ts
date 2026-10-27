@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { locationSchema, type SourceLocation } from './annotations';
 import { glossarySenseSchema, type GlossaryEntry } from './glossary';
 import type { Learning } from './domain';
+import { webCitationSchema } from './tutor-web';
 
 export const MAX_QUESTION_CONCEPTS = 10;
 export const conceptReferenceSchema = z.object({
@@ -29,6 +30,7 @@ export const conceptCitationId = (entry: ConceptReference) =>
   `concept.${entry.id}.v${entry.version}`;
 const identity = z.string().min(1).max(500);
 export const tutorCitationSchema = z.discriminatedUnion('kind', [
+  webCitationSchema,
   z.object({
     kind: z.literal('attachment'),
     id: identity,

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { tutorTurnInputSchema, type ConversationDetail } from '../../shared/tutor-turns';
+import type { WebDraft } from '../../shared/tutor-web';
 
 export const tutorDraftSchema = z.object({ text: z.string().max(8000), stamp: z.string().uuid() });
 export type TutorDraft = z.infer<typeof tutorDraftSchema>;
@@ -9,6 +10,9 @@ export const tutorSubmissionSchema = z.object({
   draftStamp: z.string().uuid().optional(),
   emptyStamp: z.string().uuid().optional(),
   restoredStamp: z.string().uuid().optional(),
+  webStamp: z.string().uuid().optional(),
+  emptyWebStamp: z.string().uuid().optional(),
+  restoredWebStamp: z.string().uuid().optional(),
   conceptStamp: z.string().optional(),
   contextStamp: z.string().optional(),
   attachmentStamps: z.record(z.string(), z.string()).optional(),
@@ -16,6 +20,17 @@ export const tutorSubmissionSchema = z.object({
   rejected: z.boolean().optional(),
 });
 export type TutorSubmission = z.infer<typeof tutorSubmissionSchema>;
+export function acknowledgeWebDraft(current: WebDraft, sent: TutorSubmission): WebDraft {
+  return [sent.webStamp, sent.emptyWebStamp, sent.restoredWebStamp].includes(current.stamp)
+    ? { enabled: false, stamp: crypto.randomUUID() }
+    : current;
+}
+export function restoreWebDraft(current: WebDraft, sent: TutorSubmission, restoredText: boolean) {
+  if (!restoredText || current.stamp !== sent.emptyWebStamp)
+    return { draft: current, submission: sent };
+  const draft = { enabled: sent.payload.webSearch === true, stamp: crypto.randomUUID() };
+  return { draft, submission: { ...sent, restoredWebStamp: draft.stamp } };
+}
 export function readTutorDraft(serialized: string, previousText: string): TutorDraft {
   try {
     const parsed = tutorDraftSchema.safeParse(JSON.parse(serialized));

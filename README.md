@@ -6,6 +6,8 @@ A local, open-source workspace that turns your recordings and documents into a l
 
 English is the default interface language; Spanish is available in Settings. Files, sessions, and progress stay on your machine. AI processing sends selected material to Meta Model API. Bring your own Meta API key; add, replace, or remove it in Settings.
 
+Tutor Web search is optional and off by default. Enable **Web** for an individual question to allow Meta to use the question, conversation and selected material in external search queries. The choice turns off after sending; saved questions and explicit retries retain their original permission. Web citations link to external sources and are labelled separately from your library evidence.
+
 ## Run locally
 
 Install Node.js 22.13+, [celld](https://github.com/denoland/celld), and ffmpeg for audio/video. Then:

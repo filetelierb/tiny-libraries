@@ -42,6 +42,8 @@ export const chatMessageSchema = z.object({
   concepts: conceptMentionsSchema.optional(),
   attachments: attachmentMentionsSchema.optional(),
   generation: tutorGenerationSchema.optional(),
+  webSearch: z.literal(true).optional(),
+  webSearched: z.boolean().optional(),
   citations: z.array(tutorCitationSchema).max(40).optional(),
   requestId: z.string().uuid().optional(),
   requestFingerprint: z

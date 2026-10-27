@@ -16,6 +16,7 @@ export const tutorTurnInputSchema = z.object({
   attachments: attachmentIdsSchema.default([]),
   generation: tutorGenerationSchema.optional(),
   references: referencesSchema.optional(),
+  webSearch: z.literal(true).optional(),
 });
 export type TutorTurnInput = z.infer<typeof tutorTurnInputSchema>;
 export const turnStatusSchema = z.enum([
@@ -32,6 +33,7 @@ export const turnStatusSchema = z.enum([
 ]);
 export type TutorTurnStatus = z.infer<typeof turnStatusSchema>;
 export type TurnScope = {
+  webSearch?: true;
   references: Array<{ id: string; version: number; prepared: string }>;
   permanentReferences?: Array<{ id: string; version: number; prepared: string }>;
   context?: TutorTurnInput['context'];
@@ -95,6 +97,7 @@ export type TurnView = {
   prompt: string;
   generation: TutorGeneration;
   effectiveGeneration?: TutorGeneration;
+  webSearch?: true;
   attachments: ChatMessage['attachments'];
   context?: ChatMessage['context'];
   references?: Array<{ id: string; version: number }>;
@@ -139,6 +142,7 @@ export function turnInputFingerprint(input: TutorTurnInput) {
     attachments: input.attachments,
     ...(input.generation ? { generation: input.generation } : {}),
     ...(input.references ? { references: input.references } : {}),
+    ...(input.webSearch ? { webSearch: true } : {}),
   });
 }
 export function turnSteeringCompatible(queued: TurnScope, active: TurnScope) {
@@ -150,6 +154,7 @@ export function turnSteeringCompatible(queued: TurnScope, active: TurnScope) {
       a.id.localeCompare(b.id),
     );
   return (
+    !!queued.webSearch === !!active.webSearch &&
     JSON.stringify(sorted(queued)) === JSON.stringify(sorted(active)) &&
     (!queued.context || JSON.stringify(queued.context) === JSON.stringify(active.context)) &&
     queued.concepts.every((concept) =>

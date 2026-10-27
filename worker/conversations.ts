@@ -191,6 +191,7 @@ async function prepareIntent(
     attachments: attachedContent,
     context,
     canCreateBookmark: true,
+    ...(input.webSearch ? { webSearch: true } : {}),
   };
   const objects = new TutorObjects(
     {
@@ -236,6 +237,7 @@ async function prepareIntent(
     generation,
     contextObject,
     scope: {
+      ...(input.webSearch ? { webSearch: true } : {}),
       references: scopedSources,
       permanentReferences,
       context,
@@ -249,6 +251,7 @@ async function prepareIntent(
       requestFingerprint,
       generation,
       sourceIds,
+      ...(input.webSearch ? { webSearch: true } : {}),
       ...(context ? { context } : {}),
       ...(glossary.mentions.length ? { concepts: glossary.mentions } : {}),
       ...(attachments.length
