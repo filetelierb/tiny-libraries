@@ -227,7 +227,7 @@ export function ReviewPanel({
             <p role="status">{t.creatingReinforcement}</p>
           ) : record.status !== 'ready' || !record.plan ? (
             <>
-              <p className="notice">{record.error || t.error}</p>
+              <p className="notice notice-error">{record.error || t.error}</p>
               <Button
                 disabled={busy}
                 onClick={() =>

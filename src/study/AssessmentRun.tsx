@@ -269,7 +269,7 @@ export function AssessmentRun({
         )}
       </div>
       {confirmCancel && !['completed', 'cancelled'].includes(detail.status) && (
-        <div className="notice assessment-cancel">
+        <div className="notice notice-plain assessment-cancel">
           <p>{t.assessmentCancelConfirm}</p>
           <Button variant="danger" disabled={busy} onClick={() => void action('cancel')}>
             {t.assessmentCancel}
@@ -308,14 +308,14 @@ export function AssessmentRun({
           <p className="muted">{t.assessmentCanClose}</p>
         </div>
       ) : detail.status === 'failed' || detail.status === 'interrupted' ? (
-        <div className="notice">
+        <div className="notice notice-error" role="alert">
           <p>{detail.error || t.error}</p>
           <Button disabled={busy} onClick={() => void action('retry')}>
             {t.retry}
           </Button>
         </div>
       ) : detail.status === 'cancelled' ? (
-        <div className="notice">
+        <div className="notice notice-plain">
           <h4>{t.assessmentCancelled}</h4>
           <p>{t.assessmentCancelledHint}</p>
           {detail.workActive && <p>{t.assessmentCancelInFlight}</p>}

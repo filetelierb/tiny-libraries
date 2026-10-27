@@ -2608,11 +2608,26 @@ body:has(.panel-resizer.resizing) {
 .notice {
   border: 1px solid var(--border);
   background: var(--accent);
-  border-radius: 7px;
+  border-radius: var(--radius-lg);
   padding: 12px;
   font-size: var(--font-size-control);
   line-height: 1.6;
   margin: 15px 0;
+}
+.notice[role='alert'],
+.notice-error {
+  color: var(--danger);
+  background: color-mix(in oklch, var(--danger) 8%, transparent);
+  border-color: color-mix(in oklch, var(--danger) 25%, transparent);
+}
+.notice-plain {
+  background: transparent;
+}
+.notice > :first-child {
+  margin-top: 0;
+}
+.notice > :last-child {
+  margin-bottom: 0;
 }
 .modal {
   position: fixed;
@@ -3414,7 +3429,7 @@ body:has(.panel-resizer.resizing) {
 }
 .form-error {
   color: var(--danger);
-  font-size: var(--font-size-control);
+  font-size: 14px;
   margin: 12px 0;
 }
 
