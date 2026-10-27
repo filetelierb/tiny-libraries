@@ -8619,3 +8619,184 @@ body:has(.panel-resizer.resizing) {
   background-color: color-mix(in oklch, var(--accent) 75%, transparent);
   color: inherit;
 }
+
+/* Artifact versions and editing */
+.artifact-pane,
+.artifact-editor {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.artifact-pane > .artifact-stage,
+.artifact-editor > .artifact-stage {
+  flex: 1;
+  min-height: 0;
+}
+.artifact-versions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+  height: 40px;
+  padding: 0 8px;
+  border-top: 1px solid var(--border);
+  background: var(--card);
+  font-family: var(--font-heading);
+  font-size: 12px;
+}
+.artifact-versions > span {
+  margin-right: auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted-text);
+}
+.artifact-versions select {
+  width: auto;
+  max-width: 160px;
+  height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-size: 12px;
+}
+.artifact-versions select:hover:not(:disabled) {
+  background: var(--muted);
+}
+.artifact-editor > .rich-toolbar {
+  margin: 0;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: var(--card);
+  padding: 4px 8px;
+  gap: 2px;
+}
+.toolbar-divider {
+  width: 1px;
+  height: 20px;
+  margin: 0 4px;
+  background: var(--border);
+}
+.artifact-editor > .notice {
+  margin: 0;
+  border-radius: 0;
+}
+.artifact-editor-formula {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--card);
+}
+.artifact-editor-formula input {
+  flex: 1;
+  max-width: 320px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+.artifact-editor-title {
+  width: 100%;
+  margin: 0 0 12px;
+  padding: 4px 0;
+  border: 0;
+  border-bottom: 1px dashed var(--border);
+  border-radius: 0;
+  background: transparent;
+  font-family: var(--font-body);
+  font-size: 20px;
+  font-weight: 700;
+}
+.artifact-editor-title:focus-visible {
+  outline: none;
+  border-bottom-color: var(--primary);
+}
+.artifact-editor-body .ProseMirror {
+  min-height: 240px;
+  outline: none;
+}
+.artifact-editor-body .ProseMirror blockquote:not([data-callout]) {
+  margin: 1.2rem 0;
+  border-left: 3px solid var(--primary);
+  padding-left: 1rem;
+  color: var(--muted-text);
+}
+
+/* Callouts: `> [!variant]` blockquotes in study markdown and the artifact editor. */
+/* [data-callout] lifts these above the artifact's plain blockquote rule. */
+.study-markdown .study-callout[data-callout] {
+  margin: 1.3rem 0;
+  padding: 0.85rem 1.1rem;
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--foreground);
+}
+.study-callout > :last-child {
+  margin-bottom: 0;
+}
+.study-callout-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.3rem;
+  font-family: var(--font-heading);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.study-callout-label svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+.study-markdown .study-callout[data-callout='key'] {
+  border-left-color: var(--primary);
+  background: color-mix(in oklch, var(--secondary), transparent 45%);
+}
+.study-callout[data-callout='key'] .study-callout-label {
+  color: var(--primary);
+}
+.study-markdown .study-callout[data-callout='warning'] {
+  border-left-color: var(--danger);
+  background: color-mix(in oklch, var(--danger), transparent 93%);
+}
+.study-callout[data-callout='warning'] .study-callout-label {
+  color: var(--danger);
+}
+.study-markdown .study-callout[data-callout='example'] {
+  border-left-color: var(--chart-3);
+}
+.study-callout[data-callout='example'] .study-callout-label {
+  color: var(--chart-3);
+}
+.study-markdown .study-callout[data-callout='analogy'] {
+  border-left-color: var(--chart-2);
+  background: color-mix(in oklch, var(--accent), transparent 60%);
+}
+.study-callout[data-callout='analogy'] .study-callout-label {
+  color: var(--on-accent);
+}
+.study-markdown .study-callout[data-callout='definition'] {
+  border-left-color: var(--chart-5);
+}
+.study-callout[data-callout='definition'] .study-callout-label {
+  color: var(--chart-5);
+}
+.artifact-editor-body .study-callout::before {
+  content: attr(data-callout);
+  display: block;
+  margin-bottom: 0.3rem;
+  font-family: var(--font-heading);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted-text);
+}

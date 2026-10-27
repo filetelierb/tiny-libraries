@@ -34,6 +34,15 @@ import {
   MetaError,
 } from './meta';
 import { cardSnapshot, startCardDecks, rateCard, CardError } from './flashcards';
+import {
+  ArtifactRevisionError,
+  deleteRevisions,
+  getRevision,
+  latestArtifact,
+  listRevisions,
+  recordGenerated,
+  saveEdit,
+} from './artifact-revisions';
 import { reinforcementSnapshot, startReinforcement, ReinforcementError } from './reinforcements';
 import type { Reinforcement } from '../shared/review';
 import {
@@ -241,8 +250,10 @@ export class Library extends DurableObject<Env> {
             kind: purgeMatch[1] === 'files' ? 'file' : 'directory',
             id: purgeMatch[2],
           });
-          for (const file of target.files)
+          for (const file of target.files) {
             await storage.delete([`file:${file.id}`, `learning:${file.id}`]);
+            await deleteRevisions(storage, file.id);
+          }
           for (const directory of target.directories)
             await storage.delete(`directory:${directory.id}`);
           return target;
@@ -536,12 +547,30 @@ export class Library extends DurableObject<Env> {
           if (!file || file.version !== value.sourceVersion)
             throw new ApiError('Source version changed', 409);
           await this.ctx.storage.put(`learning:${id}`, value);
+          await recordGenerated(this.ctx.storage, value);
           return json({ ok: true });
         }
         const value = await this.ctx.storage.get<Learning>(`learning:${id}`);
+        if (!value || learningMatch[1] === 'internal') return json(value || null);
+        // Readers see the latest saved version of the artifact, edited or generated.
+        const latest = await latestArtifact(this.ctx.storage, value);
         return json(
-          value ? (learningMatch[1] === 'internal' ? value : publicLearning(value)) : null,
+          publicLearning(
+            latest
+              ? { ...value, synthesis: { ...value.synthesis, artifact: latest.artifact } }
+              : value,
+          ),
         );
+      }
+      const revisionsMatch = path.match(/^\/api\/artifacts\/([a-f0-9-]+)\/revisions(?:\/(\d+))?$/);
+      if (revisionsMatch) {
+        const [, sourceId, revision] = revisionsMatch;
+        if (revision && request.method === 'GET')
+          return json(await getRevision(this.ctx.storage, sourceId, Number(revision)));
+        if (!revision && request.method === 'GET')
+          return json(await listRevisions(this.ctx.storage, sourceId));
+        if (!revision && request.method === 'POST')
+          return json(await saveEdit(this.ctx.storage, sourceId, await boundedJson(request)), 201);
       }
       if (path === '/api/artifacts' && request.method === 'GET') {
         const records = await this.ctx.storage.list<Learning>({ prefix: 'learning:' });
@@ -554,16 +583,18 @@ export class Library extends DurableObject<Env> {
           kind: string;
           createdAt: string;
         }> = [];
-        for (const value of records.values())
-          if (value.synthesis.artifact)
+        for (const value of records.values()) {
+          const latest = await latestArtifact(this.ctx.storage, value);
+          if (latest)
             items.push({
               id: `source:${value.sourceId}`,
               origin: 'source',
               sourceId: value.sourceId,
-              title: value.synthesis.artifact.title,
-              kind: value.synthesis.artifact.kind,
+              title: latest.artifact.title,
+              kind: latest.artifact.kind,
               createdAt: value.createdAt,
             });
+        }
         // Review artifacts belong to the session that created them.
         const reviews = await this.ctx.storage.list<Reinforcement>({ prefix: 'reinforcement:' });
         for (const value of reviews.values())
@@ -728,6 +759,7 @@ export class Library extends DurableObject<Env> {
         error instanceof AttachmentError ||
         error instanceof GlossaryError ||
         error instanceof CardError ||
+        error instanceof ArtifactRevisionError ||
         error instanceof ReinforcementError ||
         error instanceof AssessmentError ||
         error instanceof TutorJournalError ||

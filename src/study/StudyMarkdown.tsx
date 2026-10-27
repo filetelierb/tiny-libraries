@@ -1,17 +1,42 @@
 import { useMemo } from 'react';
 import Markdown, { type Components, type Options } from 'react-markdown';
+import { AlertTriangle, BookOpen, FlaskConical, Lightbulb, Sparkles } from 'lucide-react';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import type { T } from '../i18n';
 import { Formula } from './Formula';
 import { Diagram } from './Diagram';
 import { remarkLatexDelimiters } from './latexDelimiters';
+import { remarkCallouts, type CalloutVariant } from './callouts';
+
+const calloutIcons = {
+  key: Lightbulb,
+  warning: AlertTriangle,
+  example: FlaskConical,
+  analogy: Sparkles,
+  definition: BookOpen,
+} as const;
 
 export function StudyMarkdown({ t, components, remarkPlugins = [], ...props }: Options & { t: T }) {
   // Stable component types preserve diagram dialogs/zoom when selection or citations update the parent.
   const shared = useMemo<Components>(
     () => ({
       a: ({ node: _node, ...link }) => <a {...link} target="_blank" rel="noreferrer" />,
+      aside: ({ node: _node, children, ...aside }) => {
+        const variant = (aside as { 'data-callout'?: CalloutVariant })['data-callout'],
+          Icon = variant && calloutIcons[variant];
+        return (
+          <aside {...aside} role={variant ? 'note' : undefined}>
+            {variant && Icon && (
+              <strong className="study-callout-label">
+                <Icon aria-hidden />
+                {t[`callout_${variant}`]}
+              </strong>
+            )}
+            {children}
+          </aside>
+        );
+      },
       table: ({ node: _node, ...table }) => (
         <div className="study-table-scroll" tabIndex={0} role="region" aria-label={t.studyTable}>
           <table {...table} />
@@ -72,7 +97,13 @@ export function StudyMarkdown({ t, components, remarkPlugins = [], ...props }: O
     <div className="study-markdown">
       <Markdown
         {...props}
-        remarkPlugins={[remarkGfm, remarkMath, remarkLatexDelimiters, ...(remarkPlugins || [])]}
+        remarkPlugins={[
+          remarkGfm,
+          remarkMath,
+          remarkLatexDelimiters,
+          remarkCallouts,
+          ...(remarkPlugins || []),
+        ]}
         components={{ ...shared, ...components }}
       />
     </div>

@@ -67,6 +67,7 @@ import { FlashcardDeck, type DeckRequest } from './study/FlashcardDeck';
 import { ReviewPanel } from './study/ReviewPanel';
 import { reinforcementLearning } from '../shared/review';
 import { GeneratedArtifact } from './GeneratedArtifact';
+import { ArtifactVersions } from './artifacts/ArtifactVersions';
 import { recordDraft, recoverPositions, settleDrafts } from './workspace/positionDrafts';
 import { cardDue, type DeckView } from '../shared/flashcards';
 import { SignalExplorer } from './SignalExplorer';
@@ -1577,29 +1578,44 @@ export function App() {
                             artifactSplit === source.id ? 'artifact-split' : 'artifact-host'
                           }
                         >
-                          <div className="artifact-stage">
-                            <Button variant="ghost" onClick={() => openFile(source, 'retain')}>
-                              <ArrowLeft size={14} />
-                              {t.originalSource}
-                            </Button>
-                            {material?.synthesis.artifact ? (
-                              <GeneratedArtifact
-                                artifact={material.synthesis.artifact}
-                                t={t}
-                                segments={material.segments}
-                                onCite={(segment) => citeFromArtifact(source.id, segment)}
-                                sourceName={source.name}
-                                saved={session.artifacts?.[source.id]}
-                                persist={(value) =>
-                                  updateSession({
-                                    artifacts: {
-                                      ...sessionRef.current!.artifacts,
-                                      [source.id]: value,
-                                    },
-                                  })
-                                }
-                              />
-                            ) : (
+                          {material?.synthesis.artifact ? (
+                            <ArtifactVersions
+                              key={source.id}
+                              sourceId={source.id}
+                              latest={material.synthesis.artifact}
+                              t={t}
+                              onSaved={() => setRefreshTick((value) => value + 1)}
+                              header={
+                                <Button variant="ghost" onClick={() => openFile(source, 'retain')}>
+                                  <ArrowLeft size={14} />
+                                  {t.originalSource}
+                                </Button>
+                              }
+                              render={(shown) => (
+                                <GeneratedArtifact
+                                  artifact={shown}
+                                  t={t}
+                                  segments={material.segments}
+                                  onCite={(segment) => citeFromArtifact(source.id, segment)}
+                                  sourceName={source.name}
+                                  saved={session.artifacts?.[source.id]}
+                                  persist={(value) =>
+                                    updateSession({
+                                      artifacts: {
+                                        ...sessionRef.current!.artifacts,
+                                        [source.id]: value,
+                                      },
+                                    })
+                                  }
+                                />
+                              )}
+                            />
+                          ) : (
+                            <div className="artifact-stage">
+                              <Button variant="ghost" onClick={() => openFile(source, 'retain')}>
+                                <ArrowLeft size={14} />
+                                {t.originalSource}
+                              </Button>
                               <SignalExplorer
                                 key={source.id}
                                 t={t}
@@ -1614,8 +1630,8 @@ export function App() {
                                   })
                                 }
                               />
-                            )}
-                          </div>
+                            </div>
+                          )}
                           {artifactSplit === source.id && (
                             <div className="artifact-split-source">
                               <div className="artifact-split-head">
