@@ -170,26 +170,18 @@ export function PanelSection({
 }
 
 export type LibraryArtifact = {
+  id: string;
+  origin: 'source' | 'reinforcement';
   sourceId: string;
+  /** Review artifacts belong to the session that created them; source artifacts to the library. */
+  sessionId?: string;
   title: string;
   kind: string;
   createdAt: string;
 };
-
-export function ArtifactList({
-  files,
-  refreshKey,
-  open,
-  t,
-}: {
-  files: Source[];
-  refreshKey: unknown;
-  open: (file: Source) => void;
-  t: T;
-}) {
-  const [items, setItems] = useState<LibraryArtifact[] | null>(null);
-  const [error, setError] = useState('');
-  const [query, setQuery] = useState(''),
+export function useLibraryArtifacts(refreshKey: unknown) {
+  const [items, setItems] = useState<LibraryArtifact[] | null>(null),
+    [error, setError] = useState(''),
     [reload, setReload] = useState(0);
   useEffect(() => {
     let live = true;
@@ -200,8 +192,30 @@ export function ArtifactList({
       live = false;
     };
   }, [refreshKey, reload]);
+  return { items, error, reload: () => setReload((value) => value + 1) };
+}
+
+export function ArtifactList({
+  files,
+  refreshKey,
+  sessionId,
+  open,
+  t,
+}: {
+  files: Source[];
+  refreshKey: unknown;
+  sessionId: string;
+  open: (item: LibraryArtifact, file: Source) => void;
+  t: T;
+}) {
+  const { items, error, reload } = useLibraryArtifacts(refreshKey);
+  const [query, setQuery] = useState(''),
+    [allSessions, setAllSessions] = useState(false);
   const byId = new Map(files.map((file) => [file.id, file]));
-  const available = (items || []).filter((item) => byId.has(item.sourceId));
+  const available = (items || []).filter(
+    (item) =>
+      byId.has(item.sourceId) && (allSessions || !item.sessionId || item.sessionId === sessionId),
+  );
   const needle = query.trim().toLocaleLowerCase();
   const visible = available.filter((item) =>
     `${item.title} ${byId.get(item.sourceId)!.name}`.toLocaleLowerCase().includes(needle),
@@ -218,9 +232,17 @@ export function ArtifactList({
           onChange={(event) => setQuery(event.target.value)}
         />
       </label>
-      <IconButton label={t.refreshArtifacts} onClick={() => setReload((value) => value + 1)}>
+      <IconButton label={t.refreshArtifacts} onClick={reload}>
         <RefreshCw />
       </IconButton>
+      <label className="artifact-scope">
+        <input
+          type="checkbox"
+          checked={allSessions}
+          onChange={(event) => setAllSessions(event.target.checked)}
+        />
+        {t.showAllSessions}
+      </label>
     </div>
   );
   if (error)
@@ -233,7 +255,13 @@ export function ArtifactList({
       </>
     );
   if (!items) return <LoadingRow>{t.loading}</LoadingRow>;
-  if (!available.length) return <p className="panel-section-note">{t.noLibraryArtifacts}</p>;
+  if (!available.length)
+    return (
+      <>
+        {toolbar}
+        <p className="panel-section-note">{t.noLibraryArtifacts}</p>
+      </>
+    );
   return (
     <>
       {toolbar}
@@ -242,12 +270,15 @@ export function ArtifactList({
         {visible.map((item) => {
           const file = byId.get(item.sourceId)!;
           return (
-            <li key={item.sourceId}>
-              <button type="button" onClick={() => open(file)}>
+            <li key={item.id}>
+              <button type="button" onClick={() => open(item, file)}>
                 <FileStack size={16} aria-hidden="true" />
                 <span>
                   <span>{item.title}</span>
-                  <small title={file.name}>{file.name}</small>
+                  <small title={file.name}>
+                    {item.origin === 'reinforcement' ? `${t.reviewArtifact} · ` : ''}
+                    {file.name}
+                  </small>
                 </span>
               </button>
             </li>

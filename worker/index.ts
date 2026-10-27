@@ -35,6 +35,7 @@ import {
 } from './meta';
 import { cardSnapshot, startCardDecks, rateCard, CardError } from './flashcards';
 import { reinforcementSnapshot, startReinforcement, ReinforcementError } from './reinforcements';
+import type { Reinforcement } from '../shared/review';
 import {
   createAssessment,
   assessmentDetail,
@@ -544,13 +545,36 @@ export class Library extends DurableObject<Env> {
       }
       if (path === '/api/artifacts' && request.method === 'GET') {
         const records = await this.ctx.storage.list<Learning>({ prefix: 'learning:' });
-        const items = [];
+        const items: Array<{
+          id: string;
+          origin: 'source' | 'reinforcement';
+          sourceId: string;
+          sessionId?: string;
+          title: string;
+          kind: string;
+          createdAt: string;
+        }> = [];
         for (const value of records.values())
           if (value.synthesis.artifact)
             items.push({
+              id: `source:${value.sourceId}`,
+              origin: 'source',
               sourceId: value.sourceId,
               title: value.synthesis.artifact.title,
               kind: value.synthesis.artifact.kind,
+              createdAt: value.createdAt,
+            });
+        // Review artifacts belong to the session that created them.
+        const reviews = await this.ctx.storage.list<Reinforcement>({ prefix: 'reinforcement:' });
+        for (const value of reviews.values())
+          if (value.status === 'ready' && value.plan?.artifact)
+            items.push({
+              id: `reinforcement:${value.id}`,
+              origin: 'reinforcement',
+              sourceId: value.sourceId,
+              sessionId: value.sessionId,
+              title: value.plan.artifact.title,
+              kind: value.plan.artifact.kind,
               createdAt: value.createdAt,
             });
         items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));

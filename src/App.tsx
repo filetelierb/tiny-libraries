@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, lazy, Suspense, type CSSProperties } from 'react';
 import {
   BookOpen,
+  FileStack,
   PanelLeftClose,
   PanelLeftOpen,
   PanelRightClose,
@@ -96,6 +97,8 @@ import {
 } from './workspace/StudyTabs';
 import {
   ArtifactList,
+  useLibraryArtifacts,
+  type LibraryArtifact,
   LibraryTabs,
   PanelSection,
   TestsList,
@@ -299,6 +302,13 @@ export function App() {
   const activeBookmarks = savedBookmarks.filter((item) => item.sourceId === active?.id);
   const learning = learningState?.sourceId === active?.id ? learningState : null;
   const job = jobState?.sourceId === active?.id ? jobState : null;
+  const libraryArtifacts = useLibraryArtifacts(catalog?.files);
+  const sourceArtifacts = active
+    ? (libraryArtifacts.items || []).filter(
+        (item) =>
+          item.sourceId === active.id && (!item.sessionId || item.sessionId === session?.id),
+      )
+    : [];
   const run = async (work: () => Promise<void>) => {
     setError('');
     setSessionExpired(false);
@@ -445,6 +455,15 @@ export function App() {
     setArtifact(sourceId);
     setArtifactSplit(null);
     setSeek(null);
+  }
+  function openLibraryArtifact(item: LibraryArtifact, file: Source) {
+    if (item.origin === 'source') showArtifact(file.id);
+    else {
+      // Review artifacts live with their reinforcement in the Review tab.
+      setRight(true);
+      setTab('review');
+    }
+    if (panels.drawer === 'left') setLeft(false);
   }
   function openFile(file: Source, mode: 'preview' | 'retain' = 'preview') {
     if (!sessionRef.current) return;
@@ -973,10 +992,8 @@ export function App() {
                     (f) => sourceState(f, catalog.directories) !== 'trash',
                   )}
                   refreshKey={catalog.files}
-                  open={(file) => {
-                    showArtifact(file.id);
-                    if (panels.drawer === 'left') setLeft(false);
-                  }}
+                  sessionId={session.id}
+                  open={(item, file) => openLibraryArtifact(item, file)}
                   t={t}
                 />
               </PanelSection>
@@ -1293,6 +1310,24 @@ export function App() {
                         setReviewing(false),
                       );
                     }}
+                  />
+                  <ActionMenu
+                    label={`${t.sourceArtifacts}: ${sourceArtifacts.length}`}
+                    icon={
+                      <>
+                        <FileStack size={16} />
+                        <span className="toolbar-count">{sourceArtifacts.length}</span>
+                      </>
+                    }
+                    options={{ heading: t.sourceArtifacts, placement: 'below' }}
+                    actions={sourceArtifacts.map((item) => ({
+                      label:
+                        item.origin === 'reinforcement'
+                          ? `${t.reviewArtifact} · ${item.title}`
+                          : item.title,
+                      icon: <Activity size={16} />,
+                      run: () => openLibraryArtifact(item, active),
+                    }))}
                   />
                   <span className="toolbar-divider" aria-hidden="true" />
                   <IconButton

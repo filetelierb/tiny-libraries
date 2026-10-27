@@ -8297,9 +8297,24 @@ body:has(.panel-resizer.resizing) {
 }
 .artifact-list-tools {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 4px;
   padding: 0 10px 8px;
+}
+.artifact-scope {
+  display: flex;
+  flex-basis: 100%;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px 0;
+  font-size: 12px;
+  color: var(--muted-text);
+}
+.toolbar-count {
+  margin-left: 2px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 .artifact-list-tools .search-field {
   flex: 1;
