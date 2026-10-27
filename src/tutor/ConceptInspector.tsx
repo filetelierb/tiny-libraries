@@ -5,7 +5,7 @@ import type { Catalog, ConceptSource, PublicLearning, Segment } from '../../shar
 import type { GlossaryEntry } from '../../shared/glossary';
 import { sourceState } from '../../shared/directories';
 import { api } from '../api';
-import { Badge, Button, Modal } from '../design/components';
+import { Badge, Button, Modal, LoadingRow } from '../design/components';
 import type { T } from '../i18n';
 export function ConceptInspector({
   reference,
@@ -105,7 +105,7 @@ export function ConceptInspector({
           {error} <Button onClick={() => setTick((v) => v + 1)}>{t.retry}</Button>
         </p>
       )}
-      {!entry && !error && <p role="status">{t.loading}</p>}
+      {!entry && !error && <LoadingRow>{t.loading}</LoadingRow>}
       {entry?.aliases.length ? (
         <p>
           <strong>{t.conceptAliases}:</strong> {entry.aliases.join(' · ')}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
-import { Button, Modal } from '../design/components';
+import { Button, Modal, LoadingRow } from '../design/components';
 import type { T } from '../i18n';
 import type { Catalog, Segment } from '../../shared/domain';
 import { sourceState } from '../../shared/directories';
@@ -78,7 +78,7 @@ export function AttachmentInspector({
       closeLabel={t.close}
       className="attachment-inspector"
     >
-      {loading && <p role="status">{t.loading}</p>}
+      {loading && <LoadingRow>{t.loading}</LoadingRow>}
       {attachment && (
         <>
           <p className="muted">{notice || t.attachmentSnapshotNotice}</p>

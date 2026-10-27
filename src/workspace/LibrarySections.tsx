@@ -14,7 +14,7 @@ import type { T } from '../i18n';
 import type { AssessmentSummary } from '../../shared/assessments';
 import type { Source, StudySession } from '../../shared/domain';
 import { api } from '../api';
-import { Button, IconButton } from '../design/components';
+import { Button, IconButton, LoadingRow } from '../design/components';
 
 export const libraryTabs = ['library', 'sessions', 'tests'] as const;
 export type LibraryTab = (typeof libraryTabs)[number];
@@ -232,7 +232,7 @@ export function ArtifactList({
         </p>
       </>
     );
-  if (!items) return <p className="panel-section-note">{t.loading}</p>;
+  if (!items) return <LoadingRow>{t.loading}</LoadingRow>;
   if (!available.length) return <p className="panel-section-note">{t.noLibraryArtifacts}</p>;
   return (
     <>
@@ -320,7 +320,7 @@ export function TestsList({
       </div>
       {tests.error && <p className="panel-section-note error">{tests.error}</p>}
       {!tests.loaded ? (
-        <p className="panel-section-note">{t.loading}</p>
+        <LoadingRow>{t.loading}</LoadingRow>
       ) : !tests.items.length ? (
         <p className="panel-section-note">{t.noTests}</p>
       ) : (

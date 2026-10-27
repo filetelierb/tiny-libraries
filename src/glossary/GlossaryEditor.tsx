@@ -4,7 +4,7 @@ import type { Catalog, ConceptSource, PublicLearning, Source } from '../../share
 import { normalizeConcept, type GlossaryEntry, type GlossarySense } from '../../shared/glossary';
 import { api } from '../api';
 import { locationSchema } from '../../shared/annotations';
-import { Button, IconButton, Modal } from '../design/components';
+import { Button, IconButton, Modal, LoadingRow } from '../design/components';
 import { DirectoryTree, type TreeActions } from '../workspace/DirectoryTree';
 import type { T } from '../i18n';
 
@@ -374,7 +374,7 @@ export function GlossaryEditor({
                   if (!loadingSource) void selectFile(file);
                 }}
               />
-              {loadingSource && <p role="status">{t.loading}</p>}
+              {loadingSource && <LoadingRow>{t.loading}</LoadingRow>}
             </>
           ) : (
             <div className="glossary-source-form">

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useId, type ButtonHTMLAttributes, type ReactNode } from 'react';
-import { X } from 'lucide-react';
+import { LoaderCircle, X } from 'lucide-react';
 import { createPortal } from 'react-dom';
 
 export function Button({
@@ -121,5 +121,18 @@ export function Modal({
       {children}
     </dialog>,
     document.body,
+  );
+}
+/** A 16px (or 12px) muted spinner for pending work. */
+export function Spinner({ size = 16 }: { size?: number }) {
+  return <LoaderCircle size={size} className="spin" aria-hidden="true" />;
+}
+/** A spinner beside short status text, announced politely. */
+export function LoadingRow({ children }: { children: ReactNode }) {
+  return (
+    <p className="loading-row" role="status">
+      <Spinner />
+      {children}
+    </p>
   );
 }

@@ -14,7 +14,7 @@ import {
 import { normalizeConcept, uniqueNames, type GlossaryEntry } from '../../shared/glossary';
 import type { BulkConceptResult } from '../../worker/concept-suggestions';
 import { api } from '../api';
-import { Badge, Button, IconButton, Modal } from '../design/components';
+import { Badge, Button, IconButton, Modal, LoadingRow } from '../design/components';
 import type { T } from '../i18n';
 
 export function ResourceConceptSuggestions({
@@ -201,7 +201,7 @@ export function ResourceConceptSuggestions({
               {error}
             </p>
           )}
-          {!data && <p role="status">{t.loading}</p>}
+          {!data && <LoadingRow>{t.loading}</LoadingRow>}
           {data && !data.prepared && (
             <div>
               <p>{t.prepareConceptSource}</p>

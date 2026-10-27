@@ -50,7 +50,7 @@ import {
   type TutorSubmission,
 } from '../tutor/turnDrafts';
 import { TurnProgress, TurnOutbox } from '../tutor/TurnProgress';
-import { Badge, Button, IconButton, Modal } from '../design/components';
+import { Badge, Button, IconButton, Modal, LoadingRow } from '../design/components';
 import type { T } from '../i18n';
 import { DirectoryTree, RESOURCE_DRAG_TYPE, type TreeActions } from './DirectoryTree';
 import {
@@ -293,7 +293,7 @@ export function ConversationPanel({
           {!threads.length && <p className="small-empty">{t.noMessages}</p>}
         </div>
       ) : loading ? (
-        <p role="status">{t.loading}</p>
+        <LoadingRow>{t.loading}</LoadingRow>
       ) : current ? (
         <ConversationThread
           key={current.id}

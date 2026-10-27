@@ -820,8 +820,8 @@ export function App() {
   }
   if (!catalog || !session)
     return (
-      <div className="loading">
-        <BookOpen />
+      <div className="loading" role="status">
+        {!error && <LoaderCircle size={16} className="spin" aria-hidden="true" />}
         <p>{error || t.loading}</p>
         {error && <Button onClick={() => location.reload()}>{t.retry}</Button>}
       </div>

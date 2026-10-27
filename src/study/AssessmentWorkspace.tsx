@@ -12,7 +12,7 @@ import {
 } from '../../shared/assessments';
 import type { Catalog, Segment } from '../../shared/domain';
 import { api } from '../api';
-import { Button, Modal } from '../design/components';
+import { Button, Modal, LoadingRow } from '../design/components';
 import { DirectoryTree, type TreeActions } from '../workspace/DirectoryTree';
 import type { T } from '../i18n';
 import { AssessmentRun } from './AssessmentRun';
@@ -308,7 +308,7 @@ export function AssessmentWorkspace({
             <>
               <p className="assessment-subtitle">{t.assessmentSetupHint}</p>
               {loading ? (
-                <p role="status">{t.loading}</p>
+                <LoadingRow>{t.loading}</LoadingRow>
               ) : (
                 <div className="assessment-setup-card">
                   {unfinished && (
@@ -445,7 +445,7 @@ export function AssessmentWorkspace({
                       / 12 MB
                     </p>
                     <p className="muted">{t.assessmentEvidenceDisclosure}</p>
-                    {evidenceLoading && <p role="status">{t.loading}</p>}
+                    {evidenceLoading && <LoadingRow>{t.loading}</LoadingRow>}
                     {evidenceIds.map((id) => {
                       const item = evidence.find((item) => item.id === id);
                       return (
@@ -539,7 +539,8 @@ export function AssessmentWorkspace({
                               }
                             />
                             <span>
-                              {row.title} <small>· {new Date(row.createdAt).toLocaleString()}</small>
+                              {row.title}{' '}
+                              <small>· {new Date(row.createdAt).toLocaleString()}</small>
                             </span>
                           </label>
                         ))}
