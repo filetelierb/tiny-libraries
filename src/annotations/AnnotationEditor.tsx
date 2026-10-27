@@ -25,7 +25,8 @@ import {
   type DrawingStroke,
   type SourceLocation,
 } from '../../shared/annotations';
-import type { Source } from '../../shared/domain';
+import type { Source, Catalog } from '../../shared/domain';
+import type { TreeActions } from '../workspace/DirectoryTree';
 import { api } from '../api';
 import { Button, IconButton, Modal } from '../design/components';
 import { CaptureCollectionEditor } from './CaptureCollection';
@@ -56,6 +57,8 @@ export type AnnotationRequest = {
   origin?: 'manual' | 'tutor';
 };
 type EditorProps = {
+  catalog: Catalog;
+  treeActions: TreeActions;
   request: AnnotationRequest;
   sessionId: string;
   source: Source | null;
@@ -93,6 +96,8 @@ export default function AnnotationEditor(props: EditorProps) {
   );
 }
 function EditorForm({
+  catalog,
+  treeActions,
   request,
   source,
   t,
@@ -557,6 +562,10 @@ function EditorForm({
             <EditorContent editor={editor} className="annotation-body" />
           )}
           <CaptureCollectionEditor
+            catalog={catalog}
+            actions={treeActions}
+            source={source}
+            location={draft.location || request.location}
             workspace={session.workspace}
             t={t}
             disabled={pending || !!conflict}

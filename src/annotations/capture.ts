@@ -30,7 +30,6 @@ export async function captureSource(
   } else if (source.kind === 'video') {
     const video = pane.querySelector('video');
     if (video && video.readyState >= 2) {
-      video.pause();
       image = video;
       width = video.videoWidth;
       height = video.videoHeight;
@@ -44,12 +43,36 @@ export async function captureSource(
     }
   }
   if (!image || !width || !height) return;
+  const blob = await captureCanvasImage(image, width, height);
+  const ratio = Math.min(1, 1600 / Math.max(width, height));
+  return {
+    blob,
+    url: URL.createObjectURL(blob),
+    width: Math.max(1, Math.round(width * ratio)),
+    height: Math.max(1, Math.round(height * ratio)),
+  };
+}
+
+export async function captureCanvasImage(
+  image: CanvasImageSource,
+  width: number,
+  height: number,
+): Promise<Blob> {
+  if (
+    !Number.isFinite(width) ||
+    !Number.isFinite(height) ||
+    width <= 0 ||
+    height <= 0 ||
+    width * height > 64 * 1024 * 1024
+  )
+    throw new Error('The image dimensions exceed the capture limit');
   const ratio = Math.min(1, 1600 / Math.max(width, height)),
     canvas = document.createElement('canvas');
   canvas.width = Math.max(1, Math.round(width * ratio));
   canvas.height = Math.max(1, Math.round(height * ratio));
   canvas.getContext('2d')!.drawImage(image, 0, 0, canvas.width, canvas.height);
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
-  if (!blob) throw new Error('Capture could not be created');
-  return { blob, url: URL.createObjectURL(blob), width: canvas.width, height: canvas.height };
+  if (!blob || blob.size > 8 * 1024 * 1024)
+    throw new Error('Capture could not be created within 8 MB');
+  return blob;
 }

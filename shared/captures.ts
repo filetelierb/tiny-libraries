@@ -9,6 +9,14 @@ import {
 
 export const captureDigestSchema = z.string().regex(/^[a-f0-9]{64}$/);
 export const captureOriginSchema = z.enum(['pdf_page', 'video_frame', 'image', 'text_excerpt']);
+export const captureOriginSourceSchema = z
+  .object({
+    id: z.string().uuid(),
+    version: z.number().int().positive(),
+    name: z.string().min(1).max(240),
+  })
+  .strict();
+export type CaptureOriginSource = z.infer<typeof captureOriginSourceSchema>;
 export const sourceStampSchema = z
   .object({
     id: z.string().uuid(),
@@ -38,7 +46,7 @@ export function stampIdentity(stamp: SourceStamp) {
 }
 export const sourceStampsSchema = z
   .array(sourceStampSchema)
-  .max(40)
+  .max(100)
   .refine(
     (items) =>
       new Set(items.map((item) => item.id)).size === items.length &&
@@ -54,6 +62,7 @@ export const captureDescriptorSchema = z
     sourceVersion: z.number().int().positive().nullable(),
     origin: captureOriginSchema,
     stamp: sourceStampSchema.optional(),
+    originSource: captureOriginSourceSchema.optional(),
   })
   .strict()
   .refine(
@@ -87,6 +96,7 @@ export const publishedCaptureSchema = captureSelectionSchema.extend({
   origin: captureOriginSchema,
   space: captureSpaceSchema,
   stamp: sourceStampSchema.optional(),
+  originSource: captureOriginSourceSchema.optional(),
 });
 export type PublishedCapture = z.infer<typeof publishedCaptureSchema>;
 export const captureRecordSchema = z.object({

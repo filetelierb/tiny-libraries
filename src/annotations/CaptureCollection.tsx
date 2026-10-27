@@ -5,12 +5,19 @@ import {
   ChevronLeft,
   ChevronRight,
   ImagePlus,
+  Camera,
+  MapPin,
   Pencil,
   Trash2,
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
-import type { PublishedCapture } from '../../shared/captures';
+import { stampIdentity, type PublishedCapture } from '../../shared/captures';
+import type { Catalog, Source } from '../../shared/domain';
+import type { SourceLocation } from '../../shared/locations';
+import { sourceLocationStamp, formatCaptureTime } from '../../shared/capture-source';
+import type { TreeActions } from '../workspace/DirectoryTree';
+import { CaptureSourcePicker, type CaptureSourceChoice } from './CaptureSourcePicker';
 import { Button, IconButton, Modal } from '../design/components';
 import type { T } from '../i18n';
 import { CaptureWorkspace } from './CaptureWorkspace';
@@ -50,16 +57,27 @@ async function normalizedImage(file: File, t: T) {
   }
 }
 export function CaptureCollectionEditor({
+  catalog,
+  actions,
+  source,
+  location,
   workspace,
   t,
   disabled = false,
 }: {
   workspace: CaptureWorkspace;
+  catalog: Catalog;
+  actions: TreeActions;
+  source: Source | null;
+  location: SourceLocation;
   t: T;
   disabled?: boolean;
 }) {
   const value = useSyncExternalStore(workspace.subscribe, workspace.getSnapshot),
     [studio, setStudio] = useState<string | null>(null),
+    [picker, setPicker] = useState<'capture' | 'location' | null>(null),
+    [highlight, setHighlight] = useState<string | null>(null),
+    [locationNotice, setLocationNotice] = useState(''),
     [gallery, setGallery] = useState<string | null>(null),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
@@ -98,6 +116,47 @@ export function CaptureCollectionEditor({
       alive = false;
     };
   }, [missing, retry]);
+  useEffect(() => {
+    if (highlight)
+      document
+        .getElementById(`capture-location-${highlight}`)
+        ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [highlight]);
+  async function chooseSource(file: Source, choice: CaptureSourceChoice, annotate: boolean) {
+    const stamp =
+      choice.location.page !== undefined ||
+      choice.location.seconds !== undefined ||
+      choice.location.quote
+        ? sourceLocationStamp(file, choice.location)
+        : undefined;
+    if (picker === 'location') {
+      if (!stamp) throw new Error(t.captureChooseSource);
+      const result = await workspace.addStamp(stamp);
+      setHighlight(result.id);
+      setLocationNotice(result.added ? t.captureLocationAdded : t.captureLocationAlreadyAdded);
+      return;
+    }
+    if (!choice.blob) throw new Error(t.captureNotReady);
+    const id = await workspace.add(choice.blob, choice.origin, file.name, stamp, false, {
+      id: file.id,
+      version: file.version,
+      name: file.name,
+    });
+    if (stamp) {
+      const added = workspace
+        .getSnapshot()
+        .stamps.find((item) => stampIdentity(item) === stampIdentity(stamp));
+      if (added) setHighlight(added.id);
+    }
+    if (annotate && id) {
+      try {
+        await workspace.stageOne(id);
+        setStudio(id);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : t.error);
+      }
+    }
+  }
   function action(work: Promise<unknown>) {
     void work.catch((e) => setError(e instanceof Error ? e.message : t.error));
   }
@@ -111,6 +170,13 @@ export function CaptureCollectionEditor({
         <h3>
           {t.captureCollection} <small>{value.items.length} / 12</small>
         </h3>
+        <Button
+          disabled={disabled || value.items.length >= 12}
+          onClick={() => setPicker('capture')}
+        >
+          <Camera />
+          {t.captureFromLibrary}
+        </Button>
         <Button
           disabled={disabled || value.items.length >= 12}
           onClick={() => input.current?.click()}
@@ -169,6 +235,12 @@ export function CaptureCollectionEditor({
               />
             </label>
             {item.descriptor.stamp && <small>{stampLabel(item.descriptor.stamp, t)}</small>}
+            {!item.descriptor.stamp && item.descriptor.originSource && (
+              <small>
+                {item.descriptor.originSource.name} · {t.sourceVersion}{' '}
+                {item.descriptor.originSource.version}
+              </small>
+            )}
             <div className="capture-tile-actions">
               <Button
                 disabled={
@@ -207,24 +279,50 @@ export function CaptureCollectionEditor({
           </article>
         ))}
       </div>
-      {!!value.stamps.length && (
-        <div className="capture-location-list">
-          <h4>{t.captureLocations}</h4>
-          {value.stamps.map((stamp) => (
-            <div key={stamp.id}>
-              <span>{stampLabel(stamp, t)}</span>
-              <IconButton
-                label={`${t.captureRemoveLocation}: ${stamp.label}`}
-                disabled={disabled}
-                onClick={() =>
-                  action(workspace.setStamps(value.stamps.filter((item) => item.id !== stamp.id)))
-                }
-              >
-                <Trash2 />
-              </IconButton>
-            </div>
-          ))}
-        </div>
+      <div className="capture-location-list">
+        <header>
+          <h4>
+            {t.captureLocations} · {value.stamps.length} / 100
+          </h4>
+          <Button
+            disabled={disabled || value.stamps.length >= 100}
+            onClick={() => setPicker('location')}
+          >
+            <MapPin />
+            {t.captureAddLocation}
+          </Button>
+        </header>
+        {value.stamps.map((stamp) => (
+          <div
+            key={stamp.id}
+            id={`capture-location-${stamp.id}`}
+            className={highlight === stamp.id ? 'capture-location-highlight' : ''}
+          >
+            <span>{stampLabel(stamp, t)}</span>
+            <IconButton
+              label={`${t.captureRemoveLocation}: ${stamp.label}`}
+              disabled={disabled}
+              onClick={() =>
+                action(workspace.setStamps(value.stamps.filter((item) => item.id !== stamp.id)))
+              }
+            >
+              <Trash2 />
+            </IconButton>
+          </div>
+        ))}
+        {locationNotice && <p role="status">{locationNotice}</p>}
+      </div>
+      {picker && (
+        <CaptureSourcePicker
+          catalog={catalog}
+          actions={actions}
+          initialSource={source}
+          initialLocation={location}
+          mode={picker}
+          t={t}
+          close={() => setPicker(null)}
+          pick={chooseSource}
+        />
       )}
       {busy && <p role="status">{t.capturePreviewUpdating}</p>}
       {error && (
@@ -256,7 +354,7 @@ export function stampLabel(
     stamp.location.page !== undefined
       ? `${t.page} ${stamp.location.page}`
       : stamp.location.seconds !== undefined
-        ? `${Math.floor(stamp.location.seconds / 60)}:${String(Math.floor(stamp.location.seconds % 60)).padStart(2, '0')}`
+        ? formatCaptureTime(stamp.location.seconds)
         : stamp.location.quote?.slice(0, 100) || '';
   return `${stamp.label} · ${where}`;
 }
@@ -346,6 +444,11 @@ export function CaptureGallery({
           />
         </div>
         {item.stamp && <p>{stampLabel(item.stamp, t)}</p>}
+        {!item.stamp && item.originSource && (
+          <p>
+            {item.originSource.name} · {t.sourceVersion} {item.originSource.version}
+          </p>
+        )}
         <DrawingNotes key={`${item.id}:${item.drawingDigest}`} owner={owner} item={item} t={t} />
       </div>
     </Modal>

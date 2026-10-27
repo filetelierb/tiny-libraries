@@ -1,3 +1,4 @@
+import { requireCaptureOriginContext } from './capture-context';
 import { z } from 'zod';
 import {
   annotationInputSchema,
@@ -310,6 +311,8 @@ export async function annotationRoute(
       input.captures === undefined
         ? undefined
         : await captureStore(env, storage).resolve(id, input, input.captures);
+    for (const capture of resolvedCaptures || [])
+      await requireCaptureOriginContext(storage, capture);
     for (const stamp of [
       ...(input.stamps || []),
       ...(resolvedCaptures || []).flatMap((item) => (item.stamp ? [item.stamp] : [])),
@@ -377,6 +380,7 @@ export async function annotationRoute(
       } = input;
       const captures = resolvedCaptures ?? current?.captures,
         stamps = input.stamps ?? current?.stamps;
+      for (const capture of captures || []) await requireCaptureOriginContext(tx, capture);
       for (const stamp of [
         ...(stamps || []),
         ...(captures || []).flatMap((item) => (item.stamp ? [item.stamp] : [])),
@@ -392,6 +396,9 @@ export async function annotationRoute(
                 ...data.references,
                 ...(stamps || []).map((item) => item.sourceId),
                 ...(captures || []).flatMap((item) => (item.stamp ? [item.stamp.sourceId] : [])),
+                ...(captures || []).flatMap((item) =>
+                  item.originSource ? [item.originSource.id] : [],
+                ),
               ]),
             ]
           : data.references;

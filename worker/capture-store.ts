@@ -150,6 +150,7 @@ export class CaptureStore {
       size: image.bytes.length,
       origin: record.descriptor.origin,
       ...(record.descriptor.stamp ? { stamp: record.descriptor.stamp } : {}),
+      ...(record.descriptor.originSource ? { originSource: record.descriptor.originSource } : {}),
     });
     await this.objects.write(
       drawingKey(owner, id, drawingDigest),

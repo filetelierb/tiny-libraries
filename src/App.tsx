@@ -1761,6 +1761,8 @@ export function App() {
         <ContentBoundary t={t} close={() => setAnnotationRequest(null)}>
           <Suspense fallback={<p role="status">{t.loadingAnnotations}</p>}>
             <AnnotationEditor
+              catalog={catalog}
+              treeActions={treeActions}
               key={annotationRequest.id}
               request={annotationRequest}
               sessionId={session.id}

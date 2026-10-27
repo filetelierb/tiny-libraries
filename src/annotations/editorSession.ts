@@ -124,6 +124,13 @@ export function loadEditorSession(
           request.location,
         ),
         true,
+        source
+          ? {
+              id: source.id,
+              version: note.context.sourceVersion || source.version,
+              name: source.name,
+            }
+          : undefined,
       );
       incomingAdded = workspace.getSnapshot().items.length > before;
     }

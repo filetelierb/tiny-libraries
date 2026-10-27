@@ -721,6 +721,15 @@ export default {
       const contentMatch = url.pathname.match(/^\/api\/files\/([a-f0-9-]+)\/content$/);
       if (contentMatch) {
         const file = await internal<Source>(env, `/api/files/${contentMatch[1]}`);
+        if (url.searchParams.has('version')) {
+          const expected = z.coerce
+            .number()
+            .int()
+            .positive()
+            .parse(url.searchParams.get('version'));
+          if (expected !== file.version)
+            throw new ApiError('This source version changed. Choose the file again.', 409);
+        }
         const object = await env.FILES.get(`original/${file.id}/${file.version}`, {
           range: request.headers,
         });
@@ -731,6 +740,7 @@ export default {
           'X-Content-Type-Options': 'nosniff',
           'Content-Security-Policy': 'sandbox',
           'Cache-Control': 'no-store',
+          'X-Source-Version': String(file.version),
           'Content-Disposition': `inline; filename*=UTF-8''${encodeURIComponent(file.name)}`,
         });
         let status = 200;

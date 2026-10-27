@@ -1,3 +1,4 @@
+import { requireCaptureOriginContext } from './capture-context';
 import { z } from 'zod';
 import { captureDescriptorSchema, captureDigest, type CaptureDescriptor } from '../shared/captures';
 import { captureDrawingSchema } from '../shared/capture-drawing';
@@ -22,6 +23,7 @@ async function writable(storage: GlossaryStorage, descriptor: CaptureDescriptor)
   )
     throw new CaptureError('Keep the original annotation source and session', 409);
   await requireAnnotationContext(storage, descriptor);
+  await requireCaptureOriginContext(storage, descriptor);
   if (descriptor.stamp) await requireStampContext(storage, descriptor.stamp);
 }
 async function strokeIdentity(captureId: string, index: number) {

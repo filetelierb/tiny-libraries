@@ -7,6 +7,9 @@ import {
   type CaptureDescriptor,
   type PublishedCapture,
   type SourceStamp,
+  type CaptureOriginSource,
+  stampIdentity,
+  sourceStampSchema,
 } from '../../shared/captures';
 import { captureDrawingSchema, type CaptureDrawing } from '../../shared/capture-drawing';
 import type { Annotation, SourceLocation } from '../../shared/annotations';
@@ -50,15 +53,28 @@ function descriptor(
   origin: CaptureDescriptor['origin'],
   id: string,
   stamp?: SourceStamp,
+  originSource?: CaptureOriginSource,
 ) {
-  return captureDescriptorSchema.parse({ ...context, id, origin, ...(stamp ? { stamp } : {}) });
+  return captureDescriptorSchema.parse({
+    ...context,
+    id,
+    origin,
+    ...(stamp ? { stamp } : {}),
+    ...(originSource ? { originSource } : {}),
+  });
 }
 export function entryForVersion(
   context: CaptureWorkspaceContext,
   version: PublishedCapture,
 ): CaptureEntry {
   return {
-    descriptor: descriptor(context, version.origin, version.id, version.stamp),
+    descriptor: descriptor(
+      context,
+      version.origin,
+      version.id,
+      version.stamp,
+      version.originSource,
+    ),
     label: version.label,
     version,
     baseDigest: version.baseDigest,
@@ -188,12 +204,20 @@ export class CaptureWorkspace {
   setStamps(stamps: SourceStamp[]) {
     return this.update({ ...this.value, stampsManaged: true, stamps });
   }
+  async addStamp(raw: SourceStamp) {
+    const stamp = sourceStampSchema.parse(raw);
+    const existing = this.value.stamps.find((item) => stampIdentity(item) === stampIdentity(stamp));
+    if (existing) return { id: existing.id, added: false };
+    await this.setStamps([...this.value.stamps, stamp]);
+    return { id: stamp.id, added: true };
+  }
   async add(
     blob: Blob,
     origin: CaptureDescriptor['origin'],
     label: string,
     stamp?: SourceStamp,
     deduplicate = false,
+    originSource?: CaptureOriginSource,
   ) {
     const digest = await captureDigest(new Uint8Array(await blob.arrayBuffer()));
     if (
@@ -206,14 +230,24 @@ export class CaptureWorkspace {
     if (this.value.items.length >= 12) throw new Error('A note can contain up to twelve captures');
     const id = crypto.randomUUID(),
       entry: CaptureEntry = {
-        descriptor: descriptor(this.context, origin, id, stamp),
+        descriptor: descriptor(this.context, origin, id, stamp, originSource),
         label,
         baseDigest: digest,
         hasBlob: true,
       };
-    await this.update({ ...this.value, managed: true, items: [...this.value.items, entry] }, [
-      { table: 'images', key: imageDraftKey(this.context.annotationId, id), value: blob },
-    ]);
+    const stamps =
+      stamp && !this.value.stamps.some((item) => stampIdentity(item) === stampIdentity(stamp))
+        ? [...this.value.stamps, stamp]
+        : this.value.stamps;
+    await this.update(
+      {
+        ...this.value,
+        managed: true,
+        ...(stamp ? { stampsManaged: true, stamps } : {}),
+        items: [...this.value.items, entry],
+      },
+      [{ table: 'images', key: imageDraftKey(this.context.annotationId, id), value: blob }],
+    );
     return id;
   }
   async applyDrawing(id: string, raw: CaptureDrawing) {

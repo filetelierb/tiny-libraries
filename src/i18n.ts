@@ -950,6 +950,30 @@ const en = {
     'Use Left and Right to browse images. Zoom controls scroll the image without changing the saved capture.',
   captureIncomingAdded: 'The newly captured view was added to your recovered draft.',
   captureDrawingNotes: 'Drawing notes',
+  captureFromLibrary: 'Capture from library',
+  captureAddLocation: 'Add source location',
+  captureIndependentNotice:
+    'Choose a source here without moving the open reader or player. Changes stay in the annotation draft until you save.',
+  captureChooseSource: 'Choose a file from the library.',
+  captureSourceChanged: 'This source changed or is in Trash. Choose its current version again.',
+  captureUseExcerpt: 'Use a text excerpt instead',
+  captureExcerpt: 'Source excerpt',
+  captureAddClean: 'Add clean capture',
+  captureAddAnnotated: 'Add and annotate',
+  capturePage: 'Capture page',
+  captureSeconds: 'Seconds',
+  captureImageLoadError: 'The image could not be loaded. Choose the file again.',
+  captureMediaLoadError:
+    'The recording could not be loaded with a finite duration. Choose the file again.',
+  captureFramePreview: 'Independent silent frame preview',
+  captureSilentFrame:
+    'This preview stays paused and muted. The active player keeps its own position and playback state.',
+  captureSilentTime: 'Select a source time without playing audio or moving the active player.',
+  captureEarlierFrame: 'Choose an earlier frame',
+  captureLaterFrame: 'Choose a later frame',
+  captureFramePosition: 'Capture time',
+  captureLocationAlreadyAdded: 'That source location is already in this draft.',
+  captureLocationAdded: 'Source location added to this draft.',
   translation: 'Translation',
 };
 type Dictionary = typeof en;
@@ -1921,6 +1945,31 @@ const es: Dictionary = {
     'Usa las flechas izquierda y derecha para recorrer las imágenes. El zoom permite desplazarte por la imagen sin cambiar la captura guardada.',
   captureIncomingAdded: 'La vista recién capturada se añadió al borrador recuperado.',
   captureDrawingNotes: 'Notas del dibujo',
+  captureFromLibrary: 'Capturar desde la biblioteca',
+  captureAddLocation: 'Añadir ubicación de la fuente',
+  captureIndependentNotice:
+    'Elige una fuente sin mover el lector o reproductor abierto. Los cambios permanecen en el borrador hasta guardar la anotación.',
+  captureChooseSource: 'Elige un archivo de la biblioteca.',
+  captureSourceChanged: 'Esta fuente cambió o está en la papelera. Elige su versión actual.',
+  captureUseExcerpt: 'Usar un fragmento de texto',
+  captureExcerpt: 'Fragmento de la fuente',
+  captureAddClean: 'Añadir captura limpia',
+  captureAddAnnotated: 'Añadir y anotar',
+  capturePage: 'Página de la captura',
+  captureSeconds: 'Segundos',
+  captureImageLoadError: 'No se pudo cargar la imagen. Elige el archivo de nuevo.',
+  captureMediaLoadError:
+    'No se pudo cargar una duración finita de la grabación. Elige el archivo de nuevo.',
+  captureFramePreview: 'Vista previa independiente y silenciosa',
+  captureSilentFrame:
+    'Esta vista permanece pausada y sin sonido. El reproductor activo conserva su posición y estado.',
+  captureSilentTime:
+    'Selecciona un instante de la fuente sin reproducir audio ni mover el reproductor activo.',
+  captureEarlierFrame: 'Elegir un fotograma anterior',
+  captureLaterFrame: 'Elegir un fotograma posterior',
+  captureFramePosition: 'Instante de la captura',
+  captureLocationAlreadyAdded: 'Esa ubicación ya está en este borrador.',
+  captureLocationAdded: 'Ubicación añadida al borrador.',
   translation: 'Traducción',
 };
 export const dictionaries: Record<Locale, Dictionary> = { en, es };

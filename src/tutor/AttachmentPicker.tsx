@@ -316,6 +316,8 @@ export function AttachmentPicker({
       {editor && (
         <Suspense fallback={<p role="status">{t.loadingAnnotations}</p>}>
           <AnnotationEditor
+            catalog={catalog}
+            treeActions={treeActions}
             key={editor.id}
             request={editor}
             sessionId={sessionId}

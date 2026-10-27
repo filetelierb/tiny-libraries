@@ -258,3 +258,28 @@ test('authenticated local composition returns the selected cropped image and rej
   assert.equal(response.headers.get('Content-Type'), 'image/png');
   assert.ok((await response.arrayBuffer()).byteLength > 33);
 });
+
+test('immutable capture revisions retain a separately identified image origin without requiring a page stamp', async () => {
+  const f = await fixture(),
+    originSource = { id: id(), version: 2, name: 'Study image.png' },
+    descriptor = {
+      ...f.descriptor,
+      id: id(),
+      origin: 'image' as const,
+      stamp: undefined,
+      originSource,
+    };
+  await f.store.create(descriptor);
+  const record = await f.store.putBase(descriptor.annotationId, descriptor.id, image());
+  const version = await f.store.version(
+    descriptor.annotationId,
+    descriptor.id,
+    record.base!.emptyDrawingDigest,
+  );
+  assert.deepEqual(version.originSource, originSource);
+  assert.equal(version.stamp, undefined);
+  await assert.rejects(
+    () => f.store.create({ ...descriptor, originSource: { ...originSource, version: 3 } }),
+    CaptureError,
+  );
+});
