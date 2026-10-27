@@ -1349,7 +1349,8 @@ body:has(.panel-resizer.resizing) {
   gap: 4px;
   padding: 0 3px;
   font-size: 11px;
-  border-radius: var(--radius-sm);
+  font-weight: 500;
+  border-radius: var(--radius);
   white-space: nowrap;
   color: var(--muted-text);
   min-height: 35px;
@@ -1363,18 +1364,17 @@ body:has(.panel-resizer.resizing) {
   display: none;
   flex-shrink: 0;
 }
-@container (min-width: 520px) {
+@container (min-width: 420px) {
   .study-tabs > button > svg {
     display: block;
   }
 }
-.study-tabs > button:hover {
-  background: var(--muted);
-}
 .study-tabs > button.active {
   color: var(--foreground);
   background: var(--surface);
-  box-shadow: 0 1px 3px rgb(21 45 52 / 10%);
+  box-shadow:
+    0 1px 3px 0 rgb(0 0 0 / 0.1),
+    0 1px 2px -1px rgb(0 0 0 / 0.1);
 }
 .study-content {
   flex: 1;
@@ -3628,18 +3628,27 @@ body:has(.panel-resizer.resizing) {
   min-width: 0;
   width: 100%;
   margin: 0;
-  padding: 5px 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  font-size: 12px;
+  font-weight: 400;
   cursor: pointer;
 }
+.tree-file-select:hover {
+  background: var(--muted);
+}
 .tree-file-select input {
-  width: 15px;
-  height: 15px;
-  flex: 0 0 15px;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  min-width: 16px;
   margin: 0;
   accent-color: var(--primary);
 }
 .tree-file-select > svg {
-  flex: 0 0 18px;
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
   color: var(--muted-text);
 }
 .tree-file-select > span {
@@ -3650,12 +3659,12 @@ body:has(.panel-resizer.resizing) {
   min-width: 0;
 }
 .tree-file-select > small {
-  border-radius: var(--radius-sm);
-  background: var(--secondary);
-  color: var(--on-secondary);
-  min-width: 24px;
-  padding: 2px 5px;
-  text-align: center;
+  background: none;
+  color: var(--muted-text);
+  font-size: 10px;
+  min-width: 0;
+  padding: 0;
+  text-align: right;
 }
 .resource-filter-actions {
   display: flex;
@@ -3709,8 +3718,8 @@ body:has(.panel-resizer.resizing) {
 
 .bookmark-tab-count {
   margin-left: 5px;
-  font-size: 11px;
-  color: var(--muted-text);
+  font-size: 10px;
+  color: inherit;
 }
 .bookmark-filter {
   display: flex;
@@ -8204,4 +8213,17 @@ body:has(.panel-resizer.resizing) {
 }
 .pdf-page > .textLayer ::selection {
   background: rgb(27 160 145 / 35%);
+}
+.tutor-mention-picker .file-row > button:first-child {
+  font-size: 12px;
+  padding: 6px 8px;
+}
+.tutor-mention-picker .file-row > button:first-child svg {
+  width: 16px;
+  height: 16px;
+  color: inherit;
+}
+.tutor-mention-picker .file-row:hover {
+  background: color-mix(in oklch, var(--primary) 10%, transparent);
+  color: var(--primary);
 }
