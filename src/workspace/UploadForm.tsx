@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CircleCheck, FileText, LoaderCircle, Search, Upload, X } from 'lucide-react';
 import type { Catalog } from '../../shared/domain';
 import { directoryState } from '../../shared/directories';
@@ -37,7 +37,9 @@ export function UploadForm({
   const [directoryId, setDirectoryId] = useState(initialDirectoryId),
     [files, setFiles] = useState<File[]>([]),
     [done, setDone] = useState<Set<File>>(new Set()),
-    [query, setQuery] = useState('');
+    [query, setQuery] = useState(''),
+    [dragging, setDragging] = useState(false),
+    input = useRef<HTMLInputElement>(null);
   const remaining = files.filter((file) => !done.has(file));
   useEffect(() => setDirectoryId(initialDirectoryId), [initialDirectoryId]);
   const selected = catalog.directories.find((directory) => directory.id === directoryId);
@@ -58,8 +60,9 @@ export function UploadForm({
         );
       }}
     >
-      <fieldset className="destination-picker" disabled={busy}>
-        <legend>{t.destination}</legend>
+      <fieldset className="upload-section destination-picker" disabled={busy}>
+        <h3>{t.destination}</h3>
+        <p className="upload-section-hint">{t.destinationHint}</p>
         <p className="destination-path">{selected?.path || t.libraryRoot}</p>
         <label className="search-field">
           <Search size={16} aria-hidden="true" />
@@ -83,14 +86,34 @@ export function UploadForm({
           storageKey="tl:tree:upload-picker"
         />
       </fieldset>
-      <label className="upload-drop">
-        <Upload size={28} />
-        <strong>{t.chooseFile}</strong>
-        <span>PDF · MP4 · MP3 · WAV · PNG · JPG · MD · TXT</span>
+      <section
+        className={`upload-section upload-files ${dragging ? 'drop-active' : ''}`}
+        onDragOver={(event) => {
+          if (busy || !event.dataTransfer.types.includes('Files')) return;
+          event.preventDefault();
+          setDragging(true);
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(event) => {
+          setDragging(false);
+          if (busy || !event.dataTransfer.files.length) return;
+          event.preventDefault();
+          setFiles([...event.dataTransfer.files]);
+          setDone(new Set());
+        }}
+      >
+        <h3>{t.uploadFiles}</h3>
+        <p className="upload-section-hint">PDF · MP4 · MP3 · WAV · PNG · JPG · MD · TXT</p>
+        <Button className="upload-choose" disabled={busy} onClick={() => input.current?.click()}>
+          <Upload size={16} />
+          {t.chooseFiles}
+        </Button>
         <input
+          ref={input}
           type="file"
           multiple
-          aria-label={t.chooseFile}
+          hidden
+          aria-label={t.chooseFiles}
           disabled={busy}
           accept=".pdf,.mp4,.webm,.mov,.mkv,.wav,.mp3,.m4a,.ogg,.flac,.png,.jpg,.jpeg,.webp,.md,.txt,.csv"
           onChange={(event) => {
@@ -98,7 +121,7 @@ export function UploadForm({
             setDone(new Set());
           }}
         />
-      </label>
+      </section>
       {files.map((file, index) => (
         <p className={`upload-file ${done.has(file) ? 'done' : ''}`} key={index}>
           {done.has(file) ? <CircleCheck size={14} /> : <FileText size={14} />}

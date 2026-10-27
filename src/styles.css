@@ -2645,7 +2645,7 @@ body:has(.panel-resizer.resizing) {
 .modal:has(.tutor-turn-editor) {
   --modal-w: 448px;
 }
-.modal:has(.upload-drop),
+.modal:has(.upload-files),
 .modal:has(.card-deck),
 .modal:has(.attachment-picker-list),
 .modal:has(.reinforcement-setup) {
@@ -2732,26 +2732,34 @@ body:has(.panel-resizer.resizing) {
   margin-top: 20px;
   padding-top: 10px;
 }
-.upload-drop {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 13px;
-  padding: 30px 16px;
-  background: var(--background);
-  border: 1px dashed var(--border);
-  border-radius: var(--radius-lg);
-  margin-top: 18px;
-  color: var(--primary);
-  cursor: pointer;
+.upload-section {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
 }
-.upload-drop span {
-  font-size: var(--font-size-small);
-  font-weight: 400;
+.upload-section + .upload-section {
+  margin-top: 12px;
+}
+.upload-section h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+.upload-section-hint {
+  margin: 0;
+  font-size: 12px;
   color: var(--muted-text);
 }
-.upload-drop input {
-  font-size: 13px;
+.upload-files.drop-active {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 5%, transparent);
+}
+.upload-choose {
+  justify-self: start;
 }
 .upload-file {
   display: flex;
@@ -3392,27 +3400,13 @@ body:has(.panel-resizer.resizing) {
     animation: none;
   }
 }
-.destination-picker {
-  min-width: 0;
-  margin: 0;
-  padding: 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-}
-.destination-picker legend {
-  font-size: var(--font-size-control);
-  font-weight: 600;
-  padding: 0 4px;
-}
 .destination-path {
   overflow-wrap: anywhere;
-  color: var(--primary);
-  font-size: var(--font-size-control);
-  margin: 0 0 10px;
+  font-size: 14px;
+  margin: 0;
 }
 .destination-picker .directory-tree {
   max-height: 220px;
-  margin-top: 8px;
 }
 .modal > .directory-tree {
   max-height: min(52vh, 420px);
