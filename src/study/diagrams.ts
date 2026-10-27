@@ -36,7 +36,82 @@ export const diagramConfig: MermaidConfig = {
     'layout',
   ],
 };
-export type DiagramImage = { url: string; width: number; height: number };
+/** A flowchart node and where it sits on the image, in percent of its width and height. */
+export type DiagramNode = {
+  id: string;
+  label: string;
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+};
+export type DiagramLink = { id: string; from: string; to: string; label: string };
+export type DiagramFlow = { nodes: DiagramNode[]; links: DiagramLink[] };
+export type DiagramImage = { url: string; width: number; height: number; flow?: DiagramFlow };
+type Mermaid = (typeof import('mermaid'))['default'];
+type FlowDb = {
+  getVertices(): Map<string, { id: string; text?: string }>;
+  getEdges(): Array<{ start: string; end: string; text?: string }>;
+};
+const plainLabel = (value: string) =>
+  value
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+/**
+ * Flowcharts also report their nodes and links, so the image can be explored: nodes are
+ * located by measuring the sanitized drawing off-screen, never by running it in the page.
+ */
+async function flowOf(
+  mermaid: Mermaid,
+  source: string,
+  root: Element,
+  host: HTMLElement,
+  [x, y, width, height]: number[],
+): Promise<DiagramFlow | undefined> {
+  const diagram = await mermaid.mermaidAPI.getDiagramFromText(source).catch(() => null);
+  if (!diagram || !/^flowchart/.test(diagram.type)) return undefined;
+  const db = diagram.db as unknown as FlowDb;
+  const svg = document.importNode(root, true) as SVGSVGElement;
+  host.replaceChildren(svg);
+  const groups = [...svg.querySelectorAll<SVGGraphicsElement>('g.node')];
+  const space = svg.getScreenCTM()?.inverse();
+  const nodes: DiagramNode[] = [];
+  for (const vertex of db.getVertices().values()) {
+    const element = groups.find(
+      (group) =>
+        group.dataset.id === vertex.id ||
+        group.id.endsWith(`-flowchart-${vertex.id}-${group.id.split('-').at(-1)}`),
+    );
+    const screen = element?.getScreenCTM();
+    if (!element || !screen || !space) continue;
+    const box = element.getBBox(),
+      matrix = space.multiply(screen),
+      from = new DOMPoint(box.x, box.y).matrixTransform(matrix),
+      to = new DOMPoint(box.x + box.width, box.y + box.height).matrixTransform(matrix);
+    nodes.push({
+      id: vertex.id,
+      label: plainLabel(vertex.text || vertex.id) || vertex.id,
+      left: ((from.x - x) / width) * 100,
+      top: ((from.y - y) / height) * 100,
+      width: ((to.x - from.x) / width) * 100,
+      height: ((to.y - from.y) / height) * 100,
+    });
+  }
+  if (nodes.length < 2) return undefined;
+  const known = new Set(nodes.map((node) => node.id));
+  const links = db
+    .getEdges()
+    .filter((edge) => known.has(edge.start) && known.has(edge.end))
+    .map((edge, index) => ({
+      id: `link-${index}`,
+      from: edge.start,
+      to: edge.end,
+      label: plainLabel(edge.text || ''),
+    }));
+  return { nodes, links };
+}
 let engine: Promise<(typeof import('mermaid'))['default']> | undefined;
 let queue: Promise<unknown> = Promise.resolve();
 let sequence = 0;
@@ -81,11 +156,11 @@ export function renderDiagram(source: string): Promise<DiagramImage> {
       const height = box?.[3] && Number.isFinite(box[3]) ? box[3] : 600;
       root.setAttribute('width', String(width));
       root.setAttribute('height', String(height));
-      return {
-        url: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(new XMLSerializer().serializeToString(root))}`,
-        width,
-        height,
-      };
+      const url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(new XMLSerializer().serializeToString(root))}`;
+      const origin =
+        box && box.length === 4 && box.every(Number.isFinite) ? box : [0, 0, width, height];
+      const flow = await flowOf(mermaid, source, root, host, origin).catch(() => undefined);
+      return { url, width, height, ...(flow ? { flow } : {}) };
     } finally {
       host.remove();
     }

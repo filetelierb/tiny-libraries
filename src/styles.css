@@ -5761,6 +5761,60 @@ body:has(.panel-resizer.resizing) {
   background: var(--background);
   font-size: 12px;
 }
+.flow-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+.flow-toolbar > span {
+  margin-left: auto;
+  color: var(--muted-text);
+}
+.flow-canvas {
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
+  margin: auto;
+}
+.flow-node {
+  position: absolute;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+}
+.flow-node:hover,
+.flow-node:focus-visible {
+  border-color: color-mix(in oklch, var(--primary), transparent 50%);
+}
+.flow-node.lit {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px color-mix(in oklch, var(--primary), transparent 80%);
+}
+.flow-detail {
+  display: grid;
+  gap: 4px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+  font-size: var(--font-size-small);
+}
+.flow-detail p {
+  margin: 0;
+}
+.flow-detail button {
+  margin: 2px 4px 0 0;
+  padding: 1px 8px;
+  border: 1px solid color-mix(in oklch, var(--primary), transparent 65%);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  color: var(--primary);
+  font: inherit;
+  cursor: pointer;
+}
 .diagram-render-host {
   position: fixed;
   left: -100000px;
