@@ -9573,3 +9573,103 @@ body:has(.panel-resizer.resizing) {
 .csv-table-scroll > p {
   margin: 8px 0 0;
 }
+
+.editor-widget {
+  margin: 1rem 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  font-family: var(--font-heading);
+  font-size: 13px;
+}
+.editor-widget.selected {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.editor-widget[data-widget-type='invalid'] {
+  border-color: var(--danger);
+}
+.editor-widget-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+}
+.editor-widget-grip {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 28px;
+  color: var(--muted-text);
+  cursor: grab;
+}
+.editor-widget-grip svg {
+  width: 16px;
+  height: 16px;
+}
+.editor-widget-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.editor-widget-form {
+  display: grid;
+  gap: 10px;
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--border);
+}
+.widget-field {
+  display: grid;
+  gap: 4px;
+}
+.widget-field > span,
+.widget-rows legend {
+  color: var(--muted-text);
+  font-size: 12px;
+}
+.editor-widget-form input:not([type='radio']),
+.editor-widget-form textarea {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--background);
+  font: inherit;
+}
+.widget-field textarea[spellcheck='false'] {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+}
+.widget-rows {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.widget-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+.widget-row > div {
+  display: grid;
+  flex: 1;
+  gap: 4px;
+}
+.widget-row-number {
+  min-width: 18px;
+  padding-top: 7px;
+  color: var(--muted-text);
+  text-align: right;
+}
+.widget-row input[type='radio'] {
+  margin-top: 9px;
+}
+.editor-widget-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}

@@ -23,6 +23,7 @@ import { Button, IconButton } from '../design/components';
 import type { T } from '../i18n';
 import { InlineMath, BlockMath } from '../annotations/mathNodes';
 import { calloutMarker, editorMarkdown, type CalloutVariant } from '../study/callouts';
+import { WidgetNode } from './WidgetNode';
 
 type JsonNode = {
   type: string;
@@ -97,6 +98,8 @@ export function ArtifactEditor({
     [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
     [formula, setFormula] = useState<string | null>(null),
+    // Position of the formula being changed; null while inserting a new one.
+    [formulaAt, setFormulaAt] = useState<number | null>(null),
     [discarding, setDiscarding] = useState(false);
   const editor = useEditor({
     extensions: [
@@ -105,10 +108,18 @@ export function ArtifactEditor({
       Markdown,
       InlineMath,
       BlockMath,
+      WidgetNode.configure({ t }),
     ],
     content: artifact.explanation,
     contentType: 'markdown',
     editorProps: {
+      // Clicking a formula opens it in the formula bar to change or keep.
+      handleClickOn: (_view, _pos, node, nodePos) => {
+        if (node.type.name !== 'inlineMath' && node.type.name !== 'blockMath') return false;
+        setFormulaAt(nodePos);
+        setFormula(String(node.attrs.latex || ''));
+        return true;
+      },
       attributes: {
         class: 'study-markdown',
         role: 'textbox',
@@ -139,12 +150,21 @@ export function ArtifactEditor({
       chain().updateAttributes('blockquote', { variant }).run();
     else chain().wrapIn('blockquote', { variant }).run();
   };
-  const insertFormula = () => {
-    if (formula?.trim())
-      chain()
-        .insertContent({ type: 'inlineMath', attrs: { latex: formula.trim() } })
-        .run();
+  const closeFormula = () => {
     setFormula(null);
+    setFormulaAt(null);
+  };
+  const insertFormula = () => {
+    const latex = formula?.trim();
+    if (latex && formulaAt !== null)
+      chain()
+        .command(({ tr }) => {
+          tr.setNodeMarkup(formulaAt, undefined, { latex });
+          return true;
+        })
+        .run();
+    else if (latex) chain().insertContent({ type: 'inlineMath', attrs: { latex } }).run();
+    closeFormula();
   };
   const save = async () => {
     if (!editor) return;
@@ -200,7 +220,7 @@ export function ArtifactEditor({
           ),
         )}
         {tool(t.insertFormula, Sigma, formula !== null, () =>
-          setFormula((value) => (value === null ? '' : null)),
+          formula === null ? setFormula('') : closeFormula(),
         )}
         <span className="toolbar-divider" aria-hidden />
         {tool(t.undo, Undo2, false, () => chain().undo().run())}
@@ -218,11 +238,14 @@ export function ArtifactEditor({
               if (event.key === 'Enter') {
                 event.preventDefault();
                 insertFormula();
-              } else if (event.key === 'Escape') setFormula(null);
+              } else if (event.key === 'Escape') closeFormula();
             }}
           />
+          <Button size="sm" variant="ghost" onClick={closeFormula}>
+            {t.cancel}
+          </Button>
           <Button size="sm" disabled={!formula.trim()} onClick={insertFormula}>
-            {t.insertFormula}
+            {formulaAt === null ? t.insertFormula : t.updateFormula}
           </Button>
         </div>
       )}

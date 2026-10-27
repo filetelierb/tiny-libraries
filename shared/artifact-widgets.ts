@@ -376,6 +376,25 @@ export function widgetCitations(widget: ArtifactWidget): string[] {
   return items.flatMap((item) => (item.segmentId ? [item.segmentId] : []));
 }
 
+/** Empty optional texts are left out rather than saved as blanks. */
+function prune(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(prune);
+  if (value && typeof value === 'object')
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([, item]) => item !== '' && item !== undefined)
+        .map(([key, item]) => [key, typeof item === 'string' ? item : prune(item)]),
+    );
+  return value;
+}
+/** Checks a widget edited by hand and returns its markdown source, or the first problem. */
+export function validateWidgetDraft(draft: unknown) {
+  const result = artifactWidgetSchema.safeParse(prune(draft));
+  if (result.success) return { source: JSON.stringify(result.data) };
+  const issue = result.error.issues[0];
+  return { error: `${issue.path.length ? `${issue.path.join(' › ')}: ` : ''}${issue.message}` };
+}
+
 export function parseWidget(source: string): ArtifactWidget | null {
   try {
     const result = artifactWidgetSchema.safeParse(JSON.parse(source));

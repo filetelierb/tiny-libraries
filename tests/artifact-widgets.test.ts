@@ -7,6 +7,7 @@ import {
   sanitizeWidgets,
   widgetImages,
   widgetSegments,
+  validateWidgetDraft,
 } from '../shared/artifact-widgets';
 
 const block = (value: unknown) => '```widget\n' + JSON.stringify(value) + '\n```';
@@ -108,5 +109,38 @@ test('tutor markdown is normalized to artifact conventions', () => {
       '```widget\n{"type": "summary", "points": [{"text": "x", "segmentId": "section-1"}]}\n```',
       'Unknown [other] stays.',
     ].join('\n\n'),
+  );
+});
+
+test('hand-edited widgets drop empty optional texts and report the first problem', () => {
+  const steps = {
+    type: 'steps',
+    title: 'Sampling',
+    caption: '',
+    steps: [
+      { title: 'Measure', body: 'Take a value at each tick.', segmentId: 'rate' },
+      { title: 'Repeat', body: 'Keep the same interval.' },
+    ],
+  };
+  const valid = validateWidgetDraft(steps);
+  assert.equal(valid.error, undefined);
+  assert.deepEqual(JSON.parse(valid.source!).caption, undefined);
+  assert.equal(JSON.parse(valid.source!).steps[0].segmentId, 'rate');
+  const tooShort = validateWidgetDraft({ ...steps, steps: [steps.steps[0]] });
+  assert.match(tooShort.error!, /^steps: /);
+  const blankTitle = validateWidgetDraft({
+    ...steps,
+    steps: [steps.steps[0], { title: '', body: 'x' }],
+  });
+  assert.match(blankTitle.error!, /^steps › 1 › title: /);
+  assert.match(
+    validateWidgetDraft({
+      type: 'predict',
+      prompt: 'Which rate avoids aliasing?',
+      choices: ['8'],
+      correctIndex: 2,
+      reveal: 'Above 16.',
+    }).error!,
+    /outside the choices/,
   );
 });
