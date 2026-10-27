@@ -145,9 +145,6 @@ label {
 .modal label {
   gap: 4px;
 }
-p {
-  line-height: 1.65;
-}
 h1,
 h2,
 h3,
@@ -159,7 +156,12 @@ h3 {
   line-height: 1.5;
 }
 small {
-  font-size: 13px;
+  font-size: 12px;
+}
+.muted-xs {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted-text);
 }
 hr {
   border: 0;
@@ -167,7 +169,6 @@ hr {
 }
 .muted {
   color: var(--muted-text);
-  line-height: 1.7;
 }
 .text-link {
   color: var(--primary);
@@ -2991,13 +2992,26 @@ body:has(.panel-resizer.resizing) {
     flex: 1 1 100%;
   }
 }
+/* Reduced motion stops entering and spinning motion; colour feedback stays. */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation: none !important;
-    transition: none !important;
-    scroll-behavior: auto !important;
+  html {
+    scroll-behavior: auto;
+  }
+  :is(.library-panel, .study-panel).narrow,
+  .modal[open],
+  .modal::backdrop,
+  .action-menu,
+  .selection-menu,
+  .draft-chip,
+  .reference-chip,
+  .toast {
+    animation: none;
+  }
+  .spin {
+    animation-duration: 2.5s;
+  }
+  :is(.player-controls, .quiz-progress > span, .artifact-card, .assessment-history-row) {
+    transition-property: background-color, color, border-color;
   }
 }
 .generated-artifact {
@@ -5318,20 +5332,11 @@ body:has(.panel-resizer.resizing) {
 }
 .study-formula-display {
   display: block;
-  padding: 4px 0;
+  margin: 19.2px 0;
+  padding: 6.4px 0;
 }
 .study-formula .katex {
-  font-size: 1.1em;
   overflow-wrap: normal;
-}
-.study-formula:not(.study-formula-display) {
-  display: inline-block;
-  max-width: 100%;
-  overflow-x: auto;
-  vertical-align: middle;
-}
-.study-formula .katex-display {
-  margin: 0.6em 0;
 }
 .study-formula .formula-source {
   white-space: pre-wrap;
@@ -8007,4 +8012,17 @@ body:has(.panel-resizer.resizing) {
 .page-drawing .sketch-surface img {
   display: block;
   width: 100%;
+}
+/* Thin scrollbars with a border-coloured thumb on long lists and readers. */
+.thin-scrollbar,
+.file-tree,
+.study-content,
+.directory-tree,
+.conversation-messages,
+.pdf-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.pdf-page > .textLayer ::selection {
+  background: rgb(27 160 145 / 35%);
 }
