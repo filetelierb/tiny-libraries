@@ -79,7 +79,12 @@ import {
   visibleWorkspace,
 } from './workspace/tabs';
 import { ResourceTabs } from './workspace/ResourceTabs';
-import { StudyTabs, type StudyTab } from './workspace/StudyTabs';
+import {
+  StudyTabs,
+  auxiliaryStudyTools,
+  isPrimaryStudyTool,
+  type StudyTab,
+} from './workspace/StudyTabs';
 import { DirectoryTree, type TreeActions } from './workspace/DirectoryTree';
 import { SplitWorkspace } from './workspace/SplitWorkspace';
 import { UploadForm } from './workspace/UploadForm';
@@ -147,9 +152,17 @@ export function App() {
   const leftPanelRef = useRef<HTMLElement>(null),
     rightPanelRef = useRef<HTMLElement>(null);
   const [focus, setFocus] = useState(false),
-    [tab, setTab] = useState<StudyTab>('chapters'),
+    [tab, setTab] = useState<StudyTab>('assistant'),
     [query, setQuery] = useState(''),
     [catalogView, setCatalogView] = useState<CatalogView>('files');
+  function selectStudyTool(value: StudyTab) {
+    setTab(value);
+    requestAnimationFrame(() => {
+      document
+        .getElementById(isPrimaryStudyTool(value) ? `study-tab-${value}` : 'study-tool-title')
+        ?.focus({ preventScroll: true });
+    });
+  }
   const [renamingSession, setRenamingSession] = useState<StudySession | null>(null);
   const [directoryDialog, setDirectoryDialog] = useState<DirectoryDialog | null>(null);
   const [uploadDirectoryId, setUploadDirectoryId] = useState<string | null>(null);
@@ -1224,7 +1237,12 @@ export function App() {
         aria-modal={panels.drawer === 'right' ? true : undefined}
       >
         <div className="study-heading">
-          <span>{t.study}</span>
+          <StudyTabs
+            value={tab}
+            change={setTab}
+            t={t}
+            bookmarkCount={activeBookmarks.filter((bookmark) => !bookmark.deleted).length}
+          />
           <div className="panel-heading-actions">
             <IconButton
               label={panels.preferences.right.pinned ? t.unpinPanel : t.pinPanel}
@@ -1241,22 +1259,32 @@ export function App() {
             </IconButton>
           </div>
         </div>
-        <StudyTabs
-          value={tab}
-          change={setTab}
-          t={t}
-          bookmarkCount={activeBookmarks.filter((bookmark) => !bookmark.deleted).length}
-        />
-        {active && (
-          <div className="study-resource" aria-label={t.activeResource}>
-            <FileText size={15} />
-            <span title={active.name}>{active.name}</span>
+        {!isPrimaryStudyTool(tab) && (
+          <div className="study-auxiliary-heading">
+            <Button variant="ghost" onClick={() => selectStudyTool('assistant')}>
+              <ArrowLeft size={14} />
+              {t.backToTutor}
+            </Button>
+            <h2 id="study-tool-title" tabIndex={-1}>
+              {t[tab]}
+            </h2>
           </div>
         )}
+        <div className="study-resource" aria-label={t.activeResource}>
+          <FileText size={15} />
+          <span title={active?.name}>{active?.name || t.noOpenResources}</span>
+          <ActionMenu
+            label={t.moreStudyTools}
+            actions={auxiliaryStudyTools.map((tool) => ({
+              label: t[tool],
+              run: () => selectStudyTool(tool),
+            }))}
+          />
+        </div>
         <div
           id="study-content"
-          role="tabpanel"
-          aria-labelledby={`study-tab-${tab}`}
+          role={isPrimaryStudyTool(tab) ? 'tabpanel' : 'region'}
+          aria-labelledby={isPrimaryStudyTool(tab) ? `study-tab-${tab}` : 'study-tool-title'}
           className="study-content"
         >
           <div hidden={tab !== 'glossary'} className="glossary-host">
@@ -1372,6 +1400,8 @@ export function App() {
                 });
               }}
             />
+          ) : tab === 'miniapp' ? (
+            <CodePanel t={t} onError={setError} />
           ) : !active ? (
             <div className="small-empty">
               <BookOpen size={24} />
@@ -1379,6 +1409,34 @@ export function App() {
             </div>
           ) : (
             <>
+              {tab === 'artifacts' && (
+                <section className="study-artifact-entry">
+                  <div className="section-label">{t.artifacts}</div>
+                  {learning?.synthesis.artifact ? (
+                    <>
+                      <h3>{learning.synthesis.artifact.title}</h3>
+                      <p className="muted">{learning.synthesis.artifact.explanation}</p>
+                      <small>
+                        {active.name} · {new Date(learning.createdAt).toLocaleString()}
+                      </small>
+                      <Button
+                        onClick={() => {
+                          setArtifact(active.id);
+                          if (panels.drawer === 'right') setRight(false);
+                        }}
+                      >
+                        {t.open}
+                      </Button>
+                    </>
+                  ) : (
+                    <p className="muted">{t.noSourceArtifacts}</p>
+                  )}
+                  <Button variant="ghost" onClick={() => selectStudyTool('miniapp')}>
+                    <Code2 size={14} />
+                    {t.miniapp}
+                  </Button>
+                </section>
+              )}
               {tab === 'chapters' && (
                 <>
                   <div className="section-label">
@@ -1539,7 +1597,6 @@ export function App() {
                   onCite={cite}
                 />
               )}
-              {tab === 'miniapp' && <CodePanel t={t} onError={setError} />}
             </>
           )}
         </div>

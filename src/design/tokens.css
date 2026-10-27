@@ -35,4 +35,9 @@
   --paper-shadow: 0 18px 50px rgb(21 45 52 / 7%);
   --panel-width: 300px;
   --study-width: 350px;
+  --resource-strip-height: 44px;
+  --resource-tab-height: 40px;
+  --resource-tab-max: 224px;
+  --split-tab-max: 256px;
+  --study-header-height: 48px;
 }

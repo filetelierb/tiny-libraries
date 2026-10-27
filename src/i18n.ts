@@ -1,5 +1,10 @@
 import type { Locale } from '../shared/domain';
 const en = {
+  artifacts: 'Artifacts',
+  moreStudyTools: 'More study tools',
+  backToTutor: 'Back to Tutor',
+  noSourceArtifacts:
+    'No prepared artifact for this resource yet. Open Chapters to prepare its study material.',
   assessments: 'Assessments and reports',
   assessmentTitle: 'Review what you learned',
   assessmentReadOnly:
@@ -586,7 +591,7 @@ const en = {
   glossary: 'Glossary',
   practice: 'Practice',
   review: 'Review',
-  assistant: 'Assistant',
+  assistant: 'Tutor',
   artifact: 'Signal explorer',
   addNote: 'Save note',
   notePlaceholder: 'Write a note about this source…',
@@ -729,6 +734,11 @@ const en = {
 };
 type Dictionary = typeof en;
 const es: Dictionary = {
+  artifacts: 'Artefactos',
+  moreStudyTools: 'Más herramientas de estudio',
+  backToTutor: 'Volver al tutor',
+  noSourceArtifacts:
+    'Este recurso todavía no tiene un artefacto preparado. Abre Capítulos para preparar su material de estudio.',
   assessments: 'Repasos e informes',
   assessmentTitle: 'Repasar lo aprendido',
   assessmentReadOnly:
@@ -1321,7 +1331,7 @@ const es: Dictionary = {
   glossary: 'Glosario',
   practice: 'Práctica',
   review: 'Repaso',
-  assistant: 'Asistente',
+  assistant: 'Tutor',
   artifact: 'Explorador de señales',
   addNote: 'Guardar nota',
   notePlaceholder: 'Escribe una nota sobre esta fuente…',

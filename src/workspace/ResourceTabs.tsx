@@ -52,7 +52,7 @@ export function ResourceTabs({
         const selected = tab.id === workspace.activeTabId;
         return (
           <div
-            className={`resource-tab ${selected ? 'active' : ''} ${tab.preview ? 'preview' : ''}`}
+            className={`resource-tab ${sources.length === 2 ? 'split-tab' : ''} ${selected ? 'active' : ''} ${tab.preview ? 'preview' : ''}`}
             key={tab.id}
           >
             <button

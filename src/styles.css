@@ -643,20 +643,34 @@ hr {
   display: flex;
   align-items: center;
   gap: 2px;
-  min-height: 52px;
+  height: var(--resource-strip-height);
+  min-height: var(--resource-strip-height);
+  flex-shrink: 0;
   border-bottom: 1px solid var(--border);
-  padding: 0 7px;
-  background: var(--background);
+  padding: 0;
+  background: color-mix(in oklch, var(--muted) 35%, var(--background));
+}
+.resource-tabs > .icon-button {
+  flex-shrink: 0;
+  height: 100%;
+  min-height: 0;
+  border-radius: 0;
+}
+.resource-tabs > .icon-button:first-child {
+  border-right: 1px solid var(--border);
+}
+.resource-tabs > .icon-button:last-child {
+  border-left: 1px solid var(--border);
 }
 .tab-list {
   display: flex;
-  align-items: stretch;
+  align-items: end;
   flex: 1;
   min-width: 0;
   overflow: auto;
   scrollbar-width: none;
-  height: 52px;
-  padding-top: 7px;
+  height: 100%;
+  padding: 4px 6px 0;
   gap: 4px;
 }
 .resource-tab {
@@ -665,24 +679,35 @@ hr {
   border: 1px solid var(--border);
   border-bottom: 0;
   border-radius: 14px 14px 0 0;
-  max-width: 220px;
-  min-width: 120px;
+  height: var(--resource-tab-height);
+  max-width: var(--resource-tab-max);
+  min-width: 0;
   flex: 0 0 auto;
   color: var(--muted-text);
-  background: var(--background);
+  background: color-mix(in oklch, var(--surface) 55%, var(--background));
+}
+.resource-tab.split-tab {
+  max-width: var(--split-tab-max);
 }
 .resource-tab.active {
-  background: var(--surface);
+  background: var(--background);
   color: var(--foreground);
+  box-shadow: 0 1px 3px rgb(21 45 52 / 8%);
 }
 .resource-tab > button:first-child {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 10px;
+  gap: 6px;
+  padding: 0 10px;
+  height: 100%;
   min-width: 0;
-  font-size: 13px;
+  font-size: 12px;
   flex: 1;
+}
+.resource-tab > button:first-child > svg {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
 }
 .resource-tab.preview > button:first-child {
   font-style: italic;
@@ -704,8 +729,19 @@ hr {
 .resource-tab .icon-button {
   min-width: 24px;
   width: 24px;
+  min-height: 24px;
+  height: 24px;
+  flex-shrink: 0;
   padding: 3px;
-  margin-right: 3px;
+  margin-right: 4px;
+  opacity: 0.55;
+}
+.resource-tab .icon-button svg {
+  width: 12px;
+  height: 12px;
+}
+.resource-tab .icon-button:is(:hover, :focus-visible) {
+  opacity: 1;
 }
 .file-toolbar {
   display: flex;
@@ -878,16 +914,17 @@ hr {
   flex-direction: column;
 }
 .study-heading {
-  min-height: 52px;
+  min-height: var(--study-header-height);
+  height: var(--study-header-height);
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 12px 0 18px;
+  padding: 0 4px 0 0;
   border-bottom: 1px solid var(--border);
   color: var(--foreground);
-  font-size: 16px;
-  font-weight: 600;
+  background: color-mix(in oklch, var(--muted) 35%, var(--background));
+  container-type: inline-size;
 }
 .study-heading > span {
   display: flex;
@@ -897,6 +934,52 @@ hr {
 .panel-heading-actions {
   display: flex;
   gap: 2px;
+}
+.study-heading .panel-heading-actions {
+  flex-shrink: 0;
+  gap: 0;
+}
+.study-heading .panel-heading-actions > .icon-button {
+  width: 28px;
+  min-width: 28px;
+  min-height: 32px;
+  padding: 5px;
+}
+.study-heading .panel-heading-actions > .icon-button svg {
+  width: 16px;
+  height: 16px;
+}
+.study-auxiliary-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.study-auxiliary-heading .button {
+  font-size: 12px;
+}
+.study-auxiliary-heading h2 {
+  font-size: 14px;
+  margin: 0;
+}
+.study-artifact-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.study-artifact-entry h3 {
+  margin: 0;
+  font-size: 20px;
+}
+.study-artifact-entry p {
+  line-height: 1.65;
+}
+.study-artifact-entry small {
+  color: var(--muted-text);
+  overflow-wrap: anywhere;
 }
 .library-panel.docked,
 .study-panel.docked {
@@ -975,27 +1058,41 @@ body:has(.panel-resizer.resizing) {
   font-size: 13px;
 }
 .study-tabs {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   align-items: stretch;
-  flex-shrink: 0;
-  overflow-x: auto;
-  scrollbar-width: thin;
-  border-bottom: 1px solid var(--border);
-  padding: 5px 6px;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 6px;
   gap: 1px;
-  background: var(--background);
 }
 .study-tabs > button {
   display: flex;
   align-items: center;
   justify-content: center;
-  flex: 0 0 auto;
-  padding: 7px 11px;
-  font-size: var(--font-size-control);
+  min-width: 0;
+  gap: 4px;
+  padding: 0 3px;
+  font-size: 11px;
   border-radius: var(--radius-sm);
   white-space: nowrap;
   color: var(--muted-text);
-  min-height: 34px;
+  min-height: 35px;
+}
+.study-tab-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.study-tabs > button > svg {
+  display: none;
+  flex-shrink: 0;
+}
+@container (min-width: 520px) {
+  .study-tabs > button > svg {
+    display: block;
+  }
 }
 .study-tabs > button:hover {
   background: var(--muted);
@@ -2315,14 +2412,18 @@ body:has(.panel-resizer.resizing) {
   .file-title strong {
     font-size: 13px;
   }
-  .resource-tab {
-    max-width: 170px;
-  }
 }
 @media (max-width: 720px) {
+  .study-heading {
+    height: 56px;
+    min-height: 56px;
+  }
+  .study-tabs {
+    padding: 5px 6px;
+  }
   .study-tabs > button {
-    font-size: var(--font-size-control);
-    min-height: 40px;
+    font-size: 11px;
+    min-height: 44px;
   }
   .study-content {
     padding: 22px 18px;
@@ -2357,16 +2458,14 @@ body:has(.panel-resizer.resizing) {
     width: 32px;
     min-width: 32px;
   }
-  .resource-tab {
-    max-width: 150px;
-  }
   .resource-tab > button:first-child {
-    padding: 8px;
+    padding: 0 10px;
     font-size: var(--font-size-small);
   }
   .resource-tab .icon-button {
     width: 24px;
     min-width: 24px;
+    min-height: 24px;
   }
   .file-tree .file-row > button:first-child {
     font-size: var(--font-size-control);
@@ -2869,8 +2968,15 @@ body:has(.panel-resizer.resizing) {
   border-bottom: 1px solid var(--border);
   font-size: var(--font-size-control);
   color: var(--muted-text);
+  min-width: 0;
+}
+.study-resource > svg,
+.study-resource > button {
+  flex-shrink: 0;
 }
 .study-resource > span {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
