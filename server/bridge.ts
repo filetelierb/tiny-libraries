@@ -6,6 +6,8 @@ import { MAX_FILE_BYTES, kindSchema } from '../shared/domain';
 import { normalize } from './media';
 import { museStatus, codeSession } from './muse';
 import { z } from 'zod';
+import { composeCapture } from './capture-image';
+import { drawingSchema } from '../shared/annotations';
 
 export async function startBridge(token: string, root: string, port = 9877) {
   await mkdir(root, { recursive: true, mode: 0o700 });
@@ -22,6 +24,26 @@ export async function startBridge(token: string, root: string, port = 9877) {
         return;
       }
       const url = new URL(req.url || '/', 'http://127.0.0.1');
+      if (url.pathname === '/capture-image' && req.method === 'POST') {
+        const parts: Buffer[] = [];
+        let bytes = 0;
+        for await (const part of req) {
+          bytes += part.length;
+          if (bytes > 5 * 1024 * 1024) throw new Error('Capture request exceeds 5 MB');
+          parts.push(Buffer.from(part));
+        }
+        const input = z
+          .object({ image: z.string().max(4 * 1024 * 1024), strokes: drawingSchema })
+          .parse(JSON.parse(Buffer.concat(parts).toString()));
+        const image = await composeCapture(Buffer.from(input.image, 'base64'), input.strokes);
+        res.writeHead(200, {
+          'Content-Type': 'image/png',
+          'Content-Length': image.length,
+          'Cache-Control': 'no-store',
+        });
+        res.end(image);
+        return;
+      }
       if (
         ['/meta/chat/completions', '/meta/asr/transcribe'].includes(url.pathname) &&
         req.method === 'POST'

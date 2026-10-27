@@ -1328,6 +1328,24 @@ export function App() {
               changed={refresh}
               cite={citeFrom}
               treeActions={treeActions}
+              prepareSource={(file) => {
+                openFile(file, 'retain');
+                setRight(true);
+                setTab('chapters');
+              }}
+              createAttachment={async () => {
+                if (!active) return null;
+                const location = resourceLocation(active);
+                const image = await captureSource(active, location);
+                if (['pdf', 'video', 'image'].includes(active.kind) && !image)
+                  throw new Error(t.captureNotReady);
+                return {
+                  id: crypto.randomUUID(),
+                  sourceId: active.id,
+                  location,
+                  ...(image ? { capture: image } : {}),
+                };
+              }}
               questionRequest={questionRequest}
               consumeQuestion={() => setQuestionRequest(null)}
               openConcept={(id) => {

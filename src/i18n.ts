@@ -1,5 +1,46 @@
 import type { Locale } from '../shared/domain';
 const en = {
+  attachForQuestion: 'Attach to this question',
+  questionAttachment: 'Question attachment',
+  questionAttachments: 'Attachments for this question',
+  addQuestionAttachment: 'Add question attachment',
+  attachmentQuestionContext: 'This question uses the attachment snapshots selected below.',
+  attachmentTypes: 'Attachment types',
+  attachmentKind_file: 'Library file',
+  attachmentKind_annotation: 'Annotation',
+  attachmentKind_bookmark: 'Bookmark',
+  attachmentKind_capture: 'Annotated capture',
+  attachmentDisclosure:
+    'Attachments are used for this question. Review each saved snapshot before sending; its selected text and image will be sent to Meta along with your persistent references.',
+  attachmentLimits:
+    'Up to 6 attachments: 1 MB of text each, 3 MB per image and 12 MB of images per question. PDFs and recordings use prepared text or transcripts; page images and video frames need a capture. Preparation is a separate action.',
+  attachmentSnapshotNotice:
+    'This saved copy stays unchanged when the original is edited. Only snapshots selected in the current draft are sent; viewing this copy stays local.',
+  attachmentPassages: 'passages',
+  attachmentIncludesImage: 'Text and image',
+  attachmentTextOnly: 'Text only',
+  attachmentTime: 'Source time',
+  attachmentSavedImage: 'Exact saved image for this attachment, including its drawing',
+  loadMoreAttachments: 'Read more passages',
+  openAttachmentSource: 'Open original resource',
+  attachmentOriginalUnavailable:
+    'The original has changed or is unavailable. This saved copy is still readable.',
+  attachmentLimit: 'A question can contain up to 6 attachments. Remove one before adding another.',
+  attachmentAlreadySelected: 'This file or annotation revision is already attached.',
+  attachCurrentResource: 'Attach current resource',
+  createAnnotatedAttachment: 'Create annotated attachment',
+  importAttachment: 'Import a file',
+  attachmentUploadLimit:
+    'Choose a file of 20 MB or less. Imported files stay in the local library.',
+  searchQuestionAttachments: 'Search files, annotations or bookmarks…',
+  annotationsAndBookmarks: 'Annotations and bookmarks',
+  preparingAttachment: 'Saving the attachment snapshot…',
+  openToPrepareAttachment: 'Open in Chapters to prepare',
+  removeQuestionAttachment: 'Remove attachment',
+  inspectQuestionAttachment: 'Review attachment',
+  attachmentDraftNotice:
+    'Saved on this device. These attachments clear after a successful reply; later questions do not automatically reuse them.',
+
   studyTable: 'Study table',
   formula: 'Formula',
   diagram: 'Study diagram',
@@ -753,6 +794,48 @@ const en = {
 };
 type Dictionary = typeof en;
 const es: Dictionary = {
+  attachForQuestion: 'Adjuntar a esta pregunta',
+  questionAttachment: 'Adjunto de la pregunta',
+  questionAttachments: 'Adjuntos de esta pregunta',
+  addQuestionAttachment: 'Añadir adjunto a la pregunta',
+  attachmentQuestionContext:
+    'Esta pregunta usa las copias de adjuntos seleccionadas a continuación.',
+  attachmentTypes: 'Tipos de adjuntos',
+  attachmentKind_file: 'Archivo de la biblioteca',
+  attachmentKind_annotation: 'Anotación',
+  attachmentKind_bookmark: 'Marcador',
+  attachmentKind_capture: 'Captura anotada',
+  attachmentDisclosure:
+    'Los adjuntos se usan en esta pregunta. Revisa cada copia guardada antes de enviar; su texto e imagen se enviarán a Meta junto con tus referencias permanentes.',
+  attachmentLimits:
+    'Hasta 6 adjuntos: 1 MB de texto cada uno, 3 MB por imagen y 12 MB de imágenes por pregunta. Los PDF y grabaciones usan texto o transcripciones preparados; las páginas y fotogramas necesitan una captura. La preparación es una acción aparte.',
+  attachmentSnapshotNotice:
+    'Esta copia guardada no cambia al editar el original. Solo se envían las copias seleccionadas en el borrador actual; consultar esta copia es local.',
+  attachmentPassages: 'fragmentos',
+  attachmentIncludesImage: 'Texto e imagen',
+  attachmentTextOnly: 'Solo texto',
+  attachmentTime: 'Tiempo en la fuente',
+  attachmentSavedImage: 'Imagen exacta guardada para este adjunto, con su dibujo',
+  loadMoreAttachments: 'Leer más fragmentos',
+  openAttachmentSource: 'Abrir recurso original',
+  attachmentOriginalUnavailable:
+    'El original ha cambiado o no está disponible. Esta copia guardada se puede consultar.',
+  attachmentLimit: 'Una pregunta admite hasta 6 adjuntos. Quita uno antes de añadir otro.',
+  attachmentAlreadySelected: 'Este archivo o revisión de anotación ya está adjunto.',
+  attachCurrentResource: 'Adjuntar recurso actual',
+  createAnnotatedAttachment: 'Crear adjunto anotado',
+  importAttachment: 'Importar un archivo',
+  attachmentUploadLimit:
+    'Elige un archivo de hasta 20 MB. Los archivos importados se guardan en la biblioteca local.',
+  searchQuestionAttachments: 'Buscar archivos, anotaciones o marcadores…',
+  annotationsAndBookmarks: 'Anotaciones y marcadores',
+  preparingAttachment: 'Guardando la copia del adjunto…',
+  openToPrepareAttachment: 'Abrir en Capítulos para preparar',
+  removeQuestionAttachment: 'Quitar adjunto',
+  inspectQuestionAttachment: 'Revisar adjunto',
+  attachmentDraftNotice:
+    'Guardados en este dispositivo. Se quitan tras una respuesta correcta; las preguntas posteriores no los reutilizan automáticamente.',
+
   studyTable: 'Tabla de estudio',
   formula: 'Fórmula',
   diagram: 'Diagrama de estudio',

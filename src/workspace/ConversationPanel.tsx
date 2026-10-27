@@ -36,6 +36,16 @@ import { ConceptInspector } from '../tutor/ConceptInspector';
 import { TutorMentionPicker, type MentionPickerHandle } from '../tutor/TutorMentionPicker';
 import { citationFromHref, remarkTutorCitations } from '../tutor/citations';
 import { useCitationRecovery } from '../tutor/useCitationRecovery';
+import { AttachmentPicker } from '../tutor/AttachmentPicker';
+import { AttachmentInspector } from '../tutor/AttachmentInspector';
+import type { AnnotationRequest } from '../annotations/AnnotationEditor';
+import {
+  questionAttachmentSchema,
+  MAX_QUESTION_ATTACHMENTS,
+  attachmentMention,
+  type QuestionAttachment,
+  type AttachmentMention,
+} from '../../shared/tutor-attachments';
 
 function stored(key: string) {
   try {
@@ -63,6 +73,8 @@ export function ConversationPanel({
   questionRequest,
   consumeQuestion,
   openConcept,
+  prepareSource,
+  createAttachment,
 }: {
   sessionId: string;
   source: Source | null;
@@ -73,6 +85,8 @@ export function ConversationPanel({
   questionRequest: { id: string; context: QuestionContext; prompt?: string } | null;
   consumeQuestion: () => void;
   openConcept: (id: string) => void;
+  prepareSource: (source: Source) => void;
+  createAttachment: () => Promise<AnnotationRequest | null>;
   onError: (message: string) => void;
   changed: () => Promise<unknown>;
   cite: (sourceId: string, segment: Segment) => void;
@@ -215,6 +229,10 @@ export function ConversationPanel({
           questionRequest={questionRequest}
           consumeQuestion={consumeQuestion}
           openConcept={openConcept}
+          source={source}
+          changed={changed}
+          prepareSource={prepareSource}
+          createAttachment={createAttachment}
         />
       ) : (
         <div className="small-empty">
@@ -240,6 +258,10 @@ function ConversationThread({
   questionRequest,
   consumeQuestion,
   openConcept,
+  source,
+  changed,
+  prepareSource,
+  createAttachment,
 }: {
   conversation: Conversation;
   catalog: Catalog;
@@ -249,6 +271,10 @@ function ConversationThread({
   questionRequest: { id: string; context: QuestionContext; prompt?: string } | null;
   consumeQuestion: () => void;
   openConcept: (id: string) => void;
+  source: Source | null;
+  changed: () => Promise<unknown>;
+  prepareSource: (source: Source) => void;
+  createAttachment: () => Promise<AnnotationRequest | null>;
   receive: (conversation: Conversation) => Promise<void>;
   onError: (message: string) => void;
   cite: (sourceId: string, segment: Segment) => void;
@@ -256,6 +282,30 @@ function ConversationThread({
   const draftKey = `tl:conversation-draft:${conversation.id}`;
   const conceptKey = `tl:concept-draft:${conversation.id}`;
   const retryKey = `tl:conversation-request:${conversation.id}`;
+  const attachmentKey = `tl:attachment-draft:${conversation.id}`;
+  const [attachments, setAttachments] = useState<QuestionAttachment[]>(() => {
+    try {
+      const value = questionAttachmentSchema
+        .array()
+        .max(MAX_QUESTION_ATTACHMENTS)
+        .safeParse(JSON.parse(stored(attachmentKey) || '[]'));
+      return value.success ? value.data : [];
+    } catch {
+      return [];
+    }
+  });
+  const attachmentRef = useRef(attachments);
+  attachmentRef.current = attachments;
+  const changeAttachments = (items: QuestionAttachment[]) => {
+    attachmentRef.current = items;
+    setAttachments(items);
+    store(attachmentKey, JSON.stringify(items));
+  };
+  const removeSentAttachments = (ids: string[]) =>
+    changeAttachments(attachmentRef.current.filter((item) => !ids.includes(item.id)));
+  const [attachmentPicker, setAttachmentPicker] = useState(false),
+    [inspectedAttachment, setInspectedAttachment] = useState<string | null>(null),
+    [sentAttachments, setSentAttachments] = useState<AttachmentMention[]>([]);
   const [conceptDraft, setConceptDraft] = useState<{ items: ConceptMention[]; stamp: string }>(
     () => {
       try {
@@ -385,6 +435,7 @@ function ConversationThread({
       conceptStamp?: string;
       contextStamp?: string;
       context?: QuestionContext;
+      attachments?: string[];
     } = {};
     try {
       sent = JSON.parse(stored(retryKey) || '{}');
@@ -395,6 +446,7 @@ function ConversationThread({
     )
       return;
     if (sent.conceptStamp === conceptDraftRef.current.stamp) changeConcepts([]);
+    removeSentAttachments(sent.attachments || []);
     if (
       sent.contextStamp === contextStamp.current &&
       JSON.stringify(sent.context) === JSON.stringify(contextRef.current || undefined)
@@ -456,14 +508,20 @@ function ConversationThread({
     composer.current?.focus();
   };
   const citationLabel = (ref: TutorCitation) =>
-    ref.kind === 'concept'
-      ? ref.term
-      : ref.location.page
-        ? `${t.page} ${ref.location.page}`
-        : ref.location.seconds != null
-          ? `${Math.floor(ref.location.seconds / 60)}:${String(Math.floor(ref.location.seconds % 60)).padStart(2, '0')}`
-          : catalog.files.find((f) => f.id === ref.sourceId)?.name || t.source;
+    ref.kind === 'attachment'
+      ? ref.attachmentName
+      : ref.kind === 'concept'
+        ? ref.term
+        : ref.location.page
+          ? `${t.page} ${ref.location.page}`
+          : ref.location.seconds != null
+            ? `${Math.floor(ref.location.seconds / 60)}:${String(Math.floor(ref.location.seconds % 60)).padStart(2, '0')}`
+            : catalog.files.find((f) => f.id === ref.sourceId)?.name || t.source;
   const openCitation = (ref: TutorCitation) => {
+    if (ref.kind === 'attachment') {
+      setInspectedAttachment(ref.attachmentId);
+      return;
+    }
     if (ref.kind === 'concept') {
       setInspectedConcept({
         id: ref.conceptId,
@@ -506,11 +564,13 @@ function ConversationThread({
     }));
     const conceptStamp = conceptDraftRef.current.stamp,
       questionStamp = contextStamp.current;
+    const questionAttachments = attachmentRef.current.map((item) => item.id);
     const fingerprint = JSON.stringify({
       prompt: text,
       context: question,
       concepts: questionConcepts,
       sourceIds: [...conversation.sourceIds].sort(),
+      attachments: questionAttachments,
     });
     if (!text || pending || running || mentionBusy.current) return;
     let previous: { prompt?: string; requestId?: string; fingerprint?: string } = {};
@@ -527,6 +587,7 @@ function ConversationThread({
         prompt: text,
         context: question,
         concepts: questionConcepts,
+        attachments: questionAttachments,
         conceptStamp,
         contextStamp: questionStamp,
         fingerprint,
@@ -534,6 +595,7 @@ function ConversationThread({
       }),
     );
     setPending(true);
+    setSentAttachments(attachmentRef.current.map(attachmentMention));
     setPrompt(text);
     changeDraft('');
     try {
@@ -541,10 +603,12 @@ function ConversationThread({
         prompt: text,
         requestId,
         concepts: questionConcepts,
+        attachments: questionAttachments,
         ...(question ? { context: question } : {}),
       });
       await receive(next);
       store(retryKey, '');
+      removeSentAttachments(questionAttachments);
       if (conceptDraftRef.current.stamp === conceptStamp) changeConcepts([]);
       if (
         contextStamp.current === questionStamp &&
@@ -565,6 +629,7 @@ function ConversationThread({
       if (alive.current) {
         setPending(false);
         setPrompt('');
+        setSentAttachments([]);
       }
     }
   }
@@ -609,7 +674,9 @@ function ConversationThread({
           ? t.referencesNotice
           : context
             ? t.questionContextNotice
-            : t.generalTutorNotice}
+            : attachments.length
+              ? t.attachmentQuestionContext
+              : t.generalTutorNotice}
       </p>
       <div className="conversation-messages" aria-live="polite" aria-relevant="additions text">
         {conversation.messages.map((message, index) => {
@@ -621,6 +688,20 @@ function ConversationThread({
               className={`chat-message ${message.role}`}
               key={`${message.requestId || 'history'}-${index}`}
             >
+              {message.role === 'user' && !!message.attachments?.length && (
+                <div className="message-attachments" aria-label={t.questionAttachments}>
+                  {message.attachments.map((attachment) => (
+                    <button
+                      key={attachment.id}
+                      type="button"
+                      onClick={() => setInspectedAttachment(attachment.id)}
+                    >
+                      <Paperclip size={13} />
+                      {attachment.name}
+                    </button>
+                  ))}
+                </div>
+              )}
               {message.role === 'user' && message.context && (
                 <div className="message-question-context">
                   <button
@@ -659,7 +740,7 @@ function ConversationThread({
                       return (
                         <button
                           className="evidence-link"
-                          title={`${citationLabel(ref)}${ref.kind === 'concept' ? ` · ${t.revision} ${ref.version}` : ref.recovered ? ` · ${t.recoveredCitationNotice}` : ''}`}
+                          title={`${citationLabel(ref)}${ref.kind === 'concept' ? ` · ${t.revision} ${ref.version}` : ref.kind === 'source' && ref.recovered ? ` · ${t.recoveredCitationNotice}` : ''}`}
                           onClick={() => openCitation(ref)}
                         >
                           {children}
@@ -716,6 +797,11 @@ function ConversationThread({
         })}
         {pending && (
           <>
+            {!!sentAttachments.length && (
+              <p className="muted">
+                {t.questionAttachments}: {sentAttachments.map((item) => item.name).join(', ')}
+              </p>
+            )}
             <div className="chat-message user">
               <p>{prompt}</p>
             </div>
@@ -736,6 +822,36 @@ function ConversationThread({
           void send();
         }}
       >
+        {!!attachments.length && (
+          <section className="question-attachments" aria-label={t.questionAttachments}>
+            <strong>
+              {t.questionAttachments} ({attachments.length}/{MAX_QUESTION_ATTACHMENTS})
+            </strong>
+            <p>{t.attachmentDraftNotice}</p>
+            {attachments.map((item) => (
+              <div className="question-attachment" data-attachment-id={item.id} key={item.id}>
+                <button
+                  type="button"
+                  title={t.inspectQuestionAttachment}
+                  onClick={() => setInspectedAttachment(item.id)}
+                >
+                  <Paperclip size={14} />
+                  {item.name}
+                  {item.annotationRevision ? ` · ${t.revision} ${item.annotationRevision}` : ''}
+                  <small>{item.image ? t.attachmentIncludesImage : t.attachmentTextOnly}</small>
+                </button>
+                <IconButton
+                  label={`${t.removeQuestionAttachment}: ${item.name}`}
+                  onClick={() =>
+                    changeAttachments(attachmentRef.current.filter((value) => value.id !== item.id))
+                  }
+                >
+                  <X size={14} />
+                </IconButton>
+              </div>
+            ))}
+          </section>
+        )}
         {context && (
           <div className="question-context" aria-label={t.questionContext}>
             <div>
@@ -829,15 +945,51 @@ function ConversationThread({
             />
           </div>
         )}
-        <Button
-          variant="primary"
-          type="submit"
-          disabled={pending || running || mentionPending || !draft.trim()}
-        >
-          <ArrowUp size={15} />
-          {t.send}
-        </Button>
+        <div className="composer-actions">
+          <IconButton label={t.addQuestionAttachment} onClick={() => setAttachmentPicker(true)}>
+            <Plus size={16} />
+          </IconButton>
+          <Button
+            variant="primary"
+            type="submit"
+            disabled={pending || running || mentionPending || !draft.trim()}
+          >
+            <ArrowUp size={15} />
+            {t.send}
+          </Button>
+        </div>
       </form>
+      {attachmentPicker && (
+        <AttachmentPicker
+          sessionId={conversation.sessionId}
+          source={source}
+          catalog={catalog}
+          t={t}
+          treeActions={treeActions}
+          chosen={attachments}
+          choose={(item) => {
+            if (attachmentRef.current.length >= MAX_QUESTION_ATTACHMENTS) {
+              onError(t.attachmentLimit);
+              return;
+            }
+            changeAttachments([...attachmentRef.current, item]);
+          }}
+          close={() => setAttachmentPicker(false)}
+          changed={changed}
+          prepareSource={prepareSource}
+          createAttachment={createAttachment}
+        />
+      )}
+      {inspectedAttachment && (
+        <AttachmentInspector
+          key={inspectedAttachment}
+          id={inspectedAttachment}
+          t={t}
+          catalog={catalog}
+          close={() => setInspectedAttachment(null)}
+          cite={cite}
+        />
+      )}
       {inspectedConcept && (
         <ConceptInspector
           reference={inspectedConcept}

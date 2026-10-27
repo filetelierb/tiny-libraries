@@ -44,6 +44,8 @@ import { assessmentOptions, captureStudyProgress } from './assessment-context';
 import { assessmentMarkdown } from '../shared/assessments';
 import { conceptSuggestionsRoute } from './concept-suggestions';
 import { conversationRoute, conversationSnapshot } from './conversations';
+import { attachmentRoute } from './attachment-route';
+import { AttachmentError } from './tutor-attachments';
 import { recordAttempt, PracticeError } from './practice';
 import { annotationRoute, AnnotationError, ensureSharedAnnotations } from './annotations';
 import { glossaryRoute, glossarySnapshot, GlossaryError } from './glossary';
@@ -540,6 +542,10 @@ export class Library extends DurableObject<Env> {
           ),
         );
       }
+      const attachmentResponse = await attachmentRoute(request, this.env, this.ctx.storage, () =>
+        boundedJson(request),
+      );
+      if (attachmentResponse) return attachmentResponse;
       const conversationResponse = await conversationRoute({
         request,
         env: this.env,
@@ -577,6 +583,7 @@ export class Library extends DurableObject<Env> {
         error instanceof ApiError ||
         error instanceof DirectoryError ||
         error instanceof AnnotationError ||
+        error instanceof AttachmentError ||
         error instanceof GlossaryError ||
         error instanceof CardError ||
         error instanceof ReinforcementError ||

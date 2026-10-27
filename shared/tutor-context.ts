@@ -30,6 +30,15 @@ export const conceptCitationId = (entry: ConceptReference) =>
 const identity = z.string().min(1).max(500);
 export const tutorCitationSchema = z.discriminatedUnion('kind', [
   z.object({
+    kind: z.literal('attachment'),
+    id: identity,
+    attachmentId: z.string().uuid(),
+    attachmentName: z.string().min(1).max(240),
+    segmentId: identity,
+    location: locationSchema,
+    image: z.boolean(),
+  }),
+  z.object({
     kind: z.literal('source'),
     id: identity,
     sourceId: z.string().uuid(),

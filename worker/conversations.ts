@@ -19,6 +19,8 @@ import { runAssistant, bridgedFetch } from './meta';
 import { createSuggestedBookmark } from './annotations';
 import { conceptReferencesSchema } from '../shared/tutor-context';
 import { loadTutorConcepts } from './tutor-context';
+import { attachmentIdsSchema, attachmentMention } from '../shared/tutor-attachments';
+import { readQuestionAttachments, attachmentImageData } from './tutor-attachments';
 
 export async function conversationSnapshot(
   storage: DurableObjectStorage,
@@ -132,8 +134,26 @@ export async function conversationRoute({
       requestId: z.string().uuid(),
       context: questionContextSchema.optional(),
       concepts: conceptReferencesSchema.default([]),
+      attachments: attachmentIdsSchema.default([]),
     })
     .parse(await body());
+  const requestFingerprint = [
+    ...new Uint8Array(
+      await crypto.subtle.digest(
+        'SHA-256',
+        new TextEncoder().encode(
+          JSON.stringify({
+            prompt: input.prompt,
+            context: input.context,
+            concepts: input.concepts,
+            attachments: input.attachments,
+          }),
+        ),
+      ),
+    ),
+  ]
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
   const runKey = `conversation-run:${conversation.id}`;
   const reservation = await storage.transaction(async (transaction) => {
     const current = (await transaction.get<Conversation>(key))!;
@@ -141,8 +161,14 @@ export async function conversationRoute({
       current.messages.some(
         (message) => message.role === 'assistant' && message.requestId === input.requestId,
       )
-    )
+    ) {
+      const original = current.messages.find(
+        (message) => message.role === 'user' && message.requestId === input.requestId,
+      );
+      if (original?.requestFingerprint && original.requestFingerprint !== requestFingerprint)
+        return { kind: 'different' as const, current };
       return { kind: 'complete' as const, current };
+    }
     const pending = await transaction.get<{ requestId: string; until: number; owner: string }>(
       runKey,
     );
@@ -156,6 +182,13 @@ export async function conversationRoute({
     return { kind: 'reserved' as const, current };
   });
   if (reservation.kind === 'complete') return json(reservation.current);
+  if (reservation.kind === 'different')
+    return json(
+      {
+        error: 'This request ID was already used for a different question or attachment selection',
+      },
+      409,
+    );
   if (reservation.kind === 'busy')
     return json(
       {
@@ -224,13 +257,40 @@ export async function conversationRoute({
       }
     }
     const glossaryContext = await loadTutorConcepts(storage, input.concepts, materials);
+    const attachments = await readQuestionAttachments(
+      storage,
+      reservation.current.sessionId,
+      input.attachments,
+    );
+    const attachedContent = await Promise.all(
+      attachments.map(async (item) => ({
+        ...item,
+        imageData: await attachmentImageData(env.FILES, item.attachment),
+      })),
+    );
+    for (const { attachment } of attachments) {
+      if (attachment.sourceId && !sourceIds.includes(attachment.sourceId))
+        sourceIds.push(attachment.sourceId);
+    }
+    if (sourceIds.length > 20)
+      return json(
+        {
+          error:
+            'The question has more than 20 source origins. Remove a reference or attachment before sending.',
+        },
+        409,
+      );
     const userMessage = {
       role: 'user' as const,
       content: input.prompt,
       requestId: input.requestId,
+      requestFingerprint,
       sourceIds,
       ...(context ? { context } : {}),
       ...(glossaryContext.mentions.length ? { concepts: glossaryContext.mentions } : {}),
+      ...(attachments.length
+        ? { attachments: attachments.map((item) => attachmentMention(item.attachment)) }
+        : {}),
     };
     if (
       new TextEncoder().encode(
@@ -260,6 +320,7 @@ export async function conversationRoute({
       context,
       {
         concepts: glossaryContext.concepts,
+        attachments: attachedContent,
         createBookmark: ({ sourceId, sourceVersion, segment, label }) =>
           createSuggestedBookmark(storage, {
             sessionId: reservation.current.sessionId,
