@@ -1,5 +1,5 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import { Code2, Download, Eye, PencilLine } from 'lucide-react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Code2, Download, Eye, History, PencilLine } from 'lucide-react';
 import type { Artifact } from '../../shared/domain';
 import type { ArtifactRevision, ArtifactRevisionSummary } from '../../shared/artifact-revisions';
 import { api } from '../api';
@@ -29,7 +29,17 @@ export function ArtifactVersions({
     [editing, setEditing] = useState(false),
     [source, setSource] = useState(false),
     [error, setError] = useState(''),
-    [tick, setTick] = useState(0);
+    [tick, setTick] = useState(0),
+    [compact, setCompact] = useState(false);
+  const bar = useRef<HTMLElement>(null);
+  // A narrow pane keeps the bar on one line by dropping the button labels.
+  useEffect(() => {
+    const element = bar.current;
+    if (!element) return;
+    const observer = new ResizeObserver(([entry]) => setCompact(entry.contentRect.width < 560));
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [editing]);
   const latestKey = `${latest.title}\n${latest.explanation}`;
   useEffect(() => {
     let live = true;
@@ -77,6 +87,15 @@ export function ArtifactVersions({
             {error}
           </p>
         )}
+        {selected && (
+          <div className="artifact-older-banner" role="status">
+            <History aria-hidden />
+            <span>{t.olderArtifactVersion.replace('{n}', String(selected.revision))}</span>
+            <Button size="sm" onClick={() => void choose(null)}>
+              {t.backToLatest}
+            </Button>
+          </div>
+        )}
         {source ? (
           <pre className="artifact-source" tabIndex={0} aria-label={t.viewSource}>
             {`# ${shown.title}\n\n${shown.explanation}`}
@@ -85,13 +104,13 @@ export function ArtifactVersions({
           render(shown, !selected)
         )}
       </div>
-      <footer className="artifact-versions" aria-label={t.artifactVersions}>
+      <footer
+        ref={bar}
+        className={`artifact-versions ${compact ? 'compact' : ''}`}
+        aria-label={t.artifactVersions}
+      >
         <span>
-          {selected
-            ? t.olderArtifactVersion.replace('{n}', String(selected.revision))
-            : head
-              ? `${t.artifactLabel} · v${head.revision}`
-              : t.artifactLabel}
+          {t.artifactLabel} · v{selected?.revision ?? head?.revision ?? 1}
         </span>
         <select
           aria-label={t.artifactVersion}
@@ -120,14 +139,16 @@ export function ArtifactVersions({
           size="sm"
           variant={source ? 'secondary' : 'ghost'}
           aria-pressed={source}
+          title={source ? t.viewPreview : t.viewSource}
           onClick={() => setSource(!source)}
         >
           {source ? <Eye /> : <Code2 />}
-          {source ? t.viewPreview : t.viewSource}
+          <span>{source ? t.viewPreview : t.viewSource}</span>
         </Button>
         <Button
           size="sm"
           variant="ghost"
+          title={t.downloadArtifact}
           onClick={() => {
             const url = URL.createObjectURL(
               new Blob([`# ${shown.title}\n\n${shown.explanation}\n`], { type: 'text/markdown' }),
@@ -140,12 +161,12 @@ export function ArtifactVersions({
           }}
         >
           <Download />
-          {t.downloadArtifact}
+          <span>{t.downloadArtifact}</span>
         </Button>
         {!selected && head && (
-          <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>
+          <Button size="sm" variant="ghost" title={t.edit} onClick={() => setEditing(true)}>
             <PencilLine />
-            {t.edit}
+            <span>{t.edit}</span>
           </Button>
         )}
       </footer>

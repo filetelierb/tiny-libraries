@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Learning } from '../shared/domain';
-import { artifactChapters, type ArtifactStudyPlan } from '../shared/artifact-study';
+import { artifactChapters, artifactSlides, type ArtifactStudyPlan } from '../shared/artifact-study';
 import {
   artifactQuestion,
   artifactStudySnapshot,
@@ -85,6 +85,25 @@ test('artifact chapters are its ## headings outside code and widget blocks', () 
     ],
   );
   assert.deepEqual(artifactChapters('No headings at all.'), []);
+});
+
+test('slides are the introduction and one per chapter, keeping fenced headings inside', () => {
+  const slides = artifactSlides(
+    'Intro text.\n\n## One\nBody\n```\n## not a chapter\n```\n## Two\nMore',
+  );
+  assert.deepEqual(
+    slides.map((slide) => [slide.chapter, slide.markdown.split('\n')[0]]),
+    [
+      [null, 'Intro text.'],
+      [1, '## One'],
+      [2, '## Two'],
+    ],
+  );
+  assert.match(slides[1].markdown, /## not a chapter/);
+  assert.deepEqual(
+    artifactSlides('## Only\nText').map((slide) => slide.chapter),
+    [1],
+  );
 });
 
 test('chapter quizzes and cards are generated for the latest version without answers', async () => {

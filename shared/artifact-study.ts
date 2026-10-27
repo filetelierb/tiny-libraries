@@ -14,6 +14,26 @@ export function artifactChapters(markdown: string) {
   return chapters.map((chapter) => ({ ...chapter, text: chapter.text.trim() }));
 }
 
+/**
+ * Splits an artifact into slides: any introduction before the first chapter, then one
+ * slide per chapter heading. `chapter` is the 1-based chapter number, null for the intro.
+ */
+export function artifactSlides(markdown: string) {
+  const slides: Array<{ chapter: number | null; markdown: string }> = [
+    { chapter: null, markdown: '' },
+  ];
+  let fenced = false,
+    chapter = 0;
+  for (const line of markdown.split('\n')) {
+    if (/^```/.test(line)) fenced = !fenced;
+    if (!fenced && /^##\s+\S/.test(line)) slides.push({ chapter: ++chapter, markdown: '' });
+    slides.at(-1)!.markdown += `${line}\n`;
+  }
+  return slides
+    .map((slide) => ({ ...slide, markdown: slide.markdown.trim() }))
+    .filter((slide) => slide.markdown);
+}
+
 export const artifactStudyPlanSchema = z.object({
   chapters: z
     .array(

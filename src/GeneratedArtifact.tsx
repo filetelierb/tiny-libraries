@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
-import { BookOpen, ChevronDown, ChevronRight, ListChecks } from 'lucide-react';
+import {
+  BookOpen,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  FileText,
+  ListChecks,
+  Presentation,
+} from 'lucide-react';
 import type { Artifact, Segment } from '../shared/domain';
 import type { T } from './i18n';
 import { SignalExplorer } from './SignalExplorer';
@@ -21,6 +29,7 @@ import {
   type ArtifactStudyHost,
 } from './artifacts/ArtifactStudy';
 import { widgetSegments } from '../shared/artifact-widgets';
+import { artifactSlides } from '../shared/artifact-study';
 
 type Parameters = { frequency: number; sampling: number; amplitude: number };
 type OutlineEntry = { id: string; level: 2 | 3; label: string; chapter: number };
@@ -152,6 +161,10 @@ export function GeneratedArtifact({
     [current, setCurrent] = useState(''),
     [outlineOpen, setOutlineOpen] = useState(true),
     [cardsChapter, setCardsChapter] = useState<ArtifactStudyChapterView | null>(null),
+    [mode, setMode] = useState<'document' | 'slides'>(() =>
+      recall('tl:artifact-reading-mode') === 'slides' ? 'slides' : 'document',
+    ),
+    [slide, setSlide] = useState(0),
     [miniQuizzes, setMiniQuizzes] = useState(() => {
       try {
         return localStorage.getItem('tl:artifact-mini-quizzes') !== 'off';
@@ -168,10 +181,46 @@ export function GeneratedArtifact({
     !!study?.attempts.some(
       (attempt) => attempt.chapterId === chapter.id && attempt.learningVersion === ready.version,
     );
+  const slides = useMemo(() => artifactSlides(artifact.explanation), [artifact.explanation]);
+  // Slides: the text sections, then the interactive explorer, then the references.
+  const slideCount = slides.length + 2,
+    shownSlide = Math.min(slide, slideCount - 1),
+    slideChapter = slides[shownSlide]?.chapter;
+  useEffect(() => setSlide(0), [artifact.title, artifact.explanation]);
+  useEffect(() => {
+    if (mode !== 'slides') return;
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        event.defaultPrevented ||
+        event.altKey ||
+        event.metaKey ||
+        event.ctrlKey ||
+        target?.closest(
+          'input, textarea, select, [contenteditable=""], [contenteditable="true"]',
+        ) ||
+        !root.current?.isConnected ||
+        document.querySelector('.modal-backdrop')
+      )
+        return;
+      if (event.key === 'ArrowLeft')
+        setSlide((value) => Math.max(0, Math.min(value, slideCount - 1) - 1));
+      else if (event.key === 'ArrowRight') setSlide((value) => Math.min(slideCount - 1, value + 1));
+      else return;
+      event.preventDefault();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [mode, slideCount]);
+  const chooseMode = (next: 'document' | 'slides') => {
+    setMode(next);
+    remember('tl:artifact-reading-mode', next);
+  };
   // Headings come from rendered markdown, so the outline is read back from the DOM.
   useEffect(() => {
     const element = root.current;
     if (!element) return;
+    if (mode === 'slides') return setOutline([]);
     let h2 = 0,
       h3 = 0;
     // Only the artifact's own headings: nested markdown (e.g. expandable widgets) is not a chapter.
@@ -219,7 +268,7 @@ export function GeneratedArtifact({
     spy();
     scroller.addEventListener('scroll', spy, { passive: true });
     return () => scroller.removeEventListener('scroll', spy);
-  }, [artifact, segments, t]);
+  }, [artifact, segments, t, mode]);
   const chapterNow = outline.find((entry) => entry.id === current)?.chapter || 0;
   // Moving on by exactly one chapter offers the quiz of the chapter just finished, once.
   useEffect(() => {
@@ -234,11 +283,95 @@ export function GeneratedArtifact({
       study.quiz(finished, ready.version);
     }
   }, [chapterNow]);
+  const explorer =
+    artifact.kind === 'signal' ? (
+      <SignalExplorer
+        t={t}
+        storageKey={storageKey}
+        initial={saved || artifact}
+        onPersist={persist}
+      />
+    ) : (
+      <figure className="artifact-widget comparison">
+        <table className="artifact-table">
+          <thead>
+            <tr>
+              <th scope="col" />
+              <th scope="col">{artifact.leftTitle}</th>
+              <th scope="col">{artifact.rightTitle}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {artifact.rows.map((row, i) => (
+              <tr key={i}>
+                <th scope="row">{conceptLabel(row.label)}</th>
+                <td>
+                  <StudyMarkdown t={t}>{row.left}</StudyMarkdown>
+                </td>
+                <td>
+                  <StudyMarkdown t={t}>{row.right}</StudyMarkdown>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </figure>
+    );
+  const references = (
+    <footer className="artifact-references" aria-label={t.artifactReferences}>
+      <h3>{t.artifactReferences}</h3>
+      {cited.length ? (
+        <ol>
+          {cited.map((segment) => (
+            <li key={segment.id}>
+              <a
+                href={sourceUrl || '#'}
+                target={sourceUrl ? '_blank' : undefined}
+                rel="noreferrer"
+                onClick={(event) => {
+                  if (
+                    sourceUrl &&
+                    (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+                  )
+                    return;
+                  event.preventDefault();
+                  onCite(segment);
+                }}
+              >
+                {label(segment)}
+              </a>
+              <span>
+                {segment.text.slice(0, 160)}
+                {segment.text.length > 160 ? '…' : ''}
+              </span>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="muted">{t.artifactNoReferences}</p>
+      )}
+      <p className="muted artifact-edit-hint">{t.artifactTutorHint}</p>
+    </footer>
+  );
   return (
     <section className="generated-artifact" ref={root}>
       <div className="section-label">{t.explanation}</div>
       <h2>{artifact.title}</h2>
-      {(outline.length >= 2 || ready) && (
+      <div className="artifact-mode" role="group" aria-label={t.readingMode}>
+        {(['document', 'slides'] as const).map((value) => (
+          <Button
+            key={value}
+            size="sm"
+            variant={mode === value ? 'secondary' : 'ghost'}
+            aria-pressed={mode === value}
+            onClick={() => chooseMode(value)}
+          >
+            {value === 'document' ? <FileText /> : <Presentation />}
+            {value === 'document' ? t.documentMode : t.slidesMode}
+          </Button>
+        ))}
+      </div>
+      {mode === 'document' && (outline.length >= 2 || ready) && (
         <nav className="artifact-outline" aria-label={t.chapterIndex}>
           <div className="artifact-outline-head">
             <button
@@ -311,90 +444,77 @@ export function GeneratedArtifact({
       {cardsChapter && (
         <ArtifactCards chapter={cardsChapter} t={t} close={() => setCardsChapter(null)} />
       )}
-      <WidgetHostContext.Provider value={host}>
-        <StudyMarkdown t={t} remarkPlugins={conceptPlugins} components={conceptComponents}>
-          {artifact.explanation}
-        </StudyMarkdown>
-      </WidgetHostContext.Provider>
-      <div className="citations">
-        {cited.map((segment, index) => (
-          <button
-            key={segment.id}
-            title={label(segment)}
-            aria-label={`${t.source} ${index + 1}: ${label(segment)}`}
-            onClick={() => onCite(segment)}
-          >
-            {index + 1}
-          </button>
-        ))}
-      </div>
-      {artifact.kind === 'signal' ? (
-        <SignalExplorer
-          t={t}
-          storageKey={storageKey}
-          initial={saved || artifact}
-          onPersist={persist}
-        />
-      ) : (
-        <figure className="artifact-widget comparison">
-          <table className="artifact-table">
-            <thead>
-              <tr>
-                <th scope="col" />
-                <th scope="col">{artifact.leftTitle}</th>
-                <th scope="col">{artifact.rightTitle}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {artifact.rows.map((row, i) => (
-                <tr key={i}>
-                  <th scope="row">{conceptLabel(row.label)}</th>
-                  <td>
-                    <StudyMarkdown t={t}>{row.left}</StudyMarkdown>
-                  </td>
-                  <td>
-                    <StudyMarkdown t={t}>{row.right}</StudyMarkdown>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </figure>
-      )}
-      <footer className="artifact-references" aria-label={t.artifactReferences}>
-        <h3>{t.artifactReferences}</h3>
-        {cited.length ? (
-          <ol>
-            {cited.map((segment) => (
-              <li key={segment.id}>
-                <a
-                  href={sourceUrl || '#'}
-                  target={sourceUrl ? '_blank' : undefined}
-                  rel="noreferrer"
-                  onClick={(event) => {
-                    if (
-                      sourceUrl &&
-                      (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
-                    )
-                      return;
-                    event.preventDefault();
-                    onCite(segment);
-                  }}
-                >
-                  {label(segment)}
-                </a>
-                <span>
-                  {segment.text.slice(0, 160)}
-                  {segment.text.length > 160 ? '…' : ''}
-                </span>
-              </li>
+      {mode === 'document' ? (
+        <>
+          <WidgetHostContext.Provider value={host}>
+            <StudyMarkdown t={t} remarkPlugins={conceptPlugins} components={conceptComponents}>
+              {artifact.explanation}
+            </StudyMarkdown>
+          </WidgetHostContext.Provider>
+          <div className="citations">
+            {cited.map((segment, index) => (
+              <button
+                key={segment.id}
+                title={label(segment)}
+                aria-label={`${t.source} ${index + 1}: ${label(segment)}`}
+                onClick={() => onCite(segment)}
+              >
+                {index + 1}
+              </button>
             ))}
-          </ol>
-        ) : (
-          <p className="muted">{t.artifactNoReferences}</p>
-        )}
-        <p className="muted artifact-edit-hint">{t.artifactTutorHint}</p>
-      </footer>
+          </div>
+          {explorer}
+          {references}
+        </>
+      ) : (
+        <div className="artifact-slides" aria-roledescription="slides">
+          <div className="artifact-slide" aria-live="polite">
+            {shownSlide < slides.length ? (
+              <WidgetHostContext.Provider value={host}>
+                <StudyMarkdown t={t} remarkPlugins={conceptPlugins} components={conceptComponents}>
+                  {slides[shownSlide].markdown}
+                </StudyMarkdown>
+              </WidgetHostContext.Provider>
+            ) : shownSlide === slides.length ? (
+              explorer
+            ) : (
+              references
+            )}
+          </div>
+          {slideChapter && study && ready && studyChapter(slideChapter) && (
+            <ArtifactChapterActions
+              chapter={studyChapter(slideChapter)!}
+              attempted={attempted(studyChapter(slideChapter)!)}
+              quiz={() => study.quiz(studyChapter(slideChapter)!, ready.version)}
+              cards={() => setCardsChapter(studyChapter(slideChapter)!)}
+              t={t}
+            />
+          )}
+          <nav className="artifact-slide-nav" aria-label={t.slidesMode}>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={shownSlide === 0}
+              onClick={() => setSlide(shownSlide - 1)}
+            >
+              <ChevronLeft />
+              {t.previousStep}
+            </Button>
+            <span>
+              {shownSlide + 1} / {slideCount}
+            </span>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={shownSlide === slideCount - 1}
+              onClick={() => setSlide(shownSlide + 1)}
+            >
+              {t.nextStep}
+              <ChevronRight />
+            </Button>
+          </nav>
+        </div>
+      )}
     </section>
   );
 }
