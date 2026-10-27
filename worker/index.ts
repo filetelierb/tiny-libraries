@@ -24,9 +24,11 @@ import {
   gradeShortAnswer,
   analyzeConcepts,
   generateCards,
+  generateReinforcement,
   MetaError,
 } from './meta';
 import { cardSnapshot, startCardDecks, rateCard, CardError } from './flashcards';
+import { reinforcementSnapshot, startReinforcement, ReinforcementError } from './reinforcements';
 import { conceptSuggestionsRoute } from './concept-suggestions';
 import { conversationRoute, conversationSnapshot } from './conversations';
 import { recordAttempt, PracticeError } from './practice';
@@ -315,6 +317,22 @@ export class Library extends DurableObject<Env> {
         );
       }
       const cardsMatch = path.match(/^\/api\/flashcards\/([a-f0-9-]+)$/);
+      if (path === '/api/reinforcements' && request.method === 'GET')
+        return json(await reinforcementSnapshot(this.ctx.storage, this.executionId));
+      if (path === '/api/reinforcements' && request.method === 'POST')
+        return json(
+          await startReinforcement(this.ctx.storage, await boundedJson(request), {
+            owner: this.executionId,
+            settings: await this.settings(),
+            start: (task) => this.ctx.waitUntil(task),
+            generate: async (context, locale, model) => {
+              const key = await this.ctx.storage.get<string>('apiKey');
+              if (!key) throw new ApiError('Add a Meta API key in Settings', 409);
+              return generateReinforcement(key, model, context, locale, bridgedFetch(this.env));
+            },
+          }),
+          202,
+        );
       if (cardsMatch && request.method === 'GET')
         return json(await cardSnapshot(this.ctx.storage, cardsMatch[1], this.executionId));
       if (cardsMatch && request.method === 'POST') {
@@ -436,6 +454,7 @@ export class Library extends DurableObject<Env> {
         error instanceof AnnotationError ||
         error instanceof GlossaryError ||
         error instanceof CardError ||
+        error instanceof ReinforcementError ||
         error instanceof PracticeError
       )
         return json({ error: error.message }, error.status);

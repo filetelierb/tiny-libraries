@@ -223,6 +223,8 @@ export type Attempt = {
   runId?: string;
   chapterId?: string;
   question?: PublicQuestion;
+  reinforcementId?: string;
+  reinforcementVersion?: number;
   correct: boolean;
   explanation: string;
   segmentIds: string[];

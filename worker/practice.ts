@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { Attempt, Directory, Learning, Question, Segment, Source } from '../shared/domain';
 import { sourceState } from '../shared/directories';
+import type { Reinforcement } from '../shared/review';
 import type { GlossaryStorage, GlossaryStore as Store } from './glossary';
 
 export class PracticeError extends Error {
@@ -22,7 +23,13 @@ export const attemptInputSchema = z
     selected: z.number().int().min(0).max(4).optional(),
     answer: z.string().trim().min(1).max(4000).optional(),
     requestId: z.string().uuid(),
+    reinforcementId: z.string().uuid().optional(),
+    reinforcementVersion: z.number().int().positive().optional(),
   })
+  .refine(
+    (v) => !!v.reinforcementId === !!v.reinforcementVersion,
+    'Choose a complete reinforcement revision',
+  )
   .refine((v) => (v.selected != null) !== !!v.answer, 'Choose one answer type');
 type Input = z.infer<typeof attemptInputSchema>;
 function sameAnswer(existing: Attempt, input: Input) {
@@ -34,6 +41,8 @@ function sameAnswer(existing: Attempt, input: Input) {
     (!input.sourceVersion || existing.sourceVersion === input.sourceVersion) &&
     (!input.learningVersion || existing.learningVersion === input.learningVersion) &&
     existing.runId === input.runId &&
+    existing.reinforcementId === input.reinforcementId &&
+    existing.reinforcementVersion === input.reinforcementVersion &&
     (!input.chapterId || existing.chapterId === input.chapterId)
   );
 }
@@ -43,6 +52,34 @@ async function sourceQuestion(tx: Store, input: Input) {
   const directories = [...(await tx.list<Directory>({ prefix: 'directory:' })).values()];
   if (!source || sourceState(source, directories) === 'trash')
     throw new PracticeError('Restore the source before checking an answer.', 409);
+  if (input.reinforcementId) {
+    const record = await tx.get<Reinforcement>(`reinforcement:${input.reinforcementId}`);
+    const question = record?.plan?.questions.find((q) => q.id === input.questionId);
+    if (
+      !record ||
+      record.status !== 'ready' ||
+      !question ||
+      record.version !== input.reinforcementVersion ||
+      record.sourceId !== source.id ||
+      record.sourceVersion !== source.version ||
+      (input.sourceVersion && input.sourceVersion !== source.version) ||
+      (input.learningVersion && input.learningVersion !== record.learningVersion) ||
+      input.chapterId !== record.id
+    )
+      throw new PracticeError(
+        'This reinforcement question or source revision is unavailable. Reopen its saved report.',
+        409,
+      );
+    return {
+      question,
+      chapter: { id: record.id },
+      learning: {
+        sourceVersion: record.sourceVersion,
+        createdAt: record.learningVersion,
+        segments: record.segments,
+      },
+    };
+  }
   if (
     !learning ||
     learning.sourceVersion !== source.version ||
@@ -125,6 +162,12 @@ export async function recordAttempt(
       questionId: question.id,
       chapterId: chapter.id,
       ...(input.runId ? { runId: input.runId } : {}),
+      ...(input.reinforcementId
+        ? {
+            reinforcementId: input.reinforcementId,
+            reinforcementVersion: input.reinforcementVersion,
+          }
+        : {}),
       question: snapshot,
       concept: question.concept,
       selected: input.selected ?? -1,

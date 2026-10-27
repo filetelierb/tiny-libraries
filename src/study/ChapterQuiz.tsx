@@ -19,6 +19,7 @@ export type ChapterQuizRequest = {
   learning: PublicLearning;
   chapter: StudyChapter;
   wasPlaying: boolean;
+  reinforcement?: { id: string; version: number };
 };
 export function ChapterQuiz({
   request,
@@ -97,6 +98,12 @@ export function ChapterQuiz({
           runId: draftRef.current.id,
           questionId: q.id,
           requestId: draftRef.current.requests[q.id],
+          ...(request.reinforcement
+            ? {
+                reinforcementId: request.reinforcement.id,
+                reinforcementVersion: request.reinforcement.version,
+              }
+            : {}),
           ...(q.kind === 'short' ? { answer } : { selected: answer }),
         });
         values.push(value);

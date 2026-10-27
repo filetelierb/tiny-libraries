@@ -12,6 +12,7 @@ export function GeneratedArtifact({
   onCite,
   saved,
   persist,
+  storageKey = 'tl:generated-signal',
 }: {
   artifact: Artifact;
   t: T;
@@ -19,6 +20,7 @@ export function GeneratedArtifact({
   onCite: (s: Segment) => void;
   saved?: Parameters;
   persist: (p: Parameters) => void;
+  storageKey?: string;
 }) {
   const [selected, setSelected] = useState<number | null>(null);
   return (
@@ -39,7 +41,7 @@ export function GeneratedArtifact({
       {artifact.kind === 'signal' ? (
         <SignalExplorer
           t={t}
-          storageKey="tl:generated-signal"
+          storageKey={storageKey}
           initial={saved || artifact}
           onPersist={persist}
         />

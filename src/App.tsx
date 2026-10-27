@@ -27,7 +27,6 @@ import {
   CircleHelp,
   Code2,
   LoaderCircle,
-  RotateCcw,
   Pin,
   PinOff,
   FolderPlus,
@@ -52,7 +51,6 @@ import {
   MAX_RESOURCE_TABS,
   kindFor,
   fold,
-  reviewSummary,
 } from '../shared/domain';
 import { api, uploadFile } from './api';
 import { dictionaries, type T } from './i18n';
@@ -60,6 +58,8 @@ import { Badge, Button, Empty, IconButton, Modal } from './design/components';
 import { StudyReader } from './study/StudyReader';
 import { ChapterQuiz, type ChapterQuizRequest } from './study/ChapterQuiz';
 import { FlashcardDeck, type DeckRequest } from './study/FlashcardDeck';
+import { ReviewPanel } from './study/ReviewPanel';
+import { reinforcementLearning, type ReviewScope } from '../shared/review';
 import { GeneratedArtifact } from './GeneratedArtifact';
 import { SignalExplorer } from './SignalExplorer';
 import { PanelResizer, useDrawerFocus, usePanels } from './workspace/Panels';
@@ -115,6 +115,9 @@ export function App() {
   const [glossaryFocus, setGlossaryFocus] = useState<{ id: string; nonce: string } | null>(null);
   const [annotationTick, setAnnotationTick] = useState(0);
   const [quizRequest, setQuizRequest] = useState<ChapterQuizRequest | null>(null);
+  const [reviewIntent, setReviewIntent] = useState<{ scope: ReviewScope; nonce: number } | null>(
+    null,
+  );
   const [deckRequest, setDeckRequest] = useState<DeckRequest | null>(null),
     [cardTick, setCardTick] = useState(0);
   const [resumePlayback, setResumePlayback] = useState<{ sourceId: string; nonce: number } | null>(
@@ -788,6 +791,17 @@ export function App() {
             keep={keepResourceTab}
             close={closeFile}
           />
+          <IconButton
+            label={t.reviewLearning}
+            onClick={() => {
+              setFocus(false);
+              setRight(true);
+              setTab('review');
+              setReviewIntent({ scope: 'session', nonce: Date.now() });
+            }}
+          >
+            <Activity />
+          </IconButton>
           <IconButton label={t.newSession} onClick={() => setModal('session')}>
             <Plus />
           </IconButton>
@@ -1086,7 +1100,9 @@ export function App() {
                             focusPane(source.id);
                             setDeckRequest({ source, learning: material, chapterId, dueOnly });
                           }}
-                          suspended={!!quizRequest || !!deckRequest}
+                          suspended={
+                            !!quizRequest || !!deckRequest || (right && !focus && tab === 'review')
+                          }
                           resumeSignal={
                             resumePlayback?.sourceId === source.id ? resumePlayback.nonce : 0
                           }
@@ -1318,6 +1334,42 @@ export function App() {
               navigate={navigateAnnotation}
               onError={setError}
             />
+          ) : tab === 'review' ? (
+            <ReviewPanel
+              key={session.id}
+              catalog={catalog}
+              session={session}
+              active={active}
+              t={t}
+              intent={reviewIntent}
+              refresh={refresh}
+              practice={(id) => {
+                const file = catalog.files.find((f) => f.id === id);
+                if (file) {
+                  openFile(file, 'retain');
+                  setTab('practice');
+                }
+              }}
+              cite={citeFrom}
+              persist={(key, value) =>
+                updateSession({ artifacts: { ...sessionRef.current!.artifacts, [key]: value } })
+              }
+              practiceReinforcement={(record) => {
+                const material = reinforcementLearning(record),
+                  source = catalog.files.find((f) => f.id === record.sourceId);
+                if (!material || !source) {
+                  setError(t.sourceUnavailable);
+                  return;
+                }
+                setQuizRequest({
+                  source,
+                  learning: material,
+                  chapter: material.synthesis.chapters[0],
+                  wasPlaying: false,
+                  reinforcement: { id: record.id, version: record.version },
+                });
+              }}
+            />
           ) : !active ? (
             <div className="small-empty">
               <BookOpen size={24} />
@@ -1483,14 +1535,6 @@ export function App() {
                   }
                   onError={setError}
                   onCite={cite}
-                />
-              )}
-              {tab === 'review' && (
-                <Review
-                  attempts={catalog.attempts.filter((a) => a.sourceId === active.id)}
-                  t={t}
-                  showPractice={() => setTab('practice')}
-                  showArtifact={() => setArtifact(active.id)}
                 />
               )}
               {tab === 'miniapp' && <CodePanel t={t} onError={setError} />}
@@ -1938,69 +1982,6 @@ function Practice({
           )}
         </section>
       ))}
-    </>
-  );
-}
-function Review({
-  attempts,
-  t,
-  showPractice,
-  showArtifact,
-}: {
-  attempts: Attempt[];
-  t: T;
-  showPractice: () => void;
-  showArtifact: () => void;
-}) {
-  const summary = reviewSummary(attempts);
-  return (
-    <>
-      <div className="section-label">{t.review}</div>
-      {!summary.count ? (
-        <div className="small-empty">
-          <Activity size={26} />
-          <p>{t.noAttempts}</p>
-          <Button onClick={showPractice}>{t.practice}</Button>
-        </div>
-      ) : (
-        <>
-          <div className="review-score">
-            <strong>{summary.percent}%</strong>
-            <span>
-              {summary.correct} / {summary.count}
-            </span>
-          </div>
-          <p className="muted">{t.limited}</p>
-          {summary.needsPractice.length > 0 && (
-            <section className="review-concepts">
-              <h3>{t.needsPractice}</h3>
-              {summary.needsPractice.map((concept) => (
-                <button key={concept} onClick={showPractice}>
-                  <RotateCcw size={13} />
-                  {concept}
-                </button>
-              ))}
-            </section>
-          )}
-          <Button onClick={showArtifact}>
-            <Activity size={14} />
-            {t.artifact}
-          </Button>
-          <div className="attempt-log">
-            {attempts.map((a) => (
-              <div key={a.id}>
-                <span className={a.correct ? 'success-text' : 'warning-text'}>
-                  {a.correct ? '✓' : '↻'}
-                </span>
-                <span>
-                  {a.concept}
-                  <small>{new Date(a.createdAt).toLocaleString()}</small>
-                </span>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
     </>
   );
 }
