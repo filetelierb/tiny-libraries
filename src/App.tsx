@@ -1642,23 +1642,21 @@ export function App() {
             <>
               {tab === 'artifacts' && (
                 <section className="study-artifact-entry">
-                  <div className="section-label">{t.artifacts}</div>
+                  <h2>{t.artifacts}</h2>
                   {learning?.synthesis.artifact ? (
-                    <>
-                      <h3>{learning.synthesis.artifact.title}</h3>
-                      <p className="muted">{learning.synthesis.artifact.explanation}</p>
+                    <button
+                      type="button"
+                      className="artifact-card"
+                      onClick={() => {
+                        setArtifact(active.id);
+                        if (panels.drawer === 'right') setRight(false);
+                      }}
+                    >
+                      <strong>{learning.synthesis.artifact.title}</strong>
                       <small>
                         {active.name} · {new Date(learning.createdAt).toLocaleString()}
                       </small>
-                      <Button
-                        onClick={() => {
-                          setArtifact(active.id);
-                          if (panels.drawer === 'right') setRight(false);
-                        }}
-                      >
-                        {t.open}
-                      </Button>
-                    </>
+                    </button>
                   ) : (
                     <p className="muted">{t.noSourceArtifacts}</p>
                   )}
@@ -1765,16 +1763,16 @@ export function App() {
                       ))}
                     </div>
                   )}
-                  <button className="artifact-link" onClick={() => setArtifact(active.id)}>
-                    <span>
-                      <Activity size={16} />
-                      <strong>{t.artifact}</strong>
-                    </span>
-                    <p>{t.artifactBody}</p>
-                    <span className="text-link">
-                      {t.open}
-                      <ChevronRight size={13} />
-                    </span>
+                  <button
+                    type="button"
+                    className="artifact-card artifact-link"
+                    onClick={() => setArtifact(active.id)}
+                  >
+                    <strong>
+                      <Activity size={14} />
+                      {t.artifact}
+                    </strong>
+                    <small>{t.artifactBody}</small>
                   </button>
                 </>
               )}

@@ -1176,20 +1176,20 @@ hr {
   margin: 0;
 }
 .study-artifact-entry {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+  display: grid;
+  gap: 8px;
 }
-.study-artifact-entry h3 {
+.study-artifact-entry h2 {
+  margin: 0 0 4px;
+  font-size: 16px;
+  font-weight: 600;
+}
+.study-artifact-entry > p {
   margin: 0;
-  font-size: 20px;
+  font-size: 12px;
 }
-.study-artifact-entry p {
-  line-height: 1.65;
-}
-.study-artifact-entry small {
-  color: var(--muted-text);
-  overflow-wrap: anywhere;
+.study-artifact-entry > .button {
+  justify-self: start;
 }
 .library-panel.docked,
 .study-panel.docked {
@@ -1422,31 +1422,40 @@ body:has(.panel-resizer.resizing) {
   color: var(--muted-text);
   margin-top: 10px;
 }
-.artifact-link {
-  padding: 16px 0;
-  text-align: left;
-  border: 0;
-  border-bottom: 1px solid var(--border);
-  background: transparent;
+.artifact-card {
+  display: grid;
+  gap: 4px;
   width: 100%;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--foreground);
+  text-align: left;
+  transition: background 120ms;
 }
-.artifact-link > span:first-child {
+.artifact-card:hover {
+  background: var(--muted);
+}
+.artifact-card strong {
   display: flex;
-  gap: 9px;
   align-items: center;
-  color: var(--primary);
-}
-.artifact-link strong {
-  font-size: var(--font-size-control);
+  gap: 8px;
+  font-size: 14px;
   font-weight: 500;
 }
-.artifact-link p {
-  font-size: 13px;
-  color: var(--muted-text);
-  margin: 11px 0;
+.artifact-card strong > svg {
+  color: var(--primary);
+  flex-shrink: 0;
 }
-.artifact-link .text-link {
-  font-size: var(--font-size-small);
+.artifact-card small {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted-text);
+  overflow-wrap: anywhere;
+}
+.artifact-link {
+  margin-top: 16px;
 }
 .chapter-card {
   padding: 15px 0;
