@@ -4025,15 +4025,19 @@ body:has(.panel-resizer.resizing) {
 }
 .concept-hint {
   position: absolute;
-  right: 16px;
-  bottom: 85px;
+  right: 12px;
+  bottom: 112px;
   display: flex;
   align-items: center;
-  max-width: min(390px, calc(100% - 32px));
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 3px 10px rgb(21 45 52 / 12%);
+  max-width: min(390px, calc(100% - 24px));
+  padding: 4px;
+  background: color-mix(in oklch, var(--surface), transparent 5%);
+  backdrop-filter: blur(8px);
+  border: 1px solid color-mix(in oklch, var(--primary), transparent 80%);
+  border-radius: var(--radius-xl);
+  box-shadow:
+    0 4px 6px -1px rgb(0 0 0 / 0.1),
+    0 2px 4px -2px rgb(0 0 0 / 0.1);
   z-index: 8;
 }
 .viewers > .concept-hint {
@@ -4042,11 +4046,21 @@ body:has(.panel-resizer.resizing) {
 }
 .concept-hint > button:first-child {
   display: flex;
-  gap: 9px;
+  gap: 8px;
   align-items: center;
-  padding: 12px;
+  padding: 8px 12px;
   min-width: 0;
-  font-size: var(--font-size-control);
+  font-size: 12px;
+  border-radius: var(--radius-lg);
+}
+.concept-hint > button:first-child:hover {
+  background: var(--muted);
+}
+.concept-hint > .icon-button {
+  width: auto;
+  min-width: 0;
+  min-height: 0;
+  padding: 8px;
 }
 .concept-hint > button:first-child svg {
   color: var(--primary);
@@ -4081,6 +4095,16 @@ body:has(.panel-resizer.resizing) {
   margin: 16px 0;
   background: var(--background);
 }
+.suggestion-bulk {
+  border-radius: var(--radius-xl);
+  background: color-mix(in oklch, var(--muted), transparent 70%);
+}
+.suggestion-bulk-result {
+  border-radius: var(--radius-xl);
+  border-color: color-mix(in oklch, var(--primary), transparent 70%);
+  background: color-mix(in oklch, var(--primary), transparent 95%);
+  font-size: 14px;
+}
 .suggestion-bulk p,
 .suggestion-bulk-result p,
 .suggestion-match p,
@@ -4090,9 +4114,14 @@ body:has(.panel-resizer.resizing) {
 .suggestion-list > button {
   display: block;
   width: 100%;
-  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
   text-align: left;
-  padding: 16px 0;
+}
+.suggestion-list > button:hover {
+  background: color-mix(in oklch, var(--muted), transparent 40%);
 }
 .suggestion-list strong {
   display: flex;
@@ -4107,7 +4136,13 @@ body:has(.panel-resizer.resizing) {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+.suggestion-list strong svg {
+  width: 16px;
+  height: 16px;
+  color: var(--primary);
+}
 .suggestion-list small {
+  font-size: 12px;
   color: var(--primary);
 }
 .suggestion-review fieldset {
