@@ -9530,3 +9530,46 @@ body:has(.panel-resizer.resizing) {
 .processing-file small {
   color: var(--muted-text);
 }
+
+.csv-view {
+  display: flex;
+  gap: 2px;
+  padding: 8px 16px 0;
+}
+.csv-view button {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.csv-view button[aria-pressed='true'] {
+  border-color: var(--primary);
+  background: var(--secondary);
+}
+.csv-table-scroll {
+  overflow: auto;
+  padding: 12px 16px;
+}
+.csv-table {
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.csv-table th,
+.csv-table td {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+  white-space: pre-wrap;
+}
+.csv-table th {
+  position: sticky;
+  top: 0;
+  background: var(--muted);
+}
+.csv-table-scroll > p {
+  margin: 8px 0 0;
+}

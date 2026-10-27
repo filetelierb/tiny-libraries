@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, lazy, Suspense } from 'react';
+import { useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
 import { FileWarning } from 'lucide-react';
+import { parseCsv } from '../shared/csv';
 import { StudyMarkdown } from './study/StudyMarkdown';
 import type { Source, PublicLearning, Bookmark, Segment } from '../shared/domain';
 import type { ReadingProgress } from '../shared/chapters';
@@ -10,6 +11,7 @@ import { remarkSourceAnchors } from './study/sourceAnchors';
 import { ContentBoundary } from './design/ContentBoundary';
 import { paintHighlights, quoteRanges, useSavedQuotes } from './annotations/highlights';
 const PdfViewer = lazy(() => import('./PdfViewer'));
+const CSV_ROW_LIMIT = 200;
 
 export function Viewer({
   source,
@@ -43,6 +45,16 @@ export function Viewer({
   resumeSignal?: number;
 }) {
   const [text, setText] = useState('');
+  const csv = source.kind === 'text' && /\.csv$/i.test(source.name);
+  // Tables are easier to read; the plain text view keeps chapters and highlights anchored.
+  const [csvView, setCsvView] = useState<'table' | 'text'>('table');
+  const table = useMemo(
+    () => (csv && csvView === 'table' ? parseCsv(text, CSV_ROW_LIMIT + 1) : null),
+    [csv, csvView, text],
+  );
+  useEffect(() => {
+    if (seek) setCsvView('text');
+  }, [seek?.nonce]);
   const documentRoot = useRef<HTMLElement>(null),
     textPosition = useRef(position);
   const textRanges = useRef<Array<{ index: number; range: Range }>>([]);
@@ -148,7 +160,7 @@ export function Viewer({
       textPosition.current = Math.max(0, index);
       progress.current?.({ value: textPosition.current, cause: seek ? 'seek' : 'restore' });
     }
-  }, [text, learning?.createdAt, seek?.nonce]);
+  }, [text, learning?.createdAt, seek?.nonce, csvView]);
   const url = `/api/files/${source.id}/content`;
   const [failed, setFailed] = useState(false);
   useEffect(() => {
@@ -257,9 +269,59 @@ export function Viewer({
           </StudyMarkdown>
         </div>
       ) : (
-        <pre data-source-start="0" data-source-end={text.length}>
-          {text}
-        </pre>
+        <>
+          {csv && (
+            <div className="csv-view" role="group" aria-label={t.viewAs}>
+              {(['table', 'text'] as const).map((view) => (
+                <button
+                  key={view}
+                  type="button"
+                  aria-pressed={csvView === view}
+                  onClick={() => setCsvView(view)}
+                >
+                  {view === 'table' ? t.csvTable : t.csvText}
+                </button>
+              ))}
+            </div>
+          )}
+          {table ? (
+            <div className="csv-table-scroll">
+              <table className="csv-table">
+                {table.rows.length > 0 && (
+                  <thead>
+                    <tr>
+                      {table.rows[0].map((cell, i) => (
+                        <th key={i} scope="col">
+                          {cell}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                )}
+                <tbody>
+                  {table.rows.slice(1).map((row, r) => (
+                    <tr key={r}>
+                      {row.map((cell, i) => (
+                        <td key={i}>{cell}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {table.total - 1 > CSV_ROW_LIMIT && (
+                <p className="muted">
+                  {t.csvRowLimit
+                    .replace('{shown}', String(CSV_ROW_LIMIT))
+                    .replace('{total}', String(table.total - 1))}
+                </p>
+              )}
+            </div>
+          ) : (
+            <pre data-source-start="0" data-source-end={text.length}>
+              {text}
+            </pre>
+          )}
+        </>
       )}
     </article>
   );
