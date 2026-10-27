@@ -31,7 +31,8 @@
   --font-size-body: 16px;
   --font-size-control: 14px;
   --font-size-small: 12px;
-  --font-mono: ui-monospace, 'SFMono-Regular', Consolas, monospace;
+  --font-heading: 'Geist', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'SFMono-Regular', Consolas, monospace;
   --paper-shadow: 0 18px 50px rgb(21 45 52 / 7%);
   --panel-width: 300px;
   --study-width: 350px;

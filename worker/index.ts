@@ -430,7 +430,9 @@ export class Library extends DurableObject<Env> {
           );
         }
         if (path === '/api/assessments' && request.method === 'GET') {
-          const sessionId = z.string().uuid().parse(url.searchParams.get('sessionId'));
+          const sessionParam = url.searchParams.get('sessionId');
+          const sessionId =
+            sessionParam === null ? undefined : z.string().uuid().parse(sessionParam);
           return json(
             await assessmentHistory(
               this.ctx.storage,
@@ -517,6 +519,20 @@ export class Library extends DurableObject<Env> {
         return json(
           value ? (learningMatch[1] === 'internal' ? value : publicLearning(value)) : null,
         );
+      }
+      if (path === '/api/artifacts' && request.method === 'GET') {
+        const records = await this.ctx.storage.list<Learning>({ prefix: 'learning:' });
+        const items = [];
+        for (const value of records.values())
+          if (value.synthesis.artifact)
+            items.push({
+              sourceId: value.sourceId,
+              title: value.synthesis.artifact.title,
+              kind: value.synthesis.artifact.kind,
+              createdAt: value.createdAt,
+            });
+        items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+        return json(items);
       }
       const cardsMatch = path.match(/^\/api\/flashcards\/([a-f0-9-]+)$/);
       if (path === '/api/reinforcements' && request.method === 'GET')

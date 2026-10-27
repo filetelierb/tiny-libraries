@@ -87,6 +87,14 @@ import {
   isPrimaryStudyTool,
   type StudyTab,
 } from './workspace/StudyTabs';
+import {
+  ArtifactList,
+  LibraryTabs,
+  PanelSection,
+  TestsList,
+  useLibraryTab,
+  useTests,
+} from './workspace/LibrarySections';
 import { DirectoryTree, type TreeActions } from './workspace/DirectoryTree';
 import { SplitWorkspace } from './workspace/SplitWorkspace';
 import { UploadForm } from './workspace/UploadForm';
@@ -108,7 +116,7 @@ const AssessmentWorkspace = lazy(() =>
 import { sessionPreview, type QuestionContext } from '../shared/conversations';
 import { ActionMenu } from './design/ActionMenu';
 import { ContentBoundary } from './design/ContentBoundary';
-import { containsPath, directoryName, sourceState, type CatalogView } from '../shared/directories';
+import { containsPath, directoryName, sourceState } from '../shared/directories';
 
 const localGet = (key: string, fallback: string) => localStorage.getItem(key) || fallback;
 type DirectoryDialog =
@@ -127,6 +135,12 @@ export function App() {
   const [annotationTick, setAnnotationTick] = useState(0);
   const [quizRequest, setQuizRequest] = useState<ChapterQuizRequest | null>(null);
   const [assessmentOpen, setAssessmentOpen] = useState(false);
+  const [assessmentStart, setAssessmentStart] = useState<{
+    sessionId?: string;
+    selection?: string | null;
+  }>({});
+  const [libraryTab, setLibraryTab] = useLibraryTab();
+  const tests = useTests(assessmentOpen);
   const [deckRequest, setDeckRequest] = useState<DeckRequest | null>(null),
     [cardTick, setCardTick] = useState(0);
   const [resumePlayback, setResumePlayback] = useState<{ sourceId: string; nonce: number } | null>(
@@ -156,8 +170,7 @@ export function App() {
     rightPanelRef = useRef<HTMLElement>(null);
   const [focus, setFocus] = useState(false),
     [tab, setTab] = useState<StudyTab>('assistant'),
-    [query, setQuery] = useState(''),
-    [catalogView, setCatalogView] = useState<CatalogView>('files');
+    [query, setQuery] = useState('');
   function selectStudyTool(value: StudyTab) {
     setTab(value);
     requestAnimationFrame(() => {
@@ -666,133 +679,207 @@ export function App() {
         role={panels.drawer === 'left' ? 'dialog' : undefined}
         aria-modal={panels.drawer === 'left' ? true : undefined}
       >
-        <div className="brand">
-          <div>
-            <strong>{t.catalogTitle}</strong>
-            <span>{t.local}</span>
-          </div>
-          <IconButton
-            label={panels.preferences.left.pinned ? t.unpinPanel : t.pinPanel}
-            aria-pressed={panels.preferences.left.pinned}
-            onClick={() => panels.pin('left')}
-          >
-            {panels.preferences.left.pinned ? <Pin /> : <PinOff />}
-          </IconButton>
-          <IconButton
-            label={panels.drawer === 'left' ? t.backToSession : t.hideFiles}
-            onClick={() => setLeft(false)}
-          >
-            <PanelLeft />
-          </IconButton>
-        </div>
-        <div className="library-search">
-          <Search size={15} />
-          <input
-            aria-label={t.search}
-            placeholder={t.search}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </div>
-        <div className="library-actions">
-          <Button onClick={() => showUpload()}>
-            <Plus size={15} />
-            {t.upload}
-          </Button>
-          <IconButton label={t.newFolder} onClick={() => treeActions.create('')}>
-            <FolderPlus />
-          </IconButton>
-          <IconButton label={t.settings} onClick={() => setModal('settings')}>
-            <SettingsIcon />
-          </IconButton>
-        </div>
-        <div className="catalog-switch">
-          <button
-            className={catalogView === 'files' ? 'selected' : ''}
-            onClick={() => setCatalogView('files')}
-          >
-            {t.files}
-            <span>
-              {catalog.files.filter((f) => sourceState(f, catalog.directories) === 'files').length}
-            </span>
-          </button>
-          <button
-            className={catalogView === 'archived' ? 'selected' : ''}
-            onClick={() => setCatalogView('archived')}
-          >
-            <Archive size={13} />
-            {t.archived}
-            <span>
-              {
-                catalog.files.filter((f) => sourceState(f, catalog.directories) === 'archived')
-                  .length
-              }
-            </span>
-          </button>
-          <button
-            className={catalogView === 'trash' ? 'selected' : ''}
-            onClick={() => setCatalogView('trash')}
-          >
-            <Trash2 size={13} />
-            {t.trash}
-            <span>
-              {catalog.files.filter((f) => sourceState(f, catalog.directories) === 'trash').length}
-            </span>
-          </button>
-        </div>
-        <div className="file-tree">
-          <DirectoryTree
-            directories={catalog.directories}
-            files={catalog.files}
+        <div className="library-heading">
+          <LibraryTabs
+            value={libraryTab}
+            change={setLibraryTab}
             t={t}
-            active={active?.id}
-            view={catalogView}
-            query={query}
-            chooseFile={openFile}
-            actions={treeActions}
-            storageKey="tl:tree:sidebar"
+            counts={{
+              library: catalog.files.filter((f) => sourceState(f, catalog.directories) === 'files')
+                .length,
+              sessions: catalog.sessions.length,
+              tests: `${tests.items.length}${tests.more ? '+' : ''}`,
+            }}
           />
+          <div className="panel-heading-actions">
+            <IconButton
+              label={panels.preferences.left.pinned ? t.unpinPanel : t.pinPanel}
+              aria-pressed={panels.preferences.left.pinned}
+              onClick={() => panels.pin('left')}
+            >
+              {panels.preferences.left.pinned ? <Pin /> : <PinOff />}
+            </IconButton>
+            <IconButton
+              label={panels.drawer === 'left' ? t.backToSession : t.hideFiles}
+              onClick={() => setLeft(false)}
+            >
+              <PanelLeft />
+            </IconButton>
+          </div>
         </div>
-        <div className="sessions-heading">
-          <span>{t.sessions}</span>
-          <IconButton label={t.newSession} onClick={() => setModal('session')}>
-            <Plus />
-          </IconButton>
-        </div>
-        <div className="session-list">
-          {[...catalog.sessions]
-            .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-            .map((item) => {
-              const preview = sessionPreview(item, catalog.files, catalog.conversations);
-              return (
-                <div
-                  className={`session-entry ${item.id === session.id ? 'active' : ''}`}
-                  key={item.id}
-                >
-                  <button
-                    className="session-row"
-                    aria-current={item.id === session.id ? 'true' : undefined}
-                    onClick={() => selectSession(item)}
-                  >
-                    <BookOpen size={15} />
-                    <span>
-                      <span>{item.name}</span>
-                      <small title={preview.source?.name}>
-                        {preview.source?.name || t.noOpenResources}
-                      </small>
-                      <small>
-                        {preview.count} {t.messages}
-                      </small>
-                    </span>
-                    <ChevronRight size={13} />
-                  </button>
-                  <ActionMenu
-                    label={`${t.sessionOptions}: ${item.name}`}
-                    actions={[{ label: t.renameSession, run: () => setRenamingSession(item) }]}
+        <div
+          className="library-content"
+          id="library-content"
+          role="tabpanel"
+          aria-labelledby={`library-tab-${libraryTab}`}
+        >
+          {libraryTab === 'library' && (
+            <>
+              <div className="library-search">
+                <Search size={15} />
+                <input
+                  aria-label={t.search}
+                  placeholder={t.search}
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                />
+              </div>
+              <div className="library-actions">
+                <Button onClick={() => showUpload()}>
+                  <Plus size={15} />
+                  {t.upload}
+                </Button>
+                <IconButton label={t.newFolder} onClick={() => treeActions.create('')}>
+                  <FolderPlus />
+                </IconButton>
+                <IconButton label={t.settings} onClick={() => setModal('settings')}>
+                  <SettingsIcon />
+                </IconButton>
+              </div>
+              <PanelSection id="library-files" title={t.files} t={t} grow>
+                <div className="file-tree">
+                  <DirectoryTree
+                    directories={catalog.directories}
+                    files={catalog.files}
+                    t={t}
+                    active={active?.id}
+                    view="files"
+                    query={query}
+                    chooseFile={openFile}
+                    actions={treeActions}
+                    storageKey="tl:tree:sidebar"
                   />
                 </div>
-              );
-            })}
+              </PanelSection>
+              <PanelSection id="library-artifacts" title={t.artifacts} t={t}>
+                <ArtifactList
+                  files={catalog.files.filter(
+                    (f) => sourceState(f, catalog.directories) !== 'trash',
+                  )}
+                  refreshKey={catalog.files}
+                  open={(file) => {
+                    openFile(file, 'retain');
+                    setArtifact(file.id);
+                  }}
+                  t={t}
+                />
+              </PanelSection>
+              <PanelSection
+                id="library-archived"
+                title={t.archived}
+                icon={<Archive size={13} />}
+                t={t}
+                defaultOpen={false}
+              >
+                <div className="file-tree">
+                  <DirectoryTree
+                    directories={catalog.directories}
+                    files={catalog.files}
+                    t={t}
+                    active={active?.id}
+                    view="archived"
+                    query={query}
+                    chooseFile={openFile}
+                    actions={treeActions}
+                    storageKey="tl:tree:sidebar"
+                  />
+                </div>
+              </PanelSection>
+              <PanelSection
+                id="library-trash"
+                title={t.trash}
+                icon={<Trash2 size={13} />}
+                t={t}
+                defaultOpen={false}
+              >
+                <div className="file-tree">
+                  <DirectoryTree
+                    directories={catalog.directories}
+                    files={catalog.files}
+                    t={t}
+                    active={active?.id}
+                    view="trash"
+                    query={query}
+                    chooseFile={openFile}
+                    actions={treeActions}
+                    storageKey="tl:tree:sidebar"
+                  />
+                </div>
+              </PanelSection>
+            </>
+          )}
+          {libraryTab === 'sessions' && (
+            <PanelSection
+              id="study-sessions"
+              title={t.sessions}
+              t={t}
+              grow
+              actions={
+                <IconButton label={t.newSession} onClick={() => setModal('session')}>
+                  <Plus />
+                </IconButton>
+              }
+            >
+              <div className="session-list">
+                {[...catalog.sessions]
+                  .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+                  .map((item) => {
+                    const preview = sessionPreview(item, catalog.files, catalog.conversations);
+                    return (
+                      <div
+                        className={`session-entry ${item.id === session.id ? 'active' : ''}`}
+                        key={item.id}
+                      >
+                        <button
+                          className="session-row"
+                          aria-current={item.id === session.id ? 'true' : undefined}
+                          onClick={() => selectSession(item)}
+                        >
+                          <BookOpen size={15} />
+                          <span>
+                            <span>{item.name}</span>
+                            <small title={preview.source?.name}>
+                              {preview.source?.name || t.noOpenResources}
+                            </small>
+                            <small>
+                              {preview.count} {t.messages}
+                            </small>
+                          </span>
+                          <ChevronRight size={13} />
+                        </button>
+                        <ActionMenu
+                          label={`${t.sessionOptions}: ${item.name}`}
+                          actions={[
+                            { label: t.renameSession, run: () => setRenamingSession(item) },
+                          ]}
+                        />
+                      </div>
+                    );
+                  })}
+              </div>
+            </PanelSection>
+          )}
+          {libraryTab === 'tests' && (
+            <TestsList
+              tests={tests}
+              sessions={catalog.sessions}
+              currentSessionId={session.id}
+              locale={locale}
+              t={t}
+              review={() => {
+                setFocus(false);
+                setAssessmentStart({ selection: null });
+                setAssessmentOpen(true);
+                if (panels.drawer === 'left') setLeft(false);
+              }}
+              openTest={(test) => {
+                setFocus(false);
+                setAssessmentStart({ sessionId: test.sessionId, selection: test.id });
+                setAssessmentOpen(true);
+                if (panels.drawer === 'left') setLeft(false);
+              }}
+            />
+          )}
         </div>
         <div className="sidebar-foot">
           <span className={`connection-dot ${catalog.settings.configured ? 'connected' : ''}`} />
@@ -842,18 +929,6 @@ export function App() {
             rename={treeActions.renameFile}
             splitWith={splitResourceTab}
           />
-          <IconButton
-            label={t.reviewLearning}
-            onClick={() => {
-              setFocus(false);
-              setAssessmentOpen(true);
-            }}
-          >
-            <Activity />
-          </IconButton>
-          <IconButton label={t.newSession} onClick={() => setModal('session')}>
-            <Plus />
-          </IconButton>
           <IconButton
             label={t.study}
             aria-expanded={right && !focus}
@@ -1426,7 +1501,10 @@ export function App() {
               session={session}
               active={active}
               t={t}
-              assess={() => setAssessmentOpen(true)}
+              assess={() => {
+                setAssessmentStart({});
+                setAssessmentOpen(true);
+              }}
               refresh={refresh}
               practice={(id) => {
                 const file = catalog.files.find((f) => f.id === id);
@@ -1722,7 +1800,9 @@ export function App() {
             }
           >
             <AssessmentWorkspace
-              sessionId={session.id}
+              key={assessmentStart.sessionId || session.id}
+              sessionId={assessmentStart.sessionId || session.id}
+              initialSelection={assessmentStart.selection}
               catalog={catalog}
               actions={treeActions}
               t={t}

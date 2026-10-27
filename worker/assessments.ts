@@ -241,13 +241,13 @@ export async function assessmentSummary(storage: GlossaryStorage, id: string, ow
 }
 export async function assessmentHistory(
   storage: GlossaryStorage,
-  sessionId: string,
+  sessionId: string | undefined,
   owner: string,
   after?: string,
 ) {
   return storage.transaction(async (tx) => {
     const records = [...(await tx.list<Stored>({ prefix: 'assessment:' })).values()]
-      .filter((r) => r.sessionId === sessionId)
+      .filter((r) => sessionId === undefined || r.sessionId === sessionId)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id));
     const start = after ? records.findIndex((r) => r.id === after) + 1 : 0;
     if (after && !start)

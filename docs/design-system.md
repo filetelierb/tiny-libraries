@@ -6,7 +6,7 @@ A formal academic workspace with warm ivory backgrounds, near-white paper, dark 
 
 ## Tokens and primitives
 
-`src/design/tokens.css` is the source of truth. Use semantic colors, 4px spacing increments, thin borders and soft shadows confined to floating controls and overlays. Use the system Times New Roman/Times serif stack: 16px body, 14px controls, 12px secondary labels, and 17px long-form reading text. Locators and code use the monospace token. Bundle no remote fonts. Primary teal is reserved for actions, selection and links.
+`src/design/tokens.css` is the source of truth. Use semantic colors, 4px spacing increments, thin borders and soft shadows confined to floating controls and overlays. Use the system Times New Roman/Times serif stack for body text: 16px body, 14px controls, 12px secondary labels, and 17px long-form reading text. Dialog, card and sheet titles use Geist (`--font-heading`) at 16px/500; locators and code use Geist Mono (`--font-mono`). Both load from Google Fonts, the only remote origins the content security policy allows, with system sans and monospace fallbacks when offline. Primary teal is reserved for actions, selection and links.
 
 Buttons use outlined pill shapes; reader actions share one capsule with a separate focus action. Resource tabs have rounded paper tops. Reviewed files use a teal outline check-circle. Context menus use leading outline icons, soft amber hover states and a clear grouping rule. Reading surfaces remain plain, without a decorative grid or promotional empty-state slogan.
 

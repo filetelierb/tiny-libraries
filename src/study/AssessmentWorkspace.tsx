@@ -43,6 +43,7 @@ export function AssessmentWorkspace({
   prepareFile,
   beforeCreate,
   changed,
+  initialSelection,
 }: {
   sessionId: string;
   catalog: Catalog;
@@ -54,6 +55,8 @@ export function AssessmentWorkspace({
   prepareFile: (id: string) => void;
   beforeCreate: () => Promise<unknown>;
   changed: () => void;
+  /** undefined: resume the last or active test; null: open setup; id: open that test. */
+  initialSelection?: string | null;
 }) {
   const configKey = `tl:assessment-config:${sessionId}`,
     selectedKey = `tl:assessment-selected:${sessionId}`;
@@ -213,7 +216,8 @@ export function AssessmentWorkspace({
         last = localStorage.getItem(selectedKey);
       } catch {}
       const active = values.find((row) => !['completed', 'cancelled'].includes(row.status));
-      choose(active?.id || (z.string().uuid().safeParse(last).success ? last : null));
+      if (initialSelection !== undefined) choose(initialSelection);
+      else choose(active?.id || (z.string().uuid().safeParse(last).success ? last : null));
       setLoading(false);
     });
     return () => {
