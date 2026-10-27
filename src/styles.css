@@ -7883,3 +7883,17 @@ body:has(.panel-resizer.resizing) {
   flex: 1;
   min-width: 0;
 }
+/* Floating drawers keep a resize handle on their inner edge. */
+.panel-resizer.floating-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 3;
+  background: transparent;
+}
+.library-panel .floating-resizer {
+  right: -3px;
+}
+.study-panel .floating-resizer {
+  left: -3px;
+}

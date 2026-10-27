@@ -70,6 +70,8 @@ export function usePanels() {
           : {}),
       };
     });
+  // A floating drawer may grow until 48px of the session stays visible beside it.
+  const drawerMax = Math.max(PANEL_MIN.left, PANEL_MIN.right, viewport - 48);
   const resize = (side: Side, width: number) =>
     setPreferences((previous) => {
       const other = side === 'left' ? 'right' : 'left';
@@ -82,7 +84,11 @@ export function usePanels() {
         },
         [side]: {
           ...previous[side],
-          width: clamp(width, PANEL_MIN[side], Math.max(PANEL_MIN[side], resolved[side].max)),
+          width: clamp(
+            width,
+            PANEL_MIN[side],
+            resolved[side].docked ? Math.max(PANEL_MIN[side], resolved[side].max) : drawerMax,
+          ),
         },
       };
     });
@@ -93,7 +99,18 @@ export function usePanels() {
     setMobileOpen(null);
     setPreferences(panelsForSplit);
   };
-  return { preferences, effective, resolved, narrow, drawer, open, pin, resize, enterSplit };
+  return {
+    preferences,
+    effective,
+    resolved,
+    narrow,
+    drawer,
+    drawerMax,
+    open,
+    pin,
+    resize,
+    enterSplit,
+  };
 }
 
 export function useDrawerFocus(
@@ -115,7 +132,7 @@ export function useDrawerFocus(
         (element) => element.getClientRects().length > 0,
       );
     const previous = document.activeElement as HTMLElement | null;
-    elements()[0]?.focus();
+    (panel.querySelector<HTMLElement>('[data-drawer-close]') || elements()[0])?.focus();
     const keyboard = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !document.querySelector('dialog[open]')) {
         event.preventDefault();
@@ -151,6 +168,7 @@ export function PanelResizer({
   label,
   help,
   change,
+  className = '',
 }: {
   side: Side;
   width: number;
@@ -158,12 +176,13 @@ export function PanelResizer({
   label: string;
   help: string;
   change: (value: number) => void;
+  className?: string;
 }) {
   const drag = useRef<{ x: number; width: number } | null>(null);
   const [resizing, setResizing] = useState(false);
   return (
     <div
-      className={`panel-resizer ${resizing ? 'resizing' : ''}`}
+      className={`panel-resizer ${resizing ? 'resizing' : ''} ${className}`}
       role="separator"
       tabIndex={0}
       aria-orientation="vertical"

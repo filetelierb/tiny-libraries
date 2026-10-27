@@ -780,6 +780,7 @@ export function App() {
             )}
             {!panels.resolved.left.docked && (
               <IconButton
+                data-drawer-close
                 label={panels.drawer === 'left' ? t.backToSession : t.hideFiles}
                 onClick={() => setLeft(false)}
               >
@@ -985,6 +986,17 @@ export function App() {
             />
           )}
         </div>
+        {panels.drawer === 'left' && !panels.narrow && (
+          <PanelResizer
+            side="left"
+            className="floating-resizer"
+            label={t.filePanelWidth}
+            help={t.resizeHelp}
+            width={panels.resolved.left.width}
+            max={panels.drawerMax}
+            change={(value) => panels.resize('left', value)}
+          />
+        )}
       </aside>
       {left && !focus && panels.resolved.left.docked && (
         <PanelResizer
@@ -1465,6 +1477,7 @@ export function App() {
             )}
             {!panels.resolved.right.docked && (
               <IconButton
+                data-drawer-close
                 label={panels.drawer === 'right' ? t.backToSession : t.close}
                 onClick={() => setRight(false)}
               >
@@ -1855,6 +1868,17 @@ export function App() {
             </>
           )}
         </div>
+        {panels.drawer === 'right' && !panels.narrow && (
+          <PanelResizer
+            side="right"
+            className="floating-resizer"
+            label={t.studyPanelWidth}
+            help={t.resizeHelp}
+            width={panels.resolved.right.width}
+            max={panels.drawerMax}
+            change={(value) => panels.resize('right', value)}
+          />
+        )}
       </aside>
       {deckRequest && (
         <FlashcardDeck
