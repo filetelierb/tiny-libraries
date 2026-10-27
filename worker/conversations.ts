@@ -24,8 +24,8 @@ import {
   type ConversationDetail,
 } from '../shared/tutor-turns';
 import { loadTutorConcepts } from './tutor-context';
-import { attachmentMention } from '../shared/tutor-attachments';
-import { readQuestionAttachments, attachmentImageData } from './tutor-attachments';
+import { attachmentMention, attachmentSourceIds } from '../shared/tutor-attachments';
+import { readQuestionAttachments, attachmentImagesData } from './tutor-attachments';
 import { resolveTutorGeneration } from '../shared/tutor-generation';
 import { TutorObjects, TutorJournalError } from './tutor-journal';
 import type { FrozenTutorContext } from './tutor-runner';
@@ -169,12 +169,12 @@ async function prepareIntent(
   const attachedContent = await Promise.all(
     attachments.map(async (item) => ({
       ...item,
-      imageData: await attachmentImageData(env.FILES, item.attachment),
+      imagesData: await attachmentImagesData(env.FILES, item.attachment),
     })),
   );
   for (const { attachment } of attachments)
-    if (attachment.sourceId && !sourceIds.includes(attachment.sourceId))
-      sourceIds.push(attachment.sourceId);
+    for (const id of attachmentSourceIds(attachment))
+      if (!sourceIds.includes(id)) sourceIds.push(id);
   if (sourceIds.length > 20)
     throw new TutorJournalError(
       'The question has more than 20 source origins. Remove a reference or attachment before sending.',

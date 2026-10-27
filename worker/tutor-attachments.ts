@@ -4,7 +4,9 @@ import {
   questionAttachmentSchema,
   attachmentSegments,
   MAX_ATTACHMENT_IMAGE_BYTES,
-  MAX_QUESTION_IMAGE_BYTES,
+  attachmentImages,
+  questionImageBudget,
+  type AttachmentImage,
   MAX_ATTACHMENT_TEXT_BYTES,
   type AttachmentInput,
   type QuestionAttachment,
@@ -12,6 +14,9 @@ import {
   type AttachmentContent,
 } from '../shared/tutor-attachments';
 import type { Annotation, DrawingStroke } from '../shared/annotations';
+import type { CaptureStore } from './capture-store';
+import { captureDigest } from '../shared/captures';
+import { visibleCaptureComments } from '../shared/capture-consumers';
 import type { Source, Directory, Learning, Segment } from '../shared/domain';
 import { sourceState } from '../shared/directories';
 import type { GlossaryStorage } from './glossary';
@@ -64,7 +69,9 @@ export async function createQuestionAttachment(
   files: Files,
   input: AttachmentInput,
   compose: Compose,
+  captures?: Pick<CaptureStore, 'preview' | 'drawing'>,
 ): Promise<QuestionAttachment> {
+  input = attachmentInputSchema.parse(input);
   const fingerprint = JSON.stringify(input),
     key = recordKey(input.id);
   const previous = await storage.get<StoredAttachment>(key);
@@ -75,6 +82,7 @@ export async function createQuestionAttachment(
   }
   if (!(await storage.get(`session:${input.sessionId}`)))
     throw new AttachmentError('Study session not found', 404);
+  const preparedImages: Array<{ bytes: Uint8Array; image: AttachmentImage }> = [];
   let source: Source | undefined,
     annotation: Annotation | undefined,
     bytes: Uint8Array | undefined,
@@ -131,13 +139,18 @@ export async function createQuestionAttachment(
     if (annotation.sourceId)
       source = await availableSource(storage, annotation.sourceId, annotation.sourceVersion);
     name = annotation.title || source?.name || 'Annotation';
-    if (annotation.captures?.length)
+    if (annotation.captures?.length && input.captureIds === undefined)
       throw new AttachmentError(
-        'Choose capture images from the gallery before attaching this note.',
+        'Choose capture images explicitly before attaching this note.',
+        409,
+      );
+    if (input.captureIds?.some((id) => !annotation!.captures?.some((item) => item.id === id)))
+      throw new AttachmentError(
+        'A selected capture is no longer in this note. Choose it again.',
         409,
       );
     kind =
-      annotation.capture && annotation.captures === undefined
+      (annotation.capture && annotation.captures === undefined) || input.captureIds?.length
         ? 'capture'
         : annotation.kind === 'bookmark'
           ? 'bookmark'
@@ -154,6 +167,58 @@ export async function createQuestionAttachment(
           ...(annotation.location.seconds != null ? { start: annotation.location.seconds } : {}),
         },
       ];
+    for (const stamp of annotation.stamps || [])
+      segments.push({
+        id: `location-${stamp.id}`,
+        text: `Saved source location: ${stamp.label || stamp.sourceId}. Source ${stamp.sourceId} version ${stamp.sourceVersion}. ${stamp.location.quote || ''}`,
+        ...(stamp.location.page !== undefined ? { page: stamp.location.page } : {}),
+        ...(stamp.location.seconds !== undefined ? { start: stamp.location.seconds } : {}),
+      });
+    for (const id of input.captureIds || []) {
+      if (!captures) throw new AttachmentError('Capture image reader is unavailable', 503);
+      const selected = annotation.captures!.find((item) => item.id === id)!;
+      const { version, bytes: preview } = await captures.preview(
+        annotation.id,
+        id,
+        selected.drawingDigest,
+      );
+      if (
+        version.previewDigest !== selected.previewDigest ||
+        version.baseDigest !== selected.baseDigest ||
+        version.size !== selected.size ||
+        preview.length !== selected.size ||
+        (await captureDigest(preview)) !== selected.previewDigest
+      )
+        throw new AttachmentError('Capture revision integrity check failed', 409);
+      const drawing = await captures.drawing(annotation.id, id, selected.drawingDigest);
+      const comments = visibleCaptureComments(drawing);
+      const where = selected.stamp?.location;
+      segments.push({
+        id: `capture-${id}`,
+        text: [
+          `Capture image: ${selected.label || id}. Visual evidence is supplied separately; this label is not extracted text.`,
+          selected.originSource
+            ? `Source: ${selected.originSource.name}, version ${selected.originSource.version}.`
+            : '',
+          where?.quote || '',
+          comments ? `Visible numbered comments:\n${comments}` : '',
+        ]
+          .filter(Boolean)
+          .join('\n\n'),
+        ...(where?.page !== undefined ? { page: where.page } : {}),
+        ...(where?.seconds !== undefined ? { start: where.seconds } : {}),
+      });
+      preparedImages.push({
+        bytes: preview,
+        image: {
+          id: crypto.randomUUID(),
+          mime: 'image/png',
+          size: preview.length,
+          digest: selected.previewDigest,
+          capture: selected,
+        },
+      });
+    }
     if (annotation.capture && annotation.captures === undefined) {
       const original = await originalBytes(
         files,
@@ -211,11 +276,25 @@ export async function createQuestionAttachment(
       : {}),
     createdAt: new Date().toISOString(),
   });
-  if (bytes)
-    await files.put(attachmentImageKey(input.id, imageId!), bytes, {
-      httpMetadata: { contentType: mime },
-    });
+  if (annotation?.captures !== undefined) {
+    snapshot.images = preparedImages.map((item) => item.image);
+    snapshot.sourceStamps = annotation.stamps;
+  }
+  const budgetError = questionImageBudget([snapshot]);
+  if (budgetError) throw new AttachmentError(budgetError, 413);
+  if (new TextEncoder().encode(JSON.stringify(snapshot)).length > 100 * 1024)
+    throw new AttachmentError(
+      'Attachment metadata exceeds 100 KB. Choose fewer images or shorter source locations.',
+      413,
+    );
+  if (bytes) preparedImages.push({ bytes, image: snapshot.image! });
+  const written: string[] = [];
   try {
+    for (const item of preparedImages) {
+      const assetKey = attachmentImageKey(input.id, item.image.id);
+      written.push(assetKey);
+      await files.put(assetKey, item.bytes, { httpMetadata: { contentType: item.image.mime } });
+    }
     const result = await storage.transaction(async (tx) => {
       const existing = await tx.get<StoredAttachment>(key);
       if (existing) {
@@ -238,10 +317,10 @@ export async function createQuestionAttachment(
       await tx.put(key, { ...snapshot, input: fingerprint });
       return { value: snapshot, published: true };
     });
-    if (imageId && !result.published) await files.delete(attachmentImageKey(input.id, imageId));
+    if (!result.published) await Promise.all(written.map((key) => files.delete(key)));
     return result.value;
   } catch (error) {
-    if (imageId) await files.delete(attachmentImageKey(input.id, imageId));
+    await Promise.all(written.map((key) => files.delete(key)));
     throw error;
   }
 }
@@ -252,18 +331,11 @@ export async function readQuestionAttachments(
   ids: string[],
 ): Promise<AttachmentContent[]> {
   const result: AttachmentContent[] = [];
-  let imageBytes = 0;
   for (const id of attachmentIdsSchema.parse(ids)) {
     const stored = await storage.get<StoredAttachment>(recordKey(id));
     if (!stored || stored.sessionId !== sessionId)
       throw new AttachmentError('Attachment is unavailable in this study session', 409);
     const attachment = questionAttachmentSchema.parse(stored);
-    imageBytes += attachment.image?.size || 0;
-    if (imageBytes > MAX_QUESTION_IMAGE_BYTES)
-      throw new AttachmentError(
-        'Question images exceed 12 MB. Remove an image before sending.',
-        413,
-      );
     const segments: AttachmentSegment[] = [];
     for (let index = 0; index < attachment.segmentCount; index++) {
       const part = await storage.get<AttachmentSegment>(segmentKey(id, index));
@@ -272,6 +344,8 @@ export async function readQuestionAttachments(
     }
     result.push({ attachment, segments });
   }
+  const budgetError = questionImageBudget(result.map((item) => item.attachment));
+  if (budgetError) throw new AttachmentError(budgetError, 413);
   return result;
 }
 
@@ -280,22 +354,43 @@ export async function getQuestionAttachment(storage: Pick<AttachmentStore, 'get'
   if (!value) throw new AttachmentError('Attachment not found', 404);
   return questionAttachmentSchema.parse(value);
 }
-export async function attachmentImageData(files: Files, attachment: QuestionAttachment) {
-  if (!attachment.image) return undefined;
+export async function attachmentImageBytes(
+  files: Files,
+  attachment: QuestionAttachment,
+  selected: AttachmentImage,
+) {
   const bytes = await originalBytes(
     files,
-    attachmentImageKey(attachment.id, attachment.image.id),
+    attachmentImageKey(attachment.id, selected.id),
     MAX_ATTACHMENT_IMAGE_BYTES,
   );
-  const digest = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes.buffer))]
-    .map((value) => value.toString(16).padStart(2, '0'))
-    .join('');
-  if (digest !== attachment.image.digest)
+  if (bytes.length !== selected.size || (await captureDigest(bytes)) !== selected.digest)
     throw new AttachmentError('Attachment image integrity check failed', 409);
+  return bytes;
+}
+export async function attachmentImageData(
+  files: Files,
+  attachment: QuestionAttachment,
+  selected?: AttachmentImage,
+) {
+  const images = attachmentImages(attachment);
+  if (!selected && images.length > 1)
+    throw new AttachmentError('Choose a specific attachment image');
+  selected ||= images[0];
+  if (!selected) return undefined;
+  const bytes = await attachmentImageBytes(files, attachment, selected);
   let binary = '';
   for (let start = 0; start < bytes.length; start += 32768)
     binary += String.fromCharCode(...bytes.subarray(start, start + 32768));
-  return `data:${attachment.image.mime};base64,${btoa(binary)}`;
+  return `data:${selected.mime};base64,${btoa(binary)}`;
+}
+export async function attachmentImagesData(files: Files, attachment: QuestionAttachment) {
+  return Promise.all(
+    attachmentImages(attachment).map(async (image) => ({
+      image,
+      data: (await attachmentImageData(files, attachment, image))!,
+    })),
+  );
 }
 export async function attachmentSegmentPage(
   storage: Pick<AttachmentStore, 'get'>,

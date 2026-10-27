@@ -10,7 +10,14 @@ import type { Annotation, AnnotationSummary } from '../../shared/annotations';
 import { queryAnnotations } from '../annotations/api';
 import type { AnnotationRequest } from '../annotations/AnnotationEditor';
 import { DirectoryTree, type TreeActions } from '../workspace/DirectoryTree';
-import { MAX_QUESTION_ATTACHMENTS, type QuestionAttachment } from '../../shared/tutor-attachments';
+import {
+  attachmentImages,
+  MAX_QUESTION_IMAGES,
+  MAX_QUESTION_IMAGE_BYTES,
+  MAX_QUESTION_ATTACHMENTS,
+  type QuestionAttachment,
+} from '../../shared/tutor-attachments';
+import { capturePreviewUrl } from '../annotations/captureClient';
 const AnnotationEditor = lazy(() => import('../annotations/AnnotationEditor'));
 
 export function AttachmentPicker({
@@ -45,7 +52,9 @@ export function AttachmentPicker({
     [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
     [toPrepare, setToPrepare] = useState<Source | null>(null),
-    [editor, setEditor] = useState<AnnotationRequest | null>(null);
+    [editor, setEditor] = useState<AnnotationRequest | null>(null),
+    [imageNote, setImageNote] = useState<AnnotationSummary | null>(null),
+    [captureIds, setCaptureIds] = useState<string[]>([]);
   const upload = useRef<HTMLInputElement>(null),
     alive = useRef(true);
   const attaching = useRef(false);
@@ -99,7 +108,7 @@ export function AttachmentPicker({
   const attach = async (
     value:
       | { kind: 'file'; sourceId: string; sourceVersion: number }
-      | { kind: 'annotation'; annotationId: string; revision: number },
+      | { kind: 'annotation'; annotationId: string; revision: number; captureIds?: string[] },
   ) => {
     if (attaching.current) return;
     setToPrepare(null);
@@ -159,6 +168,19 @@ export function AttachmentPicker({
     selectedFile.current = file;
     void attach({ kind: 'file', sourceId: file.id, sourceVersion: file.version });
   };
+  function attachNote(note: AnnotationSummary) {
+    if (note.captures?.length) {
+      setImageNote(note);
+      setCaptureIds(note.captures.map((item) => item.id));
+      setError('');
+    } else void attach({ kind: 'annotation', annotationId: note.id, revision: note.revision });
+  }
+  const selectedImages = imageNote?.captures?.filter((item) => captureIds.includes(item.id)) || [],
+    imageCount = chosen.flatMap(attachmentImages).length + selectedImages.length,
+    imageBytes =
+      chosen.flatMap(attachmentImages).reduce((sum, item) => sum + item.size, 0) +
+      selectedImages.reduce((sum, item) => sum + item.size, 0),
+    overBudget = imageCount > MAX_QUESTION_IMAGES || imageBytes > MAX_QUESTION_IMAGE_BYTES;
   return (
     <>
       <Modal
@@ -285,26 +307,18 @@ export function AttachmentPicker({
               {notes
                 .filter((note) => fold(`${note.title} ${note.text}`).includes(fold(query)))
                 .map((note) => (
-                  <button
-                    key={note.id}
-                    type="button"
-                    onClick={() =>
-                      void attach({
-                        kind: 'annotation',
-                        annotationId: note.id,
-                        revision: note.revision,
-                      })
-                    }
-                  >
+                  <button key={note.id} type="button" onClick={() => attachNote(note)}>
                     <strong>{note.title || t.untitledAnnotation}</strong>
                     <span>
                       {note.kind === 'bookmark'
                         ? t.attachmentKind_bookmark
-                        : note.capture
+                        : (note.captures !== undefined ? note.captures.length > 0 : note.capture)
                           ? t.attachmentKind_capture
                           : t.attachmentKind_annotation}{' '}
                       · {t.revision} {note.revision} ·{' '}
-                      {note.capture ? t.attachmentIncludesImage : t.attachmentTextOnly}
+                      {(note.captures !== undefined ? note.captures.length > 0 : note.capture)
+                        ? `${t.attachmentSelectedImages}: ${note.captures?.length || 1}`
+                        : t.attachmentTextOnly}
                     </span>
                     <small>{note.text.slice(0, 120)}</small>
                   </button>
@@ -313,6 +327,75 @@ export function AttachmentPicker({
           )}
         </fieldset>
       </Modal>
+      {imageNote && (
+        <Modal
+          title={t.attachmentSelectImages}
+          close={() => !busy && setImageNote(null)}
+          closeLabel={t.close}
+          className="attachment-image-picker"
+        >
+          <p>
+            {imageNote.title || t.untitledAnnotation} · {t.revision} {imageNote.revision}
+          </p>
+          <p>{t.attachmentSelectImagesHelp}</p>
+          <p className="muted">{t.attachmentLimits}</p>
+          {error && (
+            <p className="form-error" role="alert">
+              {error}
+            </p>
+          )}
+          <fieldset disabled={busy}>
+            <div className="attachment-picker-actions">
+              <Button onClick={() => setCaptureIds(imageNote.captures!.map((item) => item.id))}>
+                {t.attachmentAllImages}
+              </Button>
+              <Button onClick={() => setCaptureIds([])}>{t.attachmentNoImages}</Button>
+            </div>
+            <div className="attachment-image-options">
+              {imageNote.captures!.map((item, index) => (
+                <label key={item.id}>
+                  <input
+                    type="checkbox"
+                    checked={captureIds.includes(item.id)}
+                    onChange={(e) =>
+                      setCaptureIds((old) =>
+                        e.target.checked ? [...old, item.id] : old.filter((id) => id !== item.id),
+                      )
+                    }
+                  />
+                  <img src={capturePreviewUrl(imageNote.id, item)} alt="" />
+                  <span>
+                    {index + 1}. {item.label || t.captureImage}
+                    <small>
+                      {item.width} × {item.height} · {(item.size / 1024).toFixed(0)} KB
+                    </small>
+                  </span>
+                </label>
+              ))}
+            </div>
+            <p role="status">
+              {t.attachmentSelectedImages}: {selectedImages.length} · {imageCount}/
+              {MAX_QUESTION_IMAGES} · {(imageBytes / 1024 / 1024).toFixed(2)}/12 MB
+            </p>
+            <Button
+              variant="primary"
+              disabled={overBudget}
+              onClick={() =>
+                void attach({
+                  kind: 'annotation',
+                  annotationId: imageNote.id,
+                  revision: imageNote.revision,
+                  captureIds: imageNote
+                    .captures!.filter((item) => captureIds.includes(item.id))
+                    .map((item) => item.id),
+                })
+              }
+            >
+              {busy ? t.preparingAttachment : t.attachmentConfirmImages}
+            </Button>
+          </fieldset>
+        </Modal>
+      )}
       {editor && (
         <Suspense fallback={<p role="status">{t.loadingAnnotations}</p>}>
           <AnnotationEditor
@@ -327,7 +410,7 @@ export function AttachmentPicker({
             saved={(note: Annotation) => {
               setEditor(null);
               void changed();
-              void attach({ kind: 'annotation', annotationId: note.id, revision: note.revision });
+              attachNote({ ...note, strokeCount: note.strokes.length });
             }}
           />
         </Suspense>

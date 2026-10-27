@@ -1,5 +1,6 @@
 import { useEffect, useRef, useId, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { X } from 'lucide-react';
+import { createPortal } from 'react-dom';
 
 export function Button({
   variant = 'default',
@@ -75,7 +76,7 @@ export function Modal({
         previous.focus({ preventScroll: true });
     };
   }, []);
-  return (
+  return createPortal(
     <dialog
       ref={ref}
       onCancel={(event) => {
@@ -96,6 +97,7 @@ export function Modal({
         </IconButton>
       </div>
       {children}
-    </dialog>
+    </dialog>,
+    document.body,
   );
 }

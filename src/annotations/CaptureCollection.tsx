@@ -15,7 +15,7 @@ import {
 import { stampIdentity, type PublishedCapture } from '../../shared/captures';
 import type { Catalog, Source } from '../../shared/domain';
 import type { SourceLocation } from '../../shared/locations';
-import { sourceLocationStamp, formatCaptureTime } from '../../shared/capture-source';
+import { sourceLocationStamp } from '../../shared/capture-source';
 import type { TreeActions } from '../workspace/DirectoryTree';
 import { CaptureSourcePicker, type CaptureSourceChoice } from './CaptureSourcePicker';
 import { Button, IconButton, Modal } from '../design/components';
@@ -24,6 +24,8 @@ import { CaptureWorkspace } from './CaptureWorkspace';
 import { CaptureStudio } from './CaptureStudio';
 import { capturePreviewUrl, capturePath } from './captureClient';
 import { api } from '../api';
+import { stampLabel } from './captureLabels';
+export { stampLabel } from './captureLabels';
 import { captureDrawingSchema, type CaptureDrawing } from '../../shared/capture-drawing';
 
 async function normalizedImage(file: File, t: T) {
@@ -346,18 +348,6 @@ export function CaptureCollectionEditor({
     </section>
   );
 }
-export function stampLabel(
-  stamp: { label: string; location: { page?: number; seconds?: number; quote?: string } },
-  t: T,
-) {
-  const where =
-    stamp.location.page !== undefined
-      ? `${t.page} ${stamp.location.page}`
-      : stamp.location.seconds !== undefined
-        ? formatCaptureTime(stamp.location.seconds)
-        : stamp.location.quote?.slice(0, 100) || '';
-  return `${stamp.label} · ${where}`;
-}
 export function CaptureGallery({
   owner,
   items,
@@ -435,6 +425,13 @@ export function CaptureGallery({
           >
             <ZoomIn />
           </IconButton>
+          <a
+            className="button"
+            href={capturePreviewUrl(owner, item)}
+            download={`capture-${item.id}.png`}
+          >
+            {t.captureDownloadImage}
+          </a>
         </div>
         <div className="capture-gallery-scroll" tabIndex={0} aria-label={t.captureGalleryHelp}>
           <img

@@ -68,6 +68,8 @@ import {
 import type { AnnotationRequest } from '../annotations/AnnotationEditor';
 import {
   questionAttachmentSchema,
+  attachmentImages,
+  questionImageBudget,
   MAX_QUESTION_ATTACHMENTS,
   type QuestionAttachment,
 } from '../../shared/tutor-attachments';
@@ -953,6 +955,11 @@ function ConversationThread({
         return;
       }
     }
+    const imageBudgetError = questionImageBudget(attachmentRef.current);
+    if (imageBudgetError) {
+      onError(imageBudgetError);
+      return;
+    }
     const emptyStamp = crypto.randomUUID();
     const emptyWebStamp = crypto.randomUUID();
     const sent: TutorSubmission = {
@@ -1242,7 +1249,11 @@ function ConversationThread({
                   <Paperclip size={14} />
                   {item.name}
                   {item.annotationRevision ? ` · ${t.revision} ${item.annotationRevision}` : ''}
-                  <small>{item.image ? t.attachmentIncludesImage : t.attachmentTextOnly}</small>
+                  <small>
+                    {attachmentImages(item).length
+                      ? `${t.attachmentSelectedImages}: ${attachmentImages(item).length}`
+                      : t.attachmentTextOnly}
+                  </small>
                 </button>
                 <IconButton
                   label={`${t.removeQuestionAttachment}: ${item.name}`}

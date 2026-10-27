@@ -27,14 +27,22 @@ const en = {
   attachmentKind_bookmark: 'Bookmark',
   attachmentKind_capture: 'Annotated capture',
   attachmentDisclosure:
-    'Attachments are used for this question. Review each saved snapshot before sending; its selected text and image will be sent to Meta along with your persistent references.',
+    'Attachments are used for this question. Review each saved snapshot before sending; its selected text and images will be sent to Meta along with your persistent references.',
   attachmentLimits:
-    'Up to 6 attachments: 1 MB of text each, 3 MB per image and 12 MB of images per question. PDFs and recordings use prepared text or transcripts; page images and video frames need a capture. Preparation is a separate action.',
+    'Up to 6 attachments: 1 MB of text each, 3 MB per image, up to 48 images and 12 MB of images per question. PDFs and recordings use prepared text or transcripts; page images and video frames need a capture. Preparation is a separate action.',
   attachmentSnapshotNotice:
     'This saved copy stays unchanged when the original is edited. Only snapshots selected in the current draft are sent; viewing this copy stays local.',
   attachmentPassages: 'passages',
   attachmentIncludesImage: 'Text and image',
   attachmentTextOnly: 'Text only',
+  attachmentSelectImages: 'Choose capture images',
+  attachmentSelectImagesHelp:
+    'The note text and source locations are included. Choose the images to send for this question; clear all for text only. Only flattened images and visible numbered comments are included.',
+  attachmentSelectedImages: 'Selected images',
+  attachmentAllImages: 'Select all images',
+  attachmentNoImages: 'Clear image selection',
+  attachmentConfirmImages: 'Attach selected evidence',
+  captureDownloadImage: 'Download flattened PNG',
   attachmentTime: 'Source time',
   attachmentSavedImage: 'Exact saved image for this attachment, including its drawing',
   loadMoreAttachments: 'Read more passages',
@@ -1007,14 +1015,22 @@ const es: Dictionary = {
   attachmentKind_bookmark: 'Marcador',
   attachmentKind_capture: 'Captura anotada',
   attachmentDisclosure:
-    'Los adjuntos se usan en esta pregunta. Revisa cada copia guardada antes de enviar; su texto e imagen se enviarán a Meta junto con tus referencias permanentes.',
+    'Los adjuntos se usan en esta pregunta. Revisa cada copia guardada antes de enviar; su texto e imágenes se enviarán a Meta junto con tus referencias permanentes.',
   attachmentLimits:
-    'Hasta 6 adjuntos: 1 MB de texto cada uno, 3 MB por imagen y 12 MB de imágenes por pregunta. Los PDF y grabaciones usan texto o transcripciones preparados; las páginas y fotogramas necesitan una captura. La preparación es una acción aparte.',
+    'Hasta 6 adjuntos: 1 MB de texto cada uno, 3 MB por imagen, hasta 48 imágenes y 12 MB de imágenes por pregunta. Los PDF y grabaciones usan texto o transcripciones preparados; las páginas y fotogramas necesitan una captura. La preparación es una acción aparte.',
   attachmentSnapshotNotice:
     'Esta copia guardada no cambia al editar el original. Solo se envían las copias seleccionadas en el borrador actual; consultar esta copia es local.',
   attachmentPassages: 'fragmentos',
   attachmentIncludesImage: 'Texto e imagen',
   attachmentTextOnly: 'Solo texto',
+  attachmentSelectImages: 'Elegir imágenes de captura',
+  attachmentSelectImagesHelp:
+    'Se incluyen el texto y las ubicaciones de la nota. Elige las imágenes que enviarás en esta pregunta; desmarca todas para adjuntar solo texto. Solo se incluyen imágenes aplanadas y comentarios numerados visibles.',
+  attachmentSelectedImages: 'Imágenes seleccionadas',
+  attachmentAllImages: 'Seleccionar todas las imágenes',
+  attachmentNoImages: 'Desmarcar todas las imágenes',
+  attachmentConfirmImages: 'Adjuntar evidencia seleccionada',
+  captureDownloadImage: 'Descargar PNG aplanado',
   attachmentTime: 'Tiempo en la fuente',
   attachmentSavedImage: 'Imagen exacta guardada para este adjunto, con su dibujo',
   loadMoreAttachments: 'Leer más fragmentos',

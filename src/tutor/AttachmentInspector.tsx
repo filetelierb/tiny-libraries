@@ -4,7 +4,13 @@ import { Button, Modal } from '../design/components';
 import type { T } from '../i18n';
 import type { Catalog, Segment } from '../../shared/domain';
 import { sourceState } from '../../shared/directories';
-import type { QuestionAttachment, AttachmentSegment } from '../../shared/tutor-attachments';
+import {
+  attachmentImages,
+  type QuestionAttachment,
+  type AttachmentSegment,
+} from '../../shared/tutor-attachments';
+import { stampLabel } from '../annotations/captureLabels';
+import { formatCaptureTime } from '../../shared/capture-source';
 
 export function AttachmentInspector({
   id,
@@ -68,7 +74,9 @@ export function AttachmentInspector({
           <p>
             {t[`attachmentKind_${attachment.kind}`]} · {t.attachmentPassages}:{' '}
             {attachment.segmentCount}
-            {attachment.image ? ` · ${t.attachmentIncludesImage}` : ` · ${t.attachmentTextOnly}`}
+            {attachmentImages(attachment).length
+              ? ` · ${t.attachmentSelectedImages}: ${attachmentImages(attachment).length}`
+              : ` · ${t.attachmentTextOnly}`}
           </p>
           {attachment.annotationRevision && (
             <p>
@@ -82,15 +90,68 @@ export function AttachmentInspector({
           )}
           {attachment.location.seconds != null && (
             <p>
-              {t.attachmentTime} {attachment.location.seconds.toFixed(1)}s
+              {t.attachmentTime} {formatCaptureTime(attachment.location.seconds)}
             </p>
           )}
-          {attachment.image && (
-            <img
-              className="attachment-preview-image"
-              src={`/api/tutor-attachments/${id}/image`}
-              alt={t.attachmentSavedImage}
-            />
+          {attachmentImages(attachment).map((image, index) => (
+            <figure key={image.id} className="attachment-image-snapshot">
+              <img
+                className="attachment-preview-image"
+                src={`/api/tutor-attachments/${id}/image?id=${image.id}`}
+                alt={`${t.attachmentSavedImage} ${index + 1}`}
+              />
+              <figcaption>
+                {index + 1}. {image.capture?.label || attachment.name}
+              </figcaption>
+              {image.capture?.stamp && <p>{stampLabel(image.capture.stamp, t)}</p>}
+              {image.capture?.originSource && (
+                <p>
+                  {image.capture.originSource.name} · {t.sourceVersion}{' '}
+                  {image.capture.originSource.version}
+                </p>
+              )}
+              <a
+                className="button"
+                href={`/api/tutor-attachments/${id}/image?id=${image.id}`}
+                download={`capture-${index + 1}.${image.mime === 'image/png' ? 'png' : 'jpg'}`}
+              >
+                {t.download}
+              </a>
+            </figure>
+          ))}
+          {!!attachment.sourceStamps?.length && (
+            <section aria-label={t.captureLocations}>
+              <strong>{t.captureLocations}</strong>
+              {attachment.sourceStamps.map((stamp) => {
+                const original = catalog.files.find((item) => item.id === stamp.sourceId),
+                  valid =
+                    original &&
+                    original.version === stamp.sourceVersion &&
+                    sourceState(original, catalog.directories) !== 'trash';
+                return (
+                  <p key={stamp.id}>
+                    <Button
+                      disabled={!valid}
+                      onClick={() => {
+                        close();
+                        cite(stamp.sourceId, {
+                          id: stamp.id,
+                          text: stamp.location.quote || '',
+                          ...(stamp.location.page !== undefined
+                            ? { page: stamp.location.page }
+                            : {}),
+                          ...(stamp.location.seconds !== undefined
+                            ? { start: stamp.location.seconds }
+                            : {}),
+                        });
+                      }}
+                    >
+                      {stampLabel(stamp, t)}
+                    </Button>
+                  </p>
+                );
+              })}
+            </section>
           )}
           <div className="attachment-snapshot-text">
             {parts.map((part) => (
@@ -99,7 +160,7 @@ export function AttachmentInspector({
                   {part.page
                     ? `${t.page} ${part.page}`
                     : part.start != null
-                      ? `${part.start.toFixed(1)}s`
+                      ? formatCaptureTime(part.start)
                       : part.id.split('.').at(-1)}
                 </small>
                 <p>{part.text}</p>

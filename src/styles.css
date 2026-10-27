@@ -5684,3 +5684,53 @@ body:has(.panel-resizer.resizing) {
   min-width: 44px;
   flex-basis: 44px;
 }
+/* Image evidence selection stays readable in narrow attachment dialogs. */
+.attachment-image-options {
+  display: grid;
+  gap: 0.6rem;
+  margin-block: 1rem;
+}
+.attachment-image-options label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 64px;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+.attachment-image-options input {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+}
+.attachment-image-options img {
+  width: 76px;
+  height: 56px;
+  object-fit: contain;
+  background: var(--surface);
+}
+.attachment-image-options span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.attachment-image-options small {
+  display: block;
+}
+.attachment-image-snapshot {
+  margin: 1rem 0;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+@media (max-width: 640px), (max-height: 480px) {
+  .attachment-image-picker .button,
+  .attachment-image-picker .icon-button,
+  .attachment-inspector .button,
+  .attachment-inspector .icon-button,
+  .capture-gallery .button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
