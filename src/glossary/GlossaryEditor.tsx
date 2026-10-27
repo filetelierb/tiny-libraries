@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, X, FolderOpen } from 'lucide-react';
+import { ArrowLeft, FolderOpen, Link as LinkIcon, LoaderCircle, Plus, Save, X } from 'lucide-react';
 import type { Catalog, ConceptSource, PublicLearning, Source } from '../../shared/domain';
 import { normalizeConcept, type GlossaryEntry, type GlossarySense } from '../../shared/glossary';
 import { api } from '../api';
@@ -112,10 +112,10 @@ export function GlossaryEditor({
       }}
     >
       <header>
+        <IconButton label={t.cancel} disabled={pending} onClick={cancel}>
+          <ArrowLeft />
+        </IconButton>
         <h3>{initial.version ? t.editConcept : t.newConcept}</h3>
-        <Button disabled={pending} onClick={cancel}>
-          {t.cancel}
-        </Button>
       </header>
       <fieldset disabled={pending}>
         <label>
@@ -150,7 +150,7 @@ export function GlossaryEditor({
                     setValue((v) => ({ ...v, senses: v.senses.filter((s) => s.id !== sense.id) }))
                   }
                 >
-                  <X size={16} />
+                  <X />
                 </IconButton>
               )}
             </header>
@@ -181,21 +181,30 @@ export function GlossaryEditor({
               {t.reviewed}
             </label>
             <h5>{t.linkedSynonyms}</h5>
-            {sense.synonyms.map((id) => (
-              <div className="glossary-edit-link" key={id}>
-                <span>
-                  {catalog.concepts.find((c) => c.id === id)?.term || t.sourceUnavailable}
-                </span>
-                <IconButton
-                  label={`${t.remove} ${catalog.concepts.find((c) => c.id === id)?.term || ''}`}
-                  onClick={() =>
-                    patchSense(sense.id, { synonyms: sense.synonyms.filter((s) => s !== id) })
-                  }
-                >
-                  <X size={14} />
-                </IconButton>
+            {!!sense.synonyms.length && (
+              <div className="glossary-chips">
+                {sense.synonyms.map((id) => {
+                  const term = catalog.concepts.find((c) => c.id === id)?.term;
+                  return (
+                    <span className="glossary-chip" key={id}>
+                      <LinkIcon />
+                      {term || t.sourceUnavailable}
+                      <button
+                        type="button"
+                        aria-label={`${t.remove} ${term || ''}`}
+                        onClick={() =>
+                          patchSense(sense.id, {
+                            synonyms: sense.synonyms.filter((s) => s !== id),
+                          })
+                        }
+                      >
+                        <X />
+                      </button>
+                    </span>
+                  );
+                })}
               </div>
-            ))}
+            )}
             <label>
               {t.addSynonym}
               <select
@@ -333,10 +342,11 @@ export function GlossaryEditor({
         </p>
       )}
       <footer>
-        <Button disabled={pending} onClick={cancel}>
+        <Button variant="ghost" disabled={pending} onClick={cancel}>
           {t.cancel}
         </Button>
         <Button type="submit" variant="primary" disabled={pending}>
+          {pending ? <LoaderCircle className="spin" /> : <Save />}
           {pending ? t.saving : t.saveConcept}
         </Button>
       </footer>

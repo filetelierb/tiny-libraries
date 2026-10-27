@@ -7340,3 +7340,130 @@ body:has(.panel-resizer.resizing) {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+
+/* Glossary concept editor. */
+.glossary-editor > header {
+  justify-content: flex-start;
+  margin: -20px -17px 0;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.glossary-editor > header > .icon-button {
+  width: 28px;
+  min-width: 28px;
+  min-height: 28px;
+}
+.glossary-editor > header h3 {
+  font-size: 16px;
+  font-weight: 600;
+}
+.glossary-editor fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.glossary-editor label {
+  gap: 4px;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 500;
+}
+.glossary-editor input:not([type='checkbox']) {
+  min-height: 32px;
+  font-size: 14px;
+}
+.glossary-editor select {
+  min-height: 36px;
+  font-size: 12px;
+}
+.glossary-editor textarea {
+  min-height: 64px;
+  font-size: 14px;
+}
+.glossary-editor .check-row {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  font-weight: 400;
+}
+.glossary-editor h5 {
+  margin: 4px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-text);
+}
+.glossary-edit-sense {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: color-mix(in oklch, var(--muted) 20%, transparent);
+}
+.glossary-edit-sense > header .icon-button {
+  width: 28px;
+  min-width: 28px;
+  min-height: 28px;
+}
+.glossary-edit-sense h4 {
+  font-size: 14px;
+  font-weight: 600;
+}
+.glossary-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px 2px 10px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--card);
+  font-size: 12px;
+}
+.glossary-chip > svg {
+  width: 14px;
+  height: 14px;
+  color: var(--primary);
+}
+.glossary-chip > button {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  color: var(--muted-text);
+}
+.glossary-chip > button svg {
+  width: 12px;
+  height: 12px;
+}
+.glossary-edit-link {
+  padding: 6px 4px 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--card);
+  font-size: 12px;
+}
+.glossary-edit-link .icon-button {
+  width: 28px;
+  min-width: 28px;
+  min-height: 28px;
+}
+.glossary-edit-relation {
+  padding: 8px;
+  border-radius: 14px;
+  background: var(--card);
+}
+.glossary-edit-relation .glossary-edit-link {
+  padding: 0 0 0 2px;
+  border: 0;
+}
+.glossary-editor footer {
+  position: sticky;
+  bottom: -20px;
+  margin: 12px -17px -20px;
+  padding: 12px 17px;
+  border-top: 1px solid var(--border);
+  background: var(--card);
+}
