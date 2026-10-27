@@ -20,6 +20,10 @@ export type ChapterQuizRequest = {
   chapter: StudyChapter;
   wasPlaying: boolean;
   reinforcement?: { id: string; version: number };
+  /** Questions generated for an artifact chapter rather than the source's own chapters. */
+  artifactStudy?: boolean;
+  /** Chapter number when the chapter is not one of the learning's own chapters. */
+  ordinal?: number;
 };
 export function ChapterQuiz({
   request,
@@ -104,6 +108,7 @@ export function ChapterQuiz({
                 reinforcementVersion: request.reinforcement.version,
               }
             : {}),
+          ...(request.artifactStudy ? { artifactStudy: true } : {}),
           ...(q.kind === 'short' ? { answer } : { selected: answer }),
         });
         values.push(value);
@@ -128,7 +133,8 @@ export function ChapterQuiz({
     <Modal title={t.quiz} close={() => close(false)} closeLabel={t.closeQuiz}>
       <div className="chapter-quiz-heading">
         <p>
-          {t.quiz} · {t.chapter} {learning.synthesis.chapters.indexOf(chapter) + 1} · {source.name}
+          {t.quiz} · {t.chapter}{' '}
+          {request.ordinal ?? learning.synthesis.chapters.indexOf(chapter) + 1} · {source.name}
         </p>
         <h3>{chapter.title}</h3>
       </div>

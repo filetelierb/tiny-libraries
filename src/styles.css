@@ -8555,7 +8555,19 @@ body:has(.panel-resizer.resizing) {
   background: var(--background);
   font-size: 0.86rem;
 }
-.artifact-outline > button {
+.artifact-outline-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.artifact-outline-head .button {
+  min-height: 26px;
+  height: 26px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+.artifact-outline-head > button:first-child {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -9206,4 +9218,76 @@ body:has(.panel-resizer.resizing) {
 }
 .artifact-widget-invalid {
   opacity: 0.7;
+}
+
+/* Artifact chapter study tools */
+.artifact-outline .chapter-actions {
+  padding: 2px 0 4px 18px;
+  font-family: var(--font-heading);
+}
+.artifact-outline .chapter-actions .button {
+  color: var(--primary);
+}
+.artifact-study-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 8px 0 4px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklch, var(--muted), transparent 60%);
+  font-family: var(--font-heading);
+  font-size: 12px;
+  color: var(--muted-text);
+}
+.artifact-study-status p {
+  margin: 0;
+}
+.artifact-study-status p.failed {
+  color: var(--danger);
+}
+.artifact-study-status .button {
+  flex-shrink: 0;
+  min-height: 28px;
+  height: 28px;
+  font-size: 12px;
+}
+.artifact-cards {
+  display: grid;
+  gap: 12px;
+}
+.artifact-cards-progress {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: 12px;
+  color: var(--muted-text);
+}
+.artifact-card-face {
+  display: grid;
+  gap: 12px;
+  min-height: 160px;
+  align-content: center;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  text-align: center;
+}
+.artifact-card-front {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+.artifact-card-back {
+  margin: 0;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border);
+  color: var(--muted-text);
+}
+.artifact-cards-nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
 }

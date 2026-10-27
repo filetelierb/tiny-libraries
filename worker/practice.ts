@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { artifactQuestion } from './artifact-study';
 import type { Attempt, Directory, Learning, Question, Segment, Source } from '../shared/domain';
 import { sourceState } from '../shared/directories';
 import type { Reinforcement } from '../shared/review';
@@ -25,6 +26,7 @@ export const attemptInputSchema = z
     requestId: z.string().uuid(),
     reinforcementId: z.string().uuid().optional(),
     reinforcementVersion: z.number().int().positive().optional(),
+    artifactStudy: z.literal(true).optional(),
   })
   .refine(
     (v) => !!v.reinforcementId === !!v.reinforcementVersion,
@@ -52,6 +54,15 @@ async function sourceQuestion(tx: Store, input: Input) {
   const directories = [...(await tx.list<Directory>({ prefix: 'directory:' })).values()];
   if (!source || sourceState(source, directories) === 'trash')
     throw new PracticeError('Restore the source before checking an answer.', 409);
+  if (input.artifactStudy) {
+    const found = await artifactQuestion(tx, source.id, input);
+    if (!found)
+      throw new PracticeError(
+        'This artifact quiz changed. Reopen it from the chapter index before answering.',
+        409,
+      );
+    return found;
+  }
   if (input.reinforcementId) {
     const record = await tx.get<Reinforcement>(`reinforcement:${input.reinforcementId}`);
     const question = record?.plan?.questions.find((q) => q.id === input.questionId);

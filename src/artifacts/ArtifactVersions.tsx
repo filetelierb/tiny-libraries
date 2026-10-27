@@ -20,7 +20,8 @@ export function ArtifactVersions({
   latest: Artifact;
   t: T;
   header: ReactNode;
-  render: (artifact: Artifact) => ReactNode;
+  /** `latest` is false while an older version is shown read-only. */
+  render: (artifact: Artifact, latest: boolean) => ReactNode;
   onSaved: () => void;
 }) {
   const [versions, setVersions] = useState<ArtifactRevisionSummary[]>([]),
@@ -75,7 +76,7 @@ export function ArtifactVersions({
             {error}
           </p>
         )}
-        {render(shown)}
+        {render(shown, !selected)}
       </div>
       <footer className="artifact-versions" aria-label={t.artifactVersions}>
         <span>

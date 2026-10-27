@@ -1596,8 +1596,31 @@ export function App() {
                                   {t.originalSource}
                                 </Button>
                               }
-                              render={(shown) => (
+                              render={(shown, latest) => (
                                 <GeneratedArtifact
+                                  study={
+                                    latest
+                                      ? {
+                                          sourceId: source.id,
+                                          attempts: catalog.attempts,
+                                          quiz: (chapter, version) =>
+                                            setQuizRequest({
+                                              source,
+                                              learning: { ...material, createdAt: version },
+                                              chapter: {
+                                                id: chapter.id,
+                                                title: chapter.title,
+                                                summary: chapter.summary,
+                                                segmentIds: chapter.segmentIds,
+                                                questions: chapter.questions,
+                                              },
+                                              wasPlaying: false,
+                                              artifactStudy: true,
+                                              ordinal: chapter.index + 1,
+                                            }),
+                                        }
+                                      : undefined
+                                  }
                                   artifact={shown}
                                   t={t}
                                   segments={material.segments}

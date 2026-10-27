@@ -28,6 +28,7 @@ import {
   gradeShortAnswer,
   analyzeConcepts,
   generateCards,
+  generateArtifactStudy,
   generateReinforcement,
   generateAssessmentBatch,
   analyzeAssessment,
@@ -35,6 +36,7 @@ import {
 } from './meta';
 import { cardSnapshot, startCardDecks, rateCard, CardError } from './flashcards';
 import { visualKey } from '../shared/artifact-widgets';
+import { artifactStudySnapshot, deleteArtifactStudy, startArtifactStudy } from './artifact-study';
 import {
   ArtifactRevisionError,
   deleteRevisions,
@@ -254,6 +256,7 @@ export class Library extends DurableObject<Env> {
           for (const file of target.files) {
             await storage.delete([`file:${file.id}`, `learning:${file.id}`]);
             await deleteRevisions(storage, file.id);
+            await deleteArtifactStudy(storage, file.id);
           }
           for (const directory of target.directories)
             await storage.delete(`directory:${directory.id}`);
@@ -561,6 +564,30 @@ export class Library extends DurableObject<Env> {
               ? { ...value, synthesis: { ...value.synthesis, artifact: latest.artifact } }
               : value,
           ),
+        );
+      }
+      const studyMatch = path.match(/^\/api\/artifacts\/([a-f0-9-]+)\/study$/);
+      if (studyMatch && request.method === 'GET')
+        return json(await artifactStudySnapshot(this.ctx.storage, studyMatch[1]));
+      if (studyMatch && request.method === 'POST') {
+        const settings = await this.settings();
+        return json(
+          await startArtifactStudy(this.ctx.storage, studyMatch[1], {
+            owner: this.executionId,
+            start: (task) => this.ctx.waitUntil(task),
+            generate: async (learning, chapters) => {
+              const key = await this.ctx.storage.get<string>('apiKey');
+              if (!key) throw new ApiError('Add a Meta API key in Settings', 409);
+              return generateArtifactStudy(
+                key,
+                settings.model,
+                learning,
+                chapters,
+                bridgedFetch(this.env),
+              );
+            },
+          }),
+          202,
         );
       }
       const revisionsMatch = path.match(/^\/api\/artifacts\/([a-f0-9-]+)\/revisions(?:\/(\d+))?$/);
