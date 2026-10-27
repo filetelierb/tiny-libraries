@@ -7,12 +7,14 @@ import {
   FileStack,
   LibraryBig,
   BookOpen,
+  RefreshCw,
+  Search,
 } from 'lucide-react';
 import type { T } from '../i18n';
 import type { AssessmentSummary } from '../../shared/assessments';
 import type { Source, StudySession } from '../../shared/domain';
 import { api } from '../api';
-import { Button } from '../design/components';
+import { Button, IconButton } from '../design/components';
 
 export const libraryTabs = ['library', 'sessions', 'tests'] as const;
 export type LibraryTab = (typeof libraryTabs)[number];
@@ -108,6 +110,7 @@ export function PanelSection({
   title,
   icon,
   actions,
+  count,
   t,
   grow = false,
   defaultOpen = true,
@@ -117,6 +120,7 @@ export function PanelSection({
   title: string;
   icon?: ReactNode;
   actions?: ReactNode;
+  count?: number;
   t: T;
   grow?: boolean;
   defaultOpen?: boolean;
@@ -152,6 +156,7 @@ export function PanelSection({
           {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
           {icon}
           <span>{title}</span>
+          {count !== undefined && <small className="panel-section-count">{count}</small>}
         </button>
         {actions && <div className="panel-section-actions">{actions}</div>}
       </div>
@@ -184,6 +189,8 @@ export function ArtifactList({
 }) {
   const [items, setItems] = useState<LibraryArtifact[] | null>(null);
   const [error, setError] = useState('');
+  const [query, setQuery] = useState(''),
+    [reload, setReload] = useState(0);
   useEffect(() => {
     let live = true;
     api<LibraryArtifact[]>('/artifacts')
@@ -192,29 +199,62 @@ export function ArtifactList({
     return () => {
       live = false;
     };
-  }, [refreshKey]);
+  }, [refreshKey, reload]);
   const byId = new Map(files.map((file) => [file.id, file]));
-  const visible = (items || []).filter((item) => byId.has(item.sourceId));
-  if (error) return <p className="panel-section-note error">{error}</p>;
+  const available = (items || []).filter((item) => byId.has(item.sourceId));
+  const needle = query.trim().toLocaleLowerCase();
+  const visible = available.filter((item) =>
+    `${item.title} ${byId.get(item.sourceId)!.name}`.toLocaleLowerCase().includes(needle),
+  );
+  const toolbar = (
+    <div className="artifact-list-tools">
+      <label className="search-field">
+        <Search size={14} aria-hidden="true" />
+        <input
+          type="search"
+          aria-label={t.filterArtifacts}
+          placeholder={t.filterArtifacts}
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+      </label>
+      <IconButton label={t.refreshArtifacts} onClick={() => setReload((value) => value + 1)}>
+        <RefreshCw />
+      </IconButton>
+    </div>
+  );
+  if (error)
+    return (
+      <>
+        {toolbar}
+        <p className="panel-section-note error" role="alert">
+          {error}
+        </p>
+      </>
+    );
   if (!items) return <p className="panel-section-note">{t.loading}</p>;
-  if (!visible.length) return <p className="panel-section-note">{t.noLibraryArtifacts}</p>;
+  if (!available.length) return <p className="panel-section-note">{t.noLibraryArtifacts}</p>;
   return (
-    <ul className="artifact-list">
-      {visible.map((item) => {
-        const file = byId.get(item.sourceId)!;
-        return (
-          <li key={item.sourceId}>
-            <button type="button" onClick={() => open(file)}>
-              <FileStack size={16} aria-hidden="true" />
-              <span>
-                <span>{item.title}</span>
-                <small title={file.name}>{file.name}</small>
-              </span>
-            </button>
-          </li>
-        );
-      })}
-    </ul>
+    <>
+      {toolbar}
+      {!visible.length && <p className="panel-section-note">{t.noResults}</p>}
+      <ul className="artifact-list">
+        {visible.map((item) => {
+          const file = byId.get(item.sourceId)!;
+          return (
+            <li key={item.sourceId}>
+              <button type="button" onClick={() => open(file)}>
+                <FileStack size={16} aria-hidden="true" />
+                <span>
+                  <span>{item.title}</span>
+                  <small title={file.name}>{file.name}</small>
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </>
   );
 }
 

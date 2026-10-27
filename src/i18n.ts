@@ -664,6 +664,8 @@ const en = {
   generalTutorNotice:
     'No library references are attached. You can ask general study questions or attach prepared files.',
   referenceLimit: 'A conversation can use up to 20 references.',
+  filterArtifacts: 'Filter artifacts…',
+  refreshArtifacts: 'Refresh artifacts',
   evidenceUnavailable:
     'This source location is unavailable. Restore the source or prepare it again.',
   sessionOptions: 'Session options',
@@ -1706,6 +1708,8 @@ const es: Dictionary = {
   generalTutorNotice:
     'No hay referencias adjuntas. Puedes hacer preguntas generales de estudio o adjuntar archivos preparados.',
   referenceLimit: 'Cada conversación admite hasta 20 referencias.',
+  filterArtifacts: 'Filtrar artefactos…',
+  refreshArtifacts: 'Actualizar artefactos',
   evidenceUnavailable:
     'Esta ubicación no está disponible. Restaura la fuente o vuelve a prepararla.',
   sessionOptions: 'Opciones de sesión',

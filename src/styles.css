@@ -7865,3 +7865,21 @@ body:has(.panel-resizer.resizing) {
   border-color: var(--primary);
   box-shadow: 0 0 0 2px color-mix(in oklch, var(--primary), transparent 70%);
 }
+.panel-section-count {
+  margin-left: auto;
+  padding-left: 6px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted-text);
+  font-variant-numeric: tabular-nums;
+}
+.artifact-list-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 10px 8px;
+}
+.artifact-list-tools .search-field {
+  flex: 1;
+  min-width: 0;
+}

@@ -823,7 +823,16 @@ export function App() {
                   <SettingsIcon />
                 </IconButton>
               </div>
-              <PanelSection id="library-files" title={t.files} t={t} grow>
+              <PanelSection
+                id="library-files"
+                title={t.files}
+                count={
+                  catalog.files.filter((f) => sourceState(f, catalog.directories) === 'files')
+                    .length
+                }
+                t={t}
+                grow
+              >
                 <div className="file-tree">
                   <DirectoryTree
                     directories={catalog.directories}
@@ -855,6 +864,10 @@ export function App() {
                 id="library-archived"
                 title={t.archived}
                 icon={<Archive size={13} />}
+                count={
+                  catalog.files.filter((f) => sourceState(f, catalog.directories) === 'archived')
+                    .length
+                }
                 t={t}
                 defaultOpen={false}
               >
@@ -876,6 +889,10 @@ export function App() {
                 id="library-trash"
                 title={t.trash}
                 icon={<Trash2 size={13} />}
+                count={
+                  catalog.files.filter((f) => sourceState(f, catalog.directories) === 'trash')
+                    .length
+                }
                 t={t}
                 defaultOpen={false}
               >
