@@ -22,6 +22,9 @@ import {
   readPanelPreferences,
   resolvePanels,
   PANEL_MIN,
+  PANEL_DEFAULT,
+  READER_MIN,
+  PANEL_MAX,
   panelsForSplit,
 } from '../src/workspace/layout';
 
@@ -125,7 +128,7 @@ test('closing the active tab selects its neighbor; closing the final tab clears 
 
 test('invalid layout preferences recover and saved widths stay bounded', () => {
   assert.equal(readPanelPreferences('broken JSON', 1400).left.pinned, true);
-  assert.equal(readPanelPreferences('null', 1400).right.width, 340);
+  assert.equal(readPanelPreferences('null', 1400).right.width, PANEL_DEFAULT.right);
   const preferences = readPanelPreferences(
     JSON.stringify({
       left: { width: -100, pinned: false, open: true },
@@ -134,7 +137,7 @@ test('invalid layout preferences recover and saved widths stay bounded', () => {
     1400,
   );
   assert.equal(preferences.left.width, PANEL_MIN.left);
-  assert.equal(preferences.right.width, 600);
+  assert.equal(preferences.right.width, PANEL_MAX.right);
   assert.equal(preferences.left.pinned, false);
   assert.equal(preferences.right.open, false);
 });
@@ -151,7 +154,7 @@ test('resizing a viewport retains reading room without changing saved preference
     const layout = resolvePanels(preferences, width);
     assert.ok(layout.left.width >= 240);
     assert.ok(layout.right.width >= 280);
-    assert.ok(width - layout.left.width - layout.right.width - 12 >= 360);
+    assert.ok(width - layout.left.width - layout.right.width - 12 >= READER_MIN);
   }
   const mobile = resolvePanels(preferences, 390);
   assert.equal(mobile.left.docked, false);

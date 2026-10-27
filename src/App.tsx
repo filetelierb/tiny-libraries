@@ -2420,7 +2420,9 @@ function TextModal({
           <Button variant="primary" type="submit" disabled={!value.trim() || pending}>
             {t.save}
           </Button>
-          <Button onClick={close}>{t.cancel}</Button>
+          <Button variant="ghost" onClick={close}>
+            {t.cancel}
+          </Button>
         </div>
       </form>
     </Modal>
@@ -2485,7 +2487,7 @@ function TrashModal({
           <Trash2 size={16} />
           {t.moveToTrash}
         </Button>
-        <Button disabled={pending} onClick={close}>
+        <Button variant="ghost" disabled={pending} onClick={close}>
           {t.cancel}
         </Button>
       </div>

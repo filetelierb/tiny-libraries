@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, Columns2, MoreHorizontal, Pencil, Pin, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Columns2, Pencil, Pin, X } from 'lucide-react';
 import type { Source } from '../../shared/domain';
 import { IconButton } from '../design/components';
 import { ResourceIcon } from '../design/ResourceIcon';
@@ -262,36 +262,6 @@ export function ResourceTabs({
                 <span>{label}</span>
                 {tab.preview && <span className="sr-only"> · {t.preview}</span>}
               </button>
-              {tab.preview && (
-                <IconButton label={`${t.keepOpen}: ${label}`} onClick={() => keep(tab.id)}>
-                  <Pin size={12} />
-                </IconButton>
-              )}
-              <IconButton
-                label={`${t.tabActions}: ${label}`}
-                aria-haspopup="menu"
-                aria-expanded={expanded}
-                aria-controls={expanded ? menuId : undefined}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  if (expanded) closeMenu();
-                  else
-                    setContext({ tabId: tab.id, element: event.currentTarget, focusLast: false });
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    setContext({
-                      tabId: tab.id,
-                      element: event.currentTarget,
-                      focusLast: event.key === 'ArrowUp',
-                    });
-                  }
-                }}
-              >
-                <MoreHorizontal size={12} />
-              </IconButton>
               <IconButton
                 label={`${t.close} ${label}`}
                 onClick={() => {

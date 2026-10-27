@@ -2,11 +2,11 @@ export type Side = 'left' | 'right';
 export type PanelPreference = { open: boolean; pinned: boolean; width: number };
 export type PanelPreferences = Record<Side, PanelPreference>;
 export const PANEL_STORAGE_KEY = 'tl:panels:v1';
-export const PANEL_MIN = { left: 240, right: 280 };
-export const PANEL_MAX = { left: 520, right: 600 };
-export const PANEL_DEFAULT = { left: 290, right: 340 };
+export const PANEL_MIN = { left: 220, right: 280 };
+export const PANEL_MAX = { left: 520, right: 720 };
+export const PANEL_DEFAULT = { left: 300, right: 360 };
 export const DRAWER_BREAKPOINT = 960;
-export const READER_MIN = 360;
+export const READER_MIN = 280;
 export const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
 
