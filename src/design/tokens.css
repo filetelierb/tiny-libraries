@@ -2,6 +2,8 @@
   --background: oklch(0.975 0.012 88);
   --foreground: oklch(0.22 0.035 244);
   --surface: oklch(0.995 0.006 88);
+  --card: var(--surface);
+  --popover: var(--surface);
   --primary: oklch(0.48 0.105 186);
   --on-primary: oklch(0.99 0.01 180);
   --secondary: oklch(0.92 0.025 190);

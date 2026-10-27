@@ -12,7 +12,7 @@ import {
   Paperclip,
   Globe,
   Globe2,
-  ListPlus,
+  CornerDownRight,
   StickyNote,
 } from 'lucide-react';
 import { readWebDraft, type WebDraft } from '../../shared/tutor-web';
@@ -1241,16 +1241,16 @@ function ConversationThread({
             <Button onClick={() => void submitSaved(submission)}>{t.resendSavedQuestion}</Button>
           </section>
         )}
-        <TurnOutbox
-          items={conversation.runState?.outbox || []}
-          catalog={catalog}
-          t={t}
-          busy={controlBusy}
-          act={act}
-          inspectAttachment={setInspectedAttachment}
-          conversationId={conversation.id}
-        />
       </div>
+      <TurnOutbox
+        items={conversation.runState?.outbox || []}
+        catalog={catalog}
+        t={t}
+        busy={controlBusy}
+        act={act}
+        inspectAttachment={setInspectedAttachment}
+        conversationId={conversation.id}
+      />
       <form
         className="tutor-composer"
         onSubmit={(event) => {
@@ -1421,7 +1421,7 @@ function ConversationThread({
               {pending ? (
                 <LoaderCircle className="spin" />
               ) : conversation.pending ? (
-                <ListPlus />
+                <CornerDownRight />
               ) : (
                 <ArrowUp />
               )}

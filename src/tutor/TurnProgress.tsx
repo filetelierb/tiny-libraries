@@ -1,5 +1,14 @@
-import { useEffect, useRef, useState } from 'react';
-import { LoaderCircle, Pencil, Play, RotateCcw, Square, X, CornerUpLeft } from 'lucide-react';
+import { useRef, useState } from 'react';
+import {
+  Clock3,
+  CornerDownRight,
+  LoaderCircle,
+  PenLine,
+  Play,
+  RotateCcw,
+  Square,
+  Trash2,
+} from 'lucide-react';
 import type { TurnView, TurnAction } from '../../shared/tutor-turns';
 import type { Catalog } from '../../shared/domain';
 import {
@@ -7,7 +16,7 @@ import {
   resolveTutorGeneration,
   type TutorPreference,
 } from '../../shared/tutor-generation';
-import { Button, Modal } from '../design/components';
+import { Button, IconButton, Modal } from '../design/components';
 import { GenerationControl, GenerationLabel } from './GenerationControl';
 import type { T } from '../i18n';
 
@@ -41,37 +50,45 @@ export function TurnProgress({
   busy: boolean;
   act: Act;
 }) {
+  const status = turn.stopRequested
+    ? t.stoppingReply
+    : turn.phase === 'tools'
+      ? t.runningStudyTools
+      : t.generatingReply;
   return (
-    <section className="tutor-run" aria-label={t.currentReply} data-turn-id={turn.id}>
-      <div className="tutor-run-heading">
+    <section
+      className="chat-entry assistant tutor-run"
+      aria-label={t.currentReply}
+      data-turn-id={turn.id}
+    >
+      {turn.partial && (
+        <div className="chat-message assistant tutor-stream-text" aria-live="off">
+          {turn.partial}
+        </div>
+      )}
+      <div className="tutor-run-status" title={t.savedProgressNotice}>
         <span role="status">
-          <LoaderCircle size={14} className="spin" />{' '}
-          {turn.stopRequested
-            ? t.stoppingReply
-            : turn.phase === 'tools'
-              ? t.runningStudyTools
-              : t.generatingReply}
+          <LoaderCircle className="spin" />
+          {status}
         </span>
-        <Button disabled={busy || turn.stopRequested} onClick={() => void act(turn, 'stop')}>
-          <Square size={13} />
-          {t.stopReply}
-        </Button>
+        <IconButton
+          label={t.stopReply}
+          disabled={busy || turn.stopRequested}
+          onClick={() => void act(turn, 'stop')}
+        >
+          <Square />
+        </IconButton>
       </div>
       <small>
         <GenerationLabel value={turn.generation} t={t} />
         {turn.webSearch && <> · {t.webEnabledQuestion}</>}
+        {!!turn.toolNames.length && (
+          <>
+            {' '}
+            · {t.toolsUsed}: {turn.toolNames.map((name) => tutorToolLabel(name, t)).join(', ')}
+          </>
+        )}
       </small>
-      {!!turn.toolNames.length && (
-        <p className="tutor-run-tools">
-          {t.toolsUsed}: {turn.toolNames.map((name) => tutorToolLabel(name, t)).join(', ')}
-        </p>
-      )}
-      {turn.partial && (
-        <div className="tutor-stream-text" aria-live="off">
-          {turn.partial}
-        </div>
-      )}
-      <small className="muted">{t.savedProgressNotice}</small>
     </section>
   );
 }
@@ -93,14 +110,8 @@ export function TurnOutbox({
   conversationId: string;
 }) {
   const [editing, setEditing] = useState<TurnView | null>(null);
-  const [expanded, setExpanded] = useState(() => items.some((item) => item.status !== 'cancelled'));
-  const attention = items
-    .filter((item) => item.status !== 'cancelled')
-    .map((item) => `${item.id}:${item.status}`)
-    .join(',');
-  useEffect(() => {
-    if (attention) setExpanded(true);
-  }, [attention]);
+  // Cancelled questions stay hidden unless they can still be retried.
+  const shown = items.filter((item) => item.status !== 'cancelled' || item.canRetry);
   const editorTrigger = useRef<HTMLButtonElement | null>(null);
   const edit = async (turn: TurnView, trigger: HTMLButtonElement) => {
     editorTrigger.current = trigger;
@@ -111,108 +122,112 @@ export function TurnOutbox({
     setEditing(null);
     if (editorTrigger.current?.isConnected) editorTrigger.current.focus();
   };
-  if (!items.length && !editing) return null;
+  if (!shown.length && !editing) return null;
   return (
     <section className="tutor-outbox" aria-label={t.questionOutbox}>
-      <details open={expanded} onToggle={(event) => setExpanded(event.currentTarget.open)}>
-        <summary>
-          <h3>
-            {t.questionOutbox} <span>{items.length}</span>
-          </h3>
-        </summary>
-        {items.map((turn) => (
-          <article className="tutor-outbox-card" data-turn-id={turn.id} key={turn.id}>
-            <div className="tutor-outbox-heading">
-              <strong>{t[`turn_${turn.status}`]}</strong>
-              <small>
-                <GenerationLabel value={turn.effectiveGeneration || turn.generation} t={t} />
-                {turn.webSearch && <> · {t.webEnabledQuestion}</>}
-              </small>
-            </div>
-            <p>{turn.prompt}</p>
-            <details>
-              <summary>{t.savedQuestionContext}</summary>
-              {!!turn.references?.length && (
-                <ul>
-                  {turn.references.map((ref) => (
-                    <li key={ref.id}>
-                      {catalog.files.find((file) => file.id === ref.id)?.name || t.missingReference}{' '}
-                      · {t.sourceVersion} {ref.version}
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {!turn.references?.length && <p>{t.noPersistentReferences}</p>}
-              {turn.context && (
-                <blockquote>
-                  {turn.context.sourceName}
-                  {turn.context.location.quote ? `: ${turn.context.location.quote}` : ''}
-                </blockquote>
-              )}
-              {turn.attachments?.map((item) => (
-                <Button variant="ghost" key={item.id} onClick={() => inspectAttachment(item.id)}>
-                  {item.name}
-                </Button>
-              ))}
-              <p className="muted">{t.frozenQuestionNotice}</p>
-            </details>
-            {turn.error && <p className="tutor-turn-error">{turn.error}</p>}
-            {turn.status === 'editing' && <p className="muted">{t.queueEditingNotice}</p>}
-            {turn.status === 'steering' && <p className="muted">{t.steeringNotice}</p>}
-            <div className="tutor-turn-actions">
-              {turn.canEdit && (
-                <Button disabled={busy} onClick={(event) => void edit(turn, event.currentTarget)}>
-                  <Pencil size={13} />
-                  {t.editQueuedQuestion}
-                </Button>
-              )}
-              {turn.status === 'editing' && (
-                <Button disabled={busy} onClick={() => void act(turn, 'resume')}>
-                  <Play size={13} />
-                  {t.resumeQueuedQuestion}
-                </Button>
-              )}
-              {turn.canEdit && (
-                <Button disabled={busy} onClick={() => void act(turn, 'cancel')}>
-                  <X size={13} />
-                  {t.cancelQueuedQuestion}
-                </Button>
-              )}
-              {turn.canRetry && (
-                <Button disabled={busy} onClick={() => void act(turn, 'retry')}>
-                  <RotateCcw size={13} />
-                  {t.retrySavedQuestion}
-                </Button>
-              )}
-              {turn.canSteer && (
-                <Button
+      {!!shown.length && (
+        <p className="tutor-outbox-heading">
+          <Clock3 aria-hidden="true" />
+          {t.questionOutbox} · {shown.length}
+        </p>
+      )}
+      {shown.map((turn) => (
+        <article className="tutor-outbox-card" data-turn-id={turn.id} key={turn.id}>
+          <div className="tutor-outbox-row">
+            <CornerDownRight aria-hidden="true" />
+            <button
+              type="button"
+              className="tutor-outbox-prompt"
+              title={`${t[`turn_${turn.status}`]} · ${turn.prompt}`}
+              disabled={busy || !turn.canEdit}
+              onClick={(event) => void edit(turn, event.currentTarget)}
+            >
+              {turn.prompt}
+            </button>
+            {turn.canSteer && (
+              <button
+                type="button"
+                className="tutor-outbox-steer"
+                title={t.steeringNotice}
+                disabled={busy}
+                onClick={() => void act(turn, 'steer')}
+              >
+                {t.steerShort}
+              </button>
+            )}
+            {turn.canEdit && (
+              <IconButton
+                label={t.editQueuedQuestion}
+                disabled={busy}
+                onClick={(event) => void edit(turn, event.currentTarget)}
+              >
+                <PenLine />
+              </IconButton>
+            )}
+            {turn.status === 'editing' && (
+              <IconButton
+                label={t.resumeQueuedQuestion}
+                disabled={busy}
+                onClick={() => void act(turn, 'resume')}
+              >
+                <Play />
+              </IconButton>
+            )}
+            {turn.canRetry && (
+              <IconButton
+                label={t.retrySavedQuestion}
+                disabled={busy}
+                onClick={() => void act(turn, 'retry')}
+              >
+                <RotateCcw />
+              </IconButton>
+            )}
+            {turn.status === 'steering' ? (
+              <LoaderCircle className="spin" aria-label={t.steeringNotice} />
+            ) : (
+              turn.canEdit && (
+                <IconButton
+                  label={t.cancelQueuedQuestion}
                   disabled={busy}
-                  title={t.steeringNotice}
-                  onClick={() => void act(turn, 'steer')}
+                  onClick={() => void act(turn, 'cancel')}
                 >
-                  <CornerUpLeft size={13} />
-                  {t.steerReply}
-                </Button>
-              )}
-            </div>
-          </article>
-        ))}
-        {editing && (
-          <TurnEditor
-            key={`${editing.id}:${editing.revision}`}
-            turn={editing}
-            conversationId={conversationId}
-            t={t}
-            catalog={catalog}
-            busy={busy}
-            close={close}
-            save={async (prompt, generation) => {
-              const saved = await act(editing, 'save', { prompt, generation });
-              if (saved) close();
-            }}
-          />
-        )}
-      </details>
+                  <Trash2 />
+                </IconButton>
+              )
+            )}
+          </div>
+          {!!turn.attachments?.length && (
+            <p className="tutor-outbox-attachments">
+              {turn.attachments.map((item) => (
+                <button type="button" key={item.id} onClick={() => inspectAttachment(item.id)}>
+                  {item.name}
+                </button>
+              ))}
+            </p>
+          )}
+          {turn.error && (
+            <p role="alert" className="tutor-turn-error">
+              {turn.error}
+            </p>
+          )}
+          {turn.status === 'editing' && <p className="muted">{t.queueEditingNotice}</p>}
+        </article>
+      ))}
+      {editing && (
+        <TurnEditor
+          key={`${editing.id}:${editing.revision}`}
+          turn={editing}
+          conversationId={conversationId}
+          t={t}
+          catalog={catalog}
+          busy={busy}
+          close={close}
+          save={async (prompt, generation) => {
+            const saved = await act(editing, 'save', { prompt, generation });
+            if (saved) close();
+          }}
+        />
+      )}
     </section>
   );
 }

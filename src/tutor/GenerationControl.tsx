@@ -1,7 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronDown, RotateCcw, X, Zap } from 'lucide-react';
-import { Button, IconButton } from '../design/components';
+import { ChevronDown, RotateCcw, Zap } from 'lucide-react';
+import { IconButton } from '../design/components';
 import type { T } from '../i18n';
 import {
   defaultTutorPreference,
@@ -116,7 +116,7 @@ function GenerationPopover({
         Math.min(target.top - rect.height - 6, window.innerHeight - rect.height - 8),
       ),
     });
-    popup.querySelector<HTMLSelectElement>('select')?.focus({ preventScroll: true });
+    popup.querySelector<HTMLInputElement>('input[type=range]')?.focus({ preventScroll: true });
   }, [anchor]);
   useEffect(() => {
     const dismiss = (event: Event) => {
@@ -151,7 +151,7 @@ function GenerationPopover({
           close();
         }
         if (event.key === 'Tab') {
-          const controls = ref.current?.querySelectorAll('button, select');
+          const controls = ref.current?.querySelectorAll('button, select, input');
           if (
             controls &&
             ((event.shiftKey && event.target === controls[0]) ||
@@ -162,10 +162,41 @@ function GenerationPopover({
       }}
     >
       <div className="generation-popover-title">
-        <strong id={`${id}-title`}>{t.tutorGeneration}</strong>
-        <IconButton label={t.close} onClick={() => close()}>
-          <X size={15} />
+        <Zap aria-hidden="true" />
+        <div>
+          <strong id={`${id}-title`}>{t[`effort_${value.reasoningEffort}`]}</strong>
+          <small>{tutorModelName(resolveTutorGeneration(value, defaultModel).model)}</small>
+        </div>
+        <IconButton label={t.resetGeneration} onClick={() => change(defaultTutorPreference)}>
+          <RotateCcw />
         </IconButton>
+      </div>
+      <input
+        type="range"
+        min={0}
+        max={reasoningEffortSchema.options.length - 1}
+        step={1}
+        value={reasoningEffortSchema.options.indexOf(value.reasoningEffort)}
+        aria-label={t.reasoningEffort}
+        aria-valuetext={t[`effort_${value.reasoningEffort}`]}
+        onChange={(event) =>
+          change({
+            ...value,
+            reasoningEffort: reasoningEffortSchema.options[Number(event.target.value)],
+          })
+        }
+      />
+      <div className="generation-presets">
+        {reasoningEffortSchema.options.map((effort) => (
+          <button
+            type="button"
+            key={effort}
+            aria-pressed={value.reasoningEffort === effort}
+            onClick={() => change({ ...value, reasoningEffort: effort })}
+          >
+            {t[`effort_${effort}`]}
+          </button>
+        ))}
       </div>
       <label>
         {t.tutorModel}
@@ -185,29 +216,9 @@ function GenerationPopover({
           ))}
         </select>
       </label>
-      <label>
-        {t.reasoningEffort}
-        <select
-          value={value.reasoningEffort}
-          onChange={(event) =>
-            change({
-              ...value,
-              reasoningEffort: event.target.value as TutorPreference['reasoningEffort'],
-            })
-          }
-        >
-          {reasoningEffortSchema.options.map((effort) => (
-            <option value={effort} key={effort}>
-              {t[`effort_${effort}`]}
-            </option>
-          ))}
-        </select>
-      </label>
-      <p id={`${id}-notice`}>{t.generationNotice}</p>
-      <p className="muted">{t.reasoningCostNotice}</p>
-      <Button variant="ghost" onClick={() => change(defaultTutorPreference)}>
-        <RotateCcw size={14} /> {t.resetGeneration}
-      </Button>
+      <p id={`${id}-notice`}>
+        {t.generationNotice} {t.reasoningCostNotice}
+      </p>
     </div>,
     anchor.closest('dialog') || document.body,
   );
