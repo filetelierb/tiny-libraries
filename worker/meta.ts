@@ -33,6 +33,7 @@ import {
 import { MetaError } from './meta-errors';
 export { MetaError } from './meta-errors';
 import { studySafety as safety } from './meta-safety';
+import { widgetInstructions } from '../shared/artifact-widgets';
 import { createTutorAgent, type TutorAgentInput, type BookmarkWriter } from './tutor-agent';
 type MetaFetch = (url: string, options: RequestInit) => Promise<Response>;
 export function bridgedFetch(config: {
@@ -181,7 +182,7 @@ export async function synthesize(
 ): Promise<Synthesis> {
   const text = JSON.stringify(segments);
   if (text.length > 1500000) throw new MetaError('Source text exceeds the analysis limit', false);
-  const prompt = `Create a concise study guide in ${locale === 'es' ? 'Spanish' : 'English'}. Produce 2–8 useful chapters and 1–3 questions per chapter, mixing single-choice and short-answer questions. Single-choice: kind=single, 2–5 choices, one correctIndex, expectedAnswer=null and rubric=null. Short-answer: kind=short, choices=[], correctIndex=null, explicit expectedAnswer and rubric. Include a glossary and an interactive artifact: use a signal specification only when sampling or waves are relevant; otherwise use a meaningful comparison with short rows. Every chapter, question, definition and artifact MUST cite existing segmentIds. Questions need unique IDs, a meaningful concept and supported explanation. Do not cite an image description as literal text. Segments: ${text}`;
+  const prompt = `Create a concise study guide in ${locale === 'es' ? 'Spanish' : 'English'}. Produce 2–8 useful chapters and 1–3 questions per chapter, mixing single-choice and short-answer questions. Single-choice: kind=single, 2–5 choices, one correctIndex, expectedAnswer=null and rubric=null. Short-answer: kind=short, choices=[], correctIndex=null, explicit expectedAnswer and rubric. Include a glossary and an interactive artifact: use a signal specification only when sampling or waves are relevant; otherwise use a meaningful comparison with short rows. Every chapter, question, definition and artifact MUST cite existing segmentIds. Questions need unique IDs, a meaningful concept and supported explanation. Do not cite an image description as literal text. ${widgetInstructions} Segments: ${text}`;
   const images = [
     ...(imageData ? [{ segmentId: 'image-1', data: imageData }] : []),
     ...(visuals || []),
@@ -208,6 +209,7 @@ export async function synthesize(
       transport,
     ),
     segments,
+    new Set(images.map((image) => image.segmentId)),
   );
 }
 export async function translate(

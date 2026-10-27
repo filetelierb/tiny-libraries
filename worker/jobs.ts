@@ -1,4 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
+import { visualKey, widgetImages } from '../shared/artifact-widgets';
 import {
   captions,
   type Job,
@@ -163,6 +164,22 @@ export class ProcessingJob extends DurableObject<Env> {
           normalized.visuals,
           bridgedFetch(this.env),
         );
+        // Image widgets show source pictures, which the study record itself does not keep.
+        const pictures = [
+          ...(normalized.imageData ? [{ segmentId: 'image-1', data: normalized.imageData }] : []),
+          ...(normalized.visuals || []),
+        ];
+        for (const segmentId of widgetImages(synthesis.artifact?.explanation || '')) {
+          const match = pictures
+            .find((picture) => picture.segmentId === segmentId)
+            ?.data.match(/^data:(image\/[a-z+]+);base64,(.+)$/);
+          if (match)
+            await this.env.FILES.put(
+              visualKey(file.id, file.version, segmentId),
+              Uint8Array.from(atob(match[2]), (char) => char.charCodeAt(0)),
+              { httpMetadata: { contentType: match[1] } },
+            );
+        }
         const learning: Learning = {
           sourceId: file.id,
           sourceVersion: file.version,

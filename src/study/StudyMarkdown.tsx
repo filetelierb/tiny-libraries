@@ -8,6 +8,7 @@ import { Formula } from './Formula';
 import { Diagram } from './Diagram';
 import { remarkLatexDelimiters } from './latexDelimiters';
 import { remarkCallouts, type CalloutVariant } from './callouts';
+import { WidgetBlock } from '../artifacts/Widgets';
 
 const calloutIcons = {
   key: Lightbulb,
@@ -60,6 +61,12 @@ export function StudyMarkdown({ t, components, remarkPlugins = [], ...props }: O
             return (
               <div {...anchors} className="study-code-block">
                 <Diagram source={source} t={t} />
+              </div>
+            );
+          if (classes.includes('language-widget'))
+            return (
+              <div {...anchors} className="study-widget-block">
+                <WidgetBlock source={source} t={t} />
               </div>
             );
           if (classes.includes('language-math'))

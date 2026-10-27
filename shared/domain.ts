@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { sanitizeWidgets } from './artifact-widgets';
 
 export const localeSchema = z.enum(['en', 'es']);
 export type Locale = z.infer<typeof localeSchema>;
@@ -325,7 +326,12 @@ export function mergeConcept(
     proposals: [...existing.proposals, { id: crypto.randomUUID(), definition, source }],
   };
 }
-export function validateSynthesis(value: unknown, segments: Segment[]): Synthesis {
+/** `imageIds` are segments with visual evidence, which image widgets may show. */
+export function validateSynthesis(
+  value: unknown,
+  segments: Segment[],
+  imageIds = new Set<string>(),
+): Synthesis {
   const parsed = synthesisSchema.parse(value),
     ids = new Set(segments.map((s) => s.id));
   const seen = new Set<string>();
@@ -362,7 +368,14 @@ export function validateSynthesis(value: unknown, segments: Segment[]): Synthesi
     const key = fold(term.term);
     if (!terms.has(key)) terms.set(key, term);
   }
-  return { ...parsed, glossary: [...terms.values()] };
+  return {
+    ...parsed,
+    glossary: [...terms.values()],
+    artifact: parsed.artifact && {
+      ...parsed.artifact,
+      explanation: sanitizeWidgets(parsed.artifact.explanation, ids, imageIds),
+    },
+  };
 }
 export function publicLearning(value: Learning): PublicLearning {
   return {

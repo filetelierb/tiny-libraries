@@ -8842,3 +8842,368 @@ body:has(.panel-resizer.resizing) {
   outline-offset: 2px;
   border-radius: 0.25rem;
 }
+
+/* Artifact widget catalog (```widget blocks in artifact markdown) */
+.study-widget-block {
+  margin: 1.6rem 0;
+}
+.study-widget-block > .artifact-widget {
+  margin: 0;
+}
+.artifact-cite {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.15rem;
+  height: 1.15rem;
+  margin-left: 0.2rem;
+  padding: 0 0.3rem;
+  vertical-align: super;
+  border: 0;
+  border-radius: 999px;
+  background: var(--secondary);
+  color: var(--on-secondary);
+  font-family: var(--font-heading);
+  font-size: 0.66rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.artifact-cite:hover {
+  background: var(--primary);
+  color: var(--on-primary);
+}
+.artifact-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.artifact-widget > figcaption,
+.artifact-summary-title {
+  margin: 0 0 0.75rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+.artifact-summary {
+  border-color: color-mix(in oklch, var(--primary), transparent 75%);
+  background: color-mix(in oklch, var(--secondary), transparent 55%);
+}
+.artifact-summary-title {
+  font-family: var(--font-heading);
+  font-size: 0.74rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+.artifact-summary ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: point;
+}
+.artifact-summary li {
+  position: relative;
+  margin: 0.55rem 0;
+  padding-left: 2rem;
+  counter-increment: point;
+}
+.artifact-summary li::before {
+  content: counter(point);
+  position: absolute;
+  top: 0.2rem;
+  left: 0;
+  display: grid;
+  place-items: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 999px;
+  background: var(--primary);
+  color: var(--on-primary);
+  font-family: var(--font-heading);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+@container (max-width: 560px) {
+  .artifact-compare thead {
+    display: none;
+  }
+  .artifact-compare tr {
+    display: block;
+    padding: 0.4rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .artifact-compare :is(th, td) {
+    display: block;
+    padding: 0.2rem 0;
+    border: 0;
+  }
+  .artifact-compare td::before {
+    content: attr(data-label) ' · ';
+    font-weight: 650;
+    color: var(--muted-text);
+  }
+}
+.artifact-steps ol {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0 0 0.9rem;
+  padding: 0;
+  list-style: none;
+}
+.artifact-steps ol li,
+.artifact-timeline ol li {
+  margin: 0;
+}
+.artifact-steps ol button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.3rem 0.75rem 0.3rem 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--background);
+  font: inherit;
+  font-size: 0.84rem;
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+}
+.artifact-steps ol button span {
+  display: grid;
+  place-items: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 999px;
+  background: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.artifact-steps ol button.done span {
+  background: var(--secondary);
+  color: var(--on-secondary);
+}
+.artifact-steps ol button.active {
+  border-color: var(--primary);
+  color: var(--primary);
+  font-weight: 650;
+}
+.artifact-steps ol button.active span {
+  background: var(--primary);
+  color: var(--on-primary);
+}
+.artifact-step-body {
+  display: block;
+  padding: 0.9rem 1rem;
+  border-radius: var(--radius);
+  background: var(--background);
+}
+.artifact-step-body p {
+  margin: 0.3rem 0;
+}
+.artifact-step-title {
+  font-weight: 700;
+}
+.artifact-step-nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+.artifact-timeline ol {
+  position: relative;
+  display: flex;
+  gap: 0.4rem;
+  margin: 0 0 0.8rem;
+  padding: 0 0 0.4rem;
+  overflow-x: auto;
+  list-style: none;
+}
+.artifact-timeline ol li {
+  flex: 0 0 auto;
+}
+.artifact-timeline ol button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  min-width: 7rem;
+  max-width: 11rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--background);
+  font: inherit;
+  font-size: 0.82rem;
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+}
+.artifact-timeline ol button.active {
+  border-top-color: var(--primary);
+  color: var(--primary);
+  font-weight: 600;
+}
+.artifact-timeline-label {
+  font-family: var(--font-heading);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted-text);
+}
+.artifact-predict {
+  border-style: dashed;
+  border-color: color-mix(in oklch, var(--chart-2), transparent 40%);
+  background: color-mix(in oklch, var(--accent), transparent 75%);
+}
+.artifact-predict .artifact-summary-title {
+  color: var(--on-accent);
+}
+.artifact-predict-prompt {
+  margin: 0.2rem 0 0.7rem;
+  font-weight: 600;
+}
+.artifact-predict-choices {
+  display: grid;
+  gap: 0.4rem;
+  margin-bottom: 0.7rem;
+}
+.artifact-predict-choices button {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--background);
+  font: inherit;
+  font-size: 0.92rem;
+  text-align: left;
+  cursor: pointer;
+}
+.artifact-predict-choices button.chosen {
+  border-color: var(--primary);
+}
+.artifact-predict-choices button.correct {
+  border-color: var(--chart-4);
+  background: color-mix(in oklch, var(--chart-4), transparent 82%);
+}
+.artifact-predict-choices button.incorrect {
+  border-color: var(--danger);
+  background: color-mix(in oklch, var(--danger), transparent 90%);
+}
+.artifact-explorable-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 1rem;
+}
+@container (max-width: 640px) {
+  .artifact-explorable-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.artifact-explorable-params {
+  display: grid;
+  gap: 0.7rem;
+}
+.artifact-explorable-params label {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.88rem;
+  font-weight: 400;
+}
+.artifact-explorable-params label > span {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.artifact-explorable-params strong {
+  font-variant-numeric: tabular-nums;
+  color: var(--primary);
+}
+.artifact-explorable-params input[type='range'] {
+  width: 100%;
+  accent-color: var(--primary);
+}
+.artifact-explorable-outputs {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+}
+.artifact-explorable-outputs > div {
+  padding: 0.5rem 0.7rem;
+  border-radius: 0.5rem;
+  background: var(--background);
+}
+.artifact-explorable-outputs dt {
+  font-size: 0.78rem;
+  color: var(--muted-text);
+}
+.artifact-explorable-outputs dd {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.artifact-explorer .artifact-chart {
+  margin-top: 0.8rem;
+}
+.artifact-explorable-note {
+  margin: 0.6rem 0 0;
+  padding-left: 0.7rem;
+  border-left: 3px solid var(--chart-2);
+  font-size: 0.9rem;
+}
+.artifact-chart {
+  width: 100%;
+  height: auto;
+  font-size: 12px;
+  fill: var(--muted-text);
+}
+.artifact-chart .axis {
+  stroke: var(--border);
+}
+.artifact-chart-unit {
+  font-weight: 400;
+  color: var(--muted-text);
+}
+.artifact-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  margin: 0.4rem 0 0;
+  font-size: 0.8rem;
+  color: var(--muted-text);
+}
+.artifact-legend i {
+  display: inline-block;
+  width: 0.7rem;
+  height: 0.7rem;
+  margin-right: 0.35rem;
+  border-radius: 2px;
+}
+.artifact-widget img {
+  display: block;
+  max-width: 100%;
+  margin: 0 auto;
+  border-radius: var(--radius-sm);
+}
+.artifact-image-caption {
+  margin-top: 0.5rem;
+  font-size: 0.86rem;
+  color: var(--muted-text);
+}
+.artifact-details {
+  margin: 1rem 0;
+  padding: 0.6rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.artifact-details > summary {
+  font-weight: 600;
+  color: var(--primary);
+  cursor: pointer;
+}
+.artifact-details[open] > summary {
+  margin-bottom: 0.4rem;
+}
+.artifact-widget-invalid {
+  opacity: 0.7;
+}

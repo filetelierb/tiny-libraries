@@ -34,6 +34,7 @@ import {
   MetaError,
 } from './meta';
 import { cardSnapshot, startCardDecks, rateCard, CardError } from './flashcards';
+import { visualKey } from '../shared/artifact-widgets';
 import {
   ArtifactRevisionError,
   deleteRevisions,
@@ -900,6 +901,20 @@ export default {
           }),
         );
       }
+      const visualMatch = url.pathname.match(/^\/api\/visuals\/([a-f0-9-]+)\/(\d+)\/([^/]+)$/);
+      if (visualMatch && request.method === 'GET') {
+        const object = await env.FILES.get(
+          visualKey(visualMatch[1], Number(visualMatch[2]), decodeURIComponent(visualMatch[3])),
+        );
+        if (!object) throw new ApiError('Picture not available', 404);
+        return new Response(object.body, {
+          headers: {
+            'Content-Type': object.httpMetadata?.contentType || 'application/octet-stream',
+            'Cache-Control': 'private, max-age=3600',
+            'X-Content-Type-Options': 'nosniff',
+          },
+        });
+      }
       const trackMatch = url.pathname.match(
         /^\/api\/captions\/([a-f0-9-]+)\/(original|translated)\.(vtt|srt)$/,
       );
@@ -950,8 +965,12 @@ export default {
             { length: file.version },
             (_, index) => `original/${file.id}/${index + 1}`,
           );
-          const captions = await env.FILES.list({ prefix: `captions/${file.id}/` });
-          await env.FILES.delete([...keys, ...captions.objects.map((object) => object.key)]);
+          const captions = await env.FILES.list({ prefix: `captions/${file.id}/` }),
+            visuals = await env.FILES.list({ prefix: `visuals/${file.id}/` });
+          await env.FILES.delete([
+            ...keys,
+            ...[...captions.objects, ...visuals.objects].map((object) => object.key),
+          ]);
         }
         return json(removed);
       }

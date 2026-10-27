@@ -11,6 +11,8 @@ import {
   remarkConceptLinks,
   type LinkableConcept,
 } from './glossary/conceptLinks';
+import { WidgetHostContext, type WidgetHost } from './artifacts/Widgets';
+import { widgetSegments } from '../shared/artifact-widgets';
 
 type Parameters = { frequency: number; sampling: number; amplitude: number };
 type OutlineEntry = { id: string; level: 2 | 3; label: string };
@@ -24,6 +26,7 @@ export function GeneratedArtifact({
   persist,
   storageKey = 'tl:generated-signal',
   sourceName,
+  pictures,
   concepts = noConcepts,
   openConcept,
 }: {
@@ -35,11 +38,14 @@ export function GeneratedArtifact({
   persist: (p: Parameters) => void;
   storageKey?: string;
   sourceName?: string;
+  /** Base URL of the source's stored pictures, for image widgets. */
+  pictures?: string;
   concepts?: LinkableConcept[];
   openConcept?: (id: string) => void;
 }) {
   // Citations are numbered by first appearance and listed again under References.
-  const cited = [...new Set(artifact.segmentIds)]
+  const widgetCites = useMemo(() => widgetSegments(artifact.explanation), [artifact.explanation]);
+  const cited = [...new Set([...artifact.segmentIds, ...widgetCites])]
     .map((id) => segments.find((segment) => segment.id === id))
     .filter((segment): segment is Segment => !!segment);
   const label = (segment: Segment) =>
@@ -96,6 +102,20 @@ export function GeneratedArtifact({
       </>
     );
   };
+  const host = useMemo<WidgetHost>(
+    () => ({
+      cite: (id) => {
+        const segment = segments.find((item) => item.id === id);
+        if (segment) onCite(segment);
+      },
+      citeNumber: (id) => {
+        const index = cited.findIndex((segment) => segment.id === id);
+        return index < 0 ? undefined : index + 1;
+      },
+      ...(pictures ? { imageUrl: (id: string) => `${pictures}/${encodeURIComponent(id)}` } : {}),
+    }),
+    [segments, onCite, cited.map((segment) => segment.id).join('\n'), pictures],
+  );
   const root = useRef<HTMLElement>(null),
     [outline, setOutline] = useState<OutlineEntry[]>([]),
     [current, setCurrent] = useState(''),
@@ -177,9 +197,11 @@ export function GeneratedArtifact({
           )}
         </nav>
       )}
-      <StudyMarkdown t={t} remarkPlugins={conceptPlugins} components={conceptComponents}>
-        {artifact.explanation}
-      </StudyMarkdown>
+      <WidgetHostContext.Provider value={host}>
+        <StudyMarkdown t={t} remarkPlugins={conceptPlugins} components={conceptComponents}>
+          {artifact.explanation}
+        </StudyMarkdown>
+      </WidgetHostContext.Provider>
       <div className="citations">
         {cited.map((segment, index) => (
           <button

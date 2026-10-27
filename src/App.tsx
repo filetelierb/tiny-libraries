@@ -1603,6 +1603,7 @@ export function App() {
                                   segments={material.segments}
                                   onCite={(segment) => citeFromArtifact(source.id, segment)}
                                   sourceName={source.name}
+                                  pictures={`/api/visuals/${source.id}/${material.sourceVersion}`}
                                   concepts={catalog.concepts}
                                   openConcept={openGlossaryConcept}
                                   saved={session.artifacts?.[source.id]}
