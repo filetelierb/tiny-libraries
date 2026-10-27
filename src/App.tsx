@@ -1723,6 +1723,7 @@ export function App() {
               {tab === 'bookmarks' && (
                 <BookmarksPanel
                   items={activeBookmarks}
+                  sourceName={active?.name}
                   filter={bookmarkFilter}
                   changeFilter={(value) => {
                     setBookmarkFilter(value);
