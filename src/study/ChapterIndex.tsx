@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import {
   Check,
-  GraduationCap,
   Layers,
+  ListChecks,
   LoaderCircle,
   PanelLeftClose,
   PanelLeftOpen,
@@ -17,7 +17,7 @@ import {
   type StudyChapter,
 } from '../../shared/chapters';
 import { formatTime } from '../../shared/media-controls';
-import { IconButton, Button } from '../design/components';
+import { Button } from '../design/components';
 import type { T } from '../i18n';
 import { quizDraftKey, readQuizDraft } from './quizDrafts';
 
@@ -64,8 +64,11 @@ export function ChapterIndex({
       className={`chapter-index ${expanded ? 'expanded' : 'collapsed'}`}
     >
       <div className="chapter-index-heading">
-        <IconButton
-          label={expanded ? t.collapseChapters : t.expandChapters}
+        <Button
+          variant="ghost"
+          size="sm"
+          title={expanded ? t.collapseChapters : t.expandChapters}
+          aria-label={expanded ? t.collapseChapters : t.expandChapters}
           aria-expanded={expanded}
           onClick={() => {
             setExpanded(!expanded);
@@ -74,13 +77,13 @@ export function ChapterIndex({
             } catch {}
           }}
         >
-          {expanded ? <PanelLeftClose /> : <PanelLeftOpen />}
-        </IconButton>
-        {expanded && (
-          <strong>
-            {t.chapters} <span>{learning.synthesis.chapters.length}</span>
-          </strong>
-        )}
+          {expanded ? <PanelLeftClose size={14} /> : <PanelLeftOpen size={14} />}
+          {expanded && (
+            <span>
+              {learning.synthesis.chapters.length} {t.chapters.toLowerCase()}
+            </span>
+          )}
+        </Button>
       </div>
       {expanded && (
         <div className="chapter-index-content">
@@ -158,30 +161,36 @@ export function ChapterIndex({
                     <small>{label}</small>
                   </div>
                 </button>
-                <Button
-                  variant="ghost"
-                  onClick={() => quiz(range.chapter)}
-                  disabled={!range.chapter.questions.length}
-                >
-                  {complete ? <Check size={13} /> : <GraduationCap size={13} />}
-                  {draft && !draft.completed ? t.continueQuiz : complete ? t.repeatQuiz : t.quiz}
-                </Button>
-                <Button
-                  variant="ghost"
-                  disabled={cards.starting || pending}
-                  onClick={() =>
-                    deck?.status === 'ready'
-                      ? openCards(range.chapter.id, false)
-                      : void cards.create([range.chapter.id])
-                  }
-                >
-                  {pending ? <LoaderCircle size={13} className="spin" /> : <Layers size={13} />}
-                  {pending
-                    ? t.creatingCards
-                    : deck?.status === 'ready'
-                      ? `${t.studyCards} · ${deck.cards.length}`
-                      : t.createCards}
-                </Button>
+                <div className="chapter-actions">
+                  <Button
+                    variant="ghost"
+                    onClick={() => quiz(range.chapter)}
+                    disabled={!range.chapter.questions.length}
+                  >
+                    {complete ? <Check size={14} /> : <ListChecks size={14} />}
+                    {draft && !draft.completed
+                      ? t.continueQuiz
+                      : complete
+                        ? t.repeatQuizShort
+                        : t.quizShort}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    disabled={cards.starting || pending}
+                    onClick={() =>
+                      deck?.status === 'ready'
+                        ? openCards(range.chapter.id, false)
+                        : void cards.create([range.chapter.id])
+                    }
+                  >
+                    {pending ? <LoaderCircle size={14} className="spin" /> : <Layers size={14} />}
+                    {pending
+                      ? t.creatingCards
+                      : deck?.status === 'ready'
+                        ? `${deck.cards.length} ${t.cardsCount}`
+                        : t.createCards}
+                  </Button>
+                </div>
                 {deck?.error && (
                   <p className="chapter-card-error" role="status">
                     {deck.error}
