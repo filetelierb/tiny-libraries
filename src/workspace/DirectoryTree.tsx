@@ -39,6 +39,8 @@ export type TreeActions = {
   archiveFile: (source: Source, restore: boolean) => void;
   trashFile: (source: Source) => void;
   restoreFile: (source: Source) => void;
+  deleteFile?: (source: Source) => void;
+  deleteDirectory?: (directory: Directory) => void;
   moveFile?: (source: Source, folder: string) => void;
   moveDirectory?: (directory: Directory, parentPath: string) => void;
 };
@@ -225,6 +227,16 @@ export function DirectoryTree({
               disabled: parentState === 'trash',
               run: () => actions.restoreDirectory(directory),
             },
+            ...(actions.deleteDirectory
+              ? [
+                  {
+                    label: t.deletePermanently,
+                    icon: <Trash2 size={16} />,
+                    danger: true,
+                    run: () => actions.deleteDirectory!(directory),
+                  },
+                ]
+              : []),
           ]
         : [];
     return [
@@ -284,6 +296,16 @@ export function DirectoryTree({
               disabled: parentState === 'trash',
               run: () => actions.restoreFile(file),
             },
+            ...(actions.deleteFile
+              ? [
+                  {
+                    label: t.deletePermanently,
+                    icon: <Trash2 size={16} />,
+                    danger: true,
+                    run: () => actions.deleteFile!(file),
+                  },
+                ]
+              : []),
           ]
         : [];
     return [

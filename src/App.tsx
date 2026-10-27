@@ -130,7 +130,9 @@ type DirectoryDialog =
   | { action: 'create'; parentPath: string }
   | { action: 'rename'; directory: Directory }
   | { action: 'trash'; directory: Directory }
-  | { action: 'trashFile'; file: Source };
+  | { action: 'trashFile'; file: Source }
+  | { action: 'deleteDirectory'; directory: Directory }
+  | { action: 'deleteFile'; file: Source };
 
 export function App() {
   const [catalog, setCatalog] = useState<Catalog | null>(null),
@@ -686,6 +688,8 @@ export function App() {
     archiveFile: (file, restore) => void run(() => editFile(file, { archived: !restore })),
     trashFile: (file) => setDirectoryDialog({ action: 'trashFile', file }),
     restoreFile: (file) => void run(() => editFile(file, { trashed: false })),
+    deleteFile: (file) => setDirectoryDialog({ action: 'deleteFile', file }),
+    deleteDirectory: (directory) => setDirectoryDialog({ action: 'deleteDirectory', directory }),
     moveFile: (file, folder) => void run(() => editFile(file, { folder })),
     moveDirectory: (directory, parentPath) =>
       void run(() => directoryMutation(directory, 'move', parentPath)),
@@ -2216,45 +2220,65 @@ export function App() {
           />
         )}
       {directoryDialog &&
-        (directoryDialog.action === 'trash' || directoryDialog.action === 'trashFile') && (
-          <TrashModal
-            t={t}
-            title={directoryDialog.action === 'trash' ? t.trashDirectoryTitle : t.trashFileTitle}
-            name={
-              directoryDialog.action === 'trash'
-                ? directoryDialog.directory.path
-                : directoryDialog.file.name
-            }
-            files={
-              directoryDialog.action === 'trash'
-                ? catalog.files.filter((file) =>
-                    containsPath(directoryDialog.directory.path, file.folder),
-                  ).length
-                : 1
-            }
-            folders={
-              directoryDialog.action === 'trash'
-                ? catalog.directories.filter(
-                    (directory) =>
-                      directory.id !== directoryDialog.directory.id &&
-                      containsPath(directoryDialog.directory.path, directory.path),
-                  ).length
-                : 0
-            }
-            close={() => setDirectoryDialog(null)}
-            submit={async () => {
-              if (directoryDialog.action === 'trash')
-                await directoryMutation(directoryDialog.directory, 'trash');
-              else {
-                await editFile(directoryDialog.file, { trashed: true });
-                await saveChain.current;
-                const data = await refresh();
-                if (sessionRef.current) commitWorkspace(usable(sessionRef.current, data));
+        directoryDialog.action !== 'create' &&
+        directoryDialog.action !== 'rename' &&
+        (() => {
+          const dialog = directoryDialog,
+            folder = 'directory' in dialog ? dialog.directory : null,
+            item = 'file' in dialog ? dialog.file : null,
+            permanent = dialog.action === 'deleteDirectory' || dialog.action === 'deleteFile';
+          return (
+            <TrashModal
+              t={t}
+              permanent={permanent}
+              title={
+                permanent
+                  ? t.deletePermanentlyTitle
+                  : folder
+                    ? t.trashDirectoryTitle
+                    : t.trashFileTitle
               }
-              setDirectoryDialog(null);
-            }}
-          />
-        )}
+              name={folder ? folder.path : item!.name}
+              files={
+                folder
+                  ? catalog.files.filter((file) => containsPath(folder.path, file.folder)).length
+                  : 1
+              }
+              folders={
+                folder
+                  ? catalog.directories.filter(
+                      (directory) =>
+                        directory.id !== folder.id && containsPath(folder.path, directory.path),
+                    ).length
+                  : 0
+              }
+              close={() => setDirectoryDialog(null)}
+              archive={
+                permanent
+                  ? undefined
+                  : async () => {
+                      if (folder) await directoryMutation(folder, 'archive');
+                      else await editFile(item!, { archived: true });
+                      setDirectoryDialog(null);
+                    }
+              }
+              submit={async () => {
+                if (permanent) {
+                  await api(folder ? `/directories/${folder.id}` : `/files/${item!.id}`, 'DELETE');
+                  const data = await refresh();
+                  if (sessionRef.current) commitWorkspace(usable(sessionRef.current, data));
+                } else if (folder) await directoryMutation(folder, 'trash');
+                else {
+                  await editFile(item!, { trashed: true });
+                  await saveChain.current;
+                  const data = await refresh();
+                  if (sessionRef.current) commitWorkspace(usable(sessionRef.current, data));
+                }
+                setDirectoryDialog(null);
+              }}
+            />
+          );
+        })()}
       {modal === 'upload' && (
         <Modal
           title={t.upload}
@@ -2759,7 +2783,9 @@ function TrashModal({
   name,
   files,
   folders,
+  permanent = false,
   close,
+  archive,
   submit,
 }: {
   t: T;
@@ -2767,11 +2793,24 @@ function TrashModal({
   name: string;
   files: number;
   folders: number;
+  permanent?: boolean;
   close: () => void;
+  archive?: () => Promise<void>;
   submit: () => Promise<void>;
 }) {
   const [pending, setPending] = useState(false),
     [error, setError] = useState('');
+  async function attempt(work: () => Promise<void>) {
+    setPending(true);
+    setError('');
+    try {
+      await work();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : t.error);
+    } finally {
+      setPending(false);
+    }
+  }
   return (
     <Modal
       title={title}
@@ -2783,7 +2822,7 @@ function TrashModal({
       <p>
         <strong>{name}</strong>
       </p>
-      <p>{t.trashExplanation}</p>
+      <p>{permanent ? t.deletePermanentlyExplanation : t.trashExplanation}</p>
       <p className="muted">
         {t.affectedItems.replace('{files}', String(files)).replace('{folders}', String(folders))}
       </p>
@@ -2793,23 +2832,15 @@ function TrashModal({
         </p>
       )}
       <div className="modal-actions">
-        <Button
-          variant="danger"
-          disabled={pending}
-          onClick={async () => {
-            setPending(true);
-            setError('');
-            try {
-              await submit();
-            } catch (error) {
-              setError(error instanceof Error ? error.message : t.error);
-            } finally {
-              setPending(false);
-            }
-          }}
-        >
+        {archive && (
+          <Button disabled={pending} onClick={() => void attempt(archive)}>
+            <Archive size={16} />
+            {t.archiveInstead}
+          </Button>
+        )}
+        <Button variant="danger" disabled={pending} onClick={() => void attempt(submit)}>
           <Trash2 size={16} />
-          {t.moveToTrash}
+          {permanent ? t.deletePermanently : t.moveToTrash}
         </Button>
         <Button variant="ghost" disabled={pending} onClick={close}>
           {t.cancel}

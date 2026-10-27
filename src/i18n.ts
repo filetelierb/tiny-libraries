@@ -711,6 +711,11 @@ const en = {
   trash: 'Trash',
   restoreToOpen: 'Restore this item to open it',
   moveToTrash: 'Move to Trash',
+  archiveInstead: 'Archive instead',
+  deletePermanently: 'Delete permanently',
+  deletePermanentlyTitle: 'Delete permanently',
+  deletePermanentlyExplanation:
+    'This permanently deletes the selected item and everything inside it, including original files, study preparation and captions. This cannot be undone.',
   trashDirectoryTitle: 'Delete folder',
   trashFileTitle: 'Delete file',
   trashExplanation:
@@ -1781,6 +1786,11 @@ const es: Dictionary = {
   trash: 'Papelera',
   restoreToOpen: 'Restaura este elemento para abrirlo',
   moveToTrash: 'Mover a la papelera',
+  archiveInstead: 'Archivar en su lugar',
+  deletePermanently: 'Eliminar definitivamente',
+  deletePermanentlyTitle: 'Eliminar definitivamente',
+  deletePermanentlyExplanation:
+    'Esto elimina para siempre el elemento seleccionado y todo su contenido, incluidos los archivos originales, la preparación de estudio y los subtítulos. No se puede deshacer.',
   trashDirectoryTitle: 'Eliminar carpeta',
   trashFileTitle: 'Eliminar archivo',
   trashExplanation:

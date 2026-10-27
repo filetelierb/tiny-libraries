@@ -41,6 +41,28 @@ export function sourceState(source: Source, directories: Directory[]): CatalogVi
   if (source.trashed || inherited === 'trash') return 'trash';
   return source.archived || inherited === 'archived' ? 'archived' : 'files';
 }
+/** Records removed by a permanent delete; only items already in Trash can be purged. */
+export function purgeTargets(
+  directories: Directory[],
+  files: Source[],
+  target: { kind: 'file' | 'directory'; id: string },
+) {
+  if (target.kind === 'file') {
+    const file = files.find((entry) => entry.id === target.id);
+    if (!file) throw new DirectoryError('File not found', 404);
+    if (sourceState(file, directories) !== 'trash')
+      throw new DirectoryError('Move the file to Trash before deleting it permanently', 409);
+    return { directories: [] as Directory[], files: [file] };
+  }
+  const directory = directories.find((entry) => entry.id === target.id);
+  if (!directory) throw new DirectoryError('Directory not found', 404);
+  if (directoryState(directory.path, directories) !== 'trash')
+    throw new DirectoryError('Move the folder to Trash before deleting it permanently', 409);
+  return {
+    directories: directories.filter((entry) => containsPath(directory.path, entry.path)),
+    files: files.filter((entry) => containsPath(directory.path, entry.folder)),
+  };
+}
 export function assertWritableDirectory(path: string, directories: Directory[]) {
   if (directoryState(path, directories) !== 'files')
     throw new DirectoryError('Restore the parent directory before adding or moving files', 409);

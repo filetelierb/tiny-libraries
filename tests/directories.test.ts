@@ -6,6 +6,7 @@ import {
   directoryState,
   ensureDirectories,
   normalizePath,
+  purgeTargets,
   sourceState,
 } from '../shared/directories';
 import type { Source } from '../shared/domain';
@@ -176,4 +177,42 @@ test('moving a directory carries descendants and refuses moves into itself', () 
       changeDirectory(directories, files, { action: 'move', id: week.id, parentPath: 'Missing' }),
     /not found/,
   );
+});
+
+test('permanent delete only purges trashed files and whole trashed folders', () => {
+  let state = changeDirectory([], [], { action: 'create', parentPath: '', name: 'Course' });
+  state = changeDirectory(state.directories, state.files, {
+    action: 'create',
+    parentPath: 'Course',
+    name: 'Week 1',
+  });
+  const inside = file('Course/Week 1'),
+    outside = file('Other');
+  const course = state.directories.find((directory) => directory.path === 'Course')!;
+  assert.throws(() => purgeTargets(state.directories, [inside], { kind: 'file', id: inside.id }));
+  assert.throws(() =>
+    purgeTargets(state.directories, [inside], { kind: 'directory', id: course.id }),
+  );
+  const trashed = changeDirectory(state.directories, [inside, outside], {
+    action: 'trash',
+    id: course.id,
+  });
+  const purge = purgeTargets(trashed.directories, trashed.files, {
+    kind: 'directory',
+    id: course.id,
+  });
+  assert.deepEqual(purge.directories.map((directory) => directory.path).sort(), [
+    'Course',
+    'Course/Week 1',
+  ]);
+  assert.deepEqual(
+    purge.files.map((entry) => entry.id),
+    [inside.id],
+  );
+  assert.equal(
+    purgeTargets(trashed.directories, trashed.files, { kind: 'file', id: inside.id }).files[0].id,
+    inside.id,
+  );
+  const loose = { ...outside, trashed: true };
+  assert.equal(purgeTargets([], [loose], { kind: 'file', id: loose.id }).files.length, 1);
 });

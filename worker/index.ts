@@ -73,6 +73,7 @@ import {
   assertWritableDirectory,
   directoryState,
   DirectoryError,
+  purgeTargets,
 } from '../shared/directories';
 
 const json = (value: unknown, status = 200) =>
@@ -231,6 +232,25 @@ export class Library extends DurableObject<Env> {
         return json({ folder });
       }
       const directoryMatch = path.match(/^\/api\/directories\/([a-f0-9-]+)$/);
+      const purgeMatch = path.match(/^\/api\/(files|directories)\/([a-f0-9-]+)$/);
+      if (purgeMatch && request.method === 'DELETE') {
+        const removed = await this.ctx.storage.transaction(async (storage) => {
+          const snapshot = await this.directorySnapshot(storage);
+          const target = purgeTargets(snapshot.directories, snapshot.files, {
+            kind: purgeMatch[1] === 'files' ? 'file' : 'directory',
+            id: purgeMatch[2],
+          });
+          for (const file of target.files)
+            await storage.delete([`file:${file.id}`, `learning:${file.id}`]);
+          for (const directory of target.directories)
+            await storage.delete(`directory:${directory.id}`);
+          return target;
+        });
+        return json({
+          files: removed.files.map((file) => ({ id: file.id, version: file.version })),
+          directories: removed.directories.length,
+        });
+      }
       if (
         (path === '/api/directories' && request.method === 'POST') ||
         (directoryMatch && request.method === 'PATCH')
@@ -857,6 +877,27 @@ export default {
           status: response.status,
           headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
         });
+      }
+      if (
+        request.method === 'DELETE' &&
+        /^\/api\/(files|directories)\/[a-f0-9-]+$/.test(url.pathname)
+      ) {
+        const response = await library(env).fetch(request);
+        if (!response.ok) return response;
+        const removed = await response.json<{
+          files: Array<{ id: string; version: number }>;
+          directories: number;
+        }>();
+        // Stored bytes go after the records, so a failure here never leaves a visible file without content.
+        for (const file of removed.files) {
+          const keys = Array.from(
+            { length: file.version },
+            (_, index) => `original/${file.id}/${index + 1}`,
+          );
+          const captions = await env.FILES.list({ prefix: `captions/${file.id}/` });
+          await env.FILES.delete([...keys, ...captions.objects.map((object) => object.key)]);
+        }
+        return json(removed);
       }
       return library(env).fetch(request);
     } catch (error) {
