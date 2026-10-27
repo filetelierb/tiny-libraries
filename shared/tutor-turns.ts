@@ -33,6 +33,7 @@ export const turnStatusSchema = z.enum([
 export type TutorTurnStatus = z.infer<typeof turnStatusSchema>;
 export type TurnScope = {
   references: Array<{ id: string; version: number; prepared: string }>;
+  permanentReferences?: Array<{ id: string; version: number; prepared: string }>;
   context?: TutorTurnInput['context'];
   concepts: TutorTurnInput['concepts'];
   attachments: string[];
@@ -69,6 +70,7 @@ export type TurnRecord = {
   toolNames: string[];
   stopRequested: boolean;
   steering: string[];
+  appliedSteers?: number;
   parentId?: string;
   effectiveGeneration?: TutorGeneration;
   blocking: boolean;
@@ -95,6 +97,8 @@ export type TurnView = {
   effectiveGeneration?: TutorGeneration;
   attachments: ChatMessage['attachments'];
   context?: ChatMessage['context'];
+  references?: Array<{ id: string; version: number }>;
+  phase?: TurnRecord['phase'];
   attempt: number;
   partial: string;
   toolNames: string[];
@@ -139,8 +143,12 @@ export function turnInputFingerprint(input: TutorTurnInput) {
 }
 export function turnSteeringCompatible(queued: TurnScope, active: TurnScope) {
   if (queued.attachments.length) return false;
+  const usePermanent =
+    queued.permanentReferences !== undefined && active.permanentReferences !== undefined;
   const sorted = (scope: TurnScope) =>
-    [...scope.references].sort((a, b) => a.id.localeCompare(b.id));
+    [...(usePermanent ? scope.permanentReferences! : scope.references)].sort((a, b) =>
+      a.id.localeCompare(b.id),
+    );
   return (
     JSON.stringify(sorted(queued)) === JSON.stringify(sorted(active)) &&
     (!queued.context || JSON.stringify(queued.context) === JSON.stringify(active.context)) &&

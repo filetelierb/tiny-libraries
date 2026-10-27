@@ -44,6 +44,18 @@ export class TutorConversation extends DurableObject<Env> {
   async receipt(id: string, fingerprint: string) {
     return this.checked(() => this.journal().receipt(id, fingerprint));
   }
+  async turn(id: string) {
+    return this.checked(async () => {
+      const journal = this.journal(),
+        record = await journal.get(id);
+      return record
+        ? {
+            turn: await journal.view(record, await journal.active()),
+            acceptanceFingerprint: record.acceptanceFingerprint,
+          }
+        : null;
+    });
+  }
   async accept(intent: TurnIntent, fingerprint: string) {
     return this.checked(() => this.journal().accept(intent, fingerprint));
   }

@@ -202,21 +202,42 @@ async function prepareIntent(
     conversation.id,
   );
   const contextObject = await objects.put(frozen);
+  const scopedSources = await Promise.all(
+    [...sources.values()].map(async (source) => ({
+      id: source.id,
+      version: source.version,
+      prepared: await tutorFingerprint({
+        learning: materials.find((item) => item.sourceId === source.id) || null,
+        concepts: glossary.concepts.filter((item) => item.scope === 'source'),
+      }),
+    })),
+  );
+  const permanentReferences = await Promise.all(
+    scopedSources
+      .filter((source) => references.includes(source.id))
+      .map(async (source) => ({
+        ...source,
+        prepared: await tutorFingerprint({
+          learning: materials.find((item) => item.sourceId === source.id) || null,
+          concepts: glossary.concepts
+            .filter((item) =>
+              item.entry.sources.some(
+                (origin) =>
+                  origin.sourceId === source.id && origin.sourceVersion === source.version,
+              ),
+            )
+            .map((item) => ({ id: item.entry.id, version: item.entry.version }))
+            .sort((a, b) => a.id.localeCompare(b.id)),
+        }),
+      })),
+  );
   return {
     input,
     generation,
     contextObject,
     scope: {
-      references: await Promise.all(
-        [...sources.values()].map(async (source) => ({
-          id: source.id,
-          version: source.version,
-          prepared: await tutorFingerprint({
-            learning: materials.find((item) => item.sourceId === source.id) || null,
-            concepts: glossary.concepts.filter((item) => item.scope === 'source'),
-          }),
-        })),
-      ),
+      references: scopedSources,
+      permanentReferences,
       context,
       concepts: input.concepts,
       attachments: input.attachments,
@@ -288,7 +309,7 @@ export async function conversationRoute({
       updatedAt: new Date().toISOString(),
     });
     await storage.put(`conversation:${created.id}`, created);
-    return json(created, 201);
+    return json({ ...created, pending: false }, 201);
   }
   const key = `conversation:${match![1]}`,
     conversation = await storage.get<Conversation>(key);
@@ -315,6 +336,25 @@ export async function conversationRoute({
     return request.method === 'GET'
       ? json(unwrap(await actor.attempts(match![3], before)))
       : json({ error: 'Method not allowed' }, 405);
+  if (match![3] && request.method === 'GET') {
+    const receipt = unwrap(await actor.turn(match![3]));
+    if (receipt) return json({ accepted: true, requestId: match![3], ...receipt });
+    const original = conversation.messages.find(
+      (message) => message.role === 'user' && message.requestId === match![3],
+    );
+    if (
+      original &&
+      conversation.messages.some(
+        (message) => message.role === 'assistant' && message.requestId === match![3],
+      )
+    )
+      return json({
+        accepted: true,
+        requestId: match![3],
+        acceptanceFingerprint: original.requestFingerprint,
+      });
+    return json({ error: 'Question not found' }, 404);
+  }
   if (match![3] && ['POST', 'PATCH'].includes(request.method)) {
     const action = turnActionSchema.parse(await body());
     return json(unwrap(await actor.action(match![3], action)));

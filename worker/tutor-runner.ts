@@ -121,8 +121,13 @@ export class TutorRunner {
         record.checkpointObject,
       );
       const agent = await createTutorAgent(input, checkpoint);
+      const appliedSteers = agent.snapshot().steers.length;
+      if (record.appliedSteers !== appliedSteers) {
+        await this.journal.progress(record, { appliedSteers });
+        return;
+      }
       if (record.steering.length) {
-        if (agent.modelCalls >= 20) {
+        if (agent.modelCalls >= 20 || appliedSteers >= 20) {
           await this.journal.releaseSteering(record);
           return;
         }

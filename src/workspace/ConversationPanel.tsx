@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { StudyMarkdown } from '../study/StudyMarkdown';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { SavedTutorMessage } from '../tutor/SavedTutorMessage';
 import {
   ArrowLeft,
   ArrowUp,
@@ -19,7 +19,24 @@ import {
 import type { Catalog, Source, Segment, PublicLearning } from '../../shared/domain';
 import { fold } from '../../shared/domain';
 import { sourceState } from '../../shared/directories';
-import { api } from '../api';
+import { api, ApiResponseError } from '../api';
+import {
+  turnInputFingerprint,
+  type ConversationDetail,
+  type TurnAction,
+  type TurnView,
+} from '../../shared/tutor-turns';
+import {
+  acknowledgeTutorDraft,
+  acknowledgeTutorAttachments,
+  restoreTutorDraft,
+  readTutorDraft,
+  readTutorSubmission,
+  newerConversation,
+  type TutorDraft,
+  type TutorSubmission,
+} from '../tutor/turnDrafts';
+import { TurnProgress, TurnOutbox } from '../tutor/TurnProgress';
 import { Button, IconButton, Modal } from '../design/components';
 import type { T } from '../i18n';
 import { DirectoryTree, type TreeActions } from './DirectoryTree';
@@ -34,7 +51,6 @@ import {
 import { normalizeConcept, type GlossaryEntry } from '../../shared/glossary';
 import { ConceptInspector } from '../tutor/ConceptInspector';
 import { TutorMentionPicker, type MentionPickerHandle } from '../tutor/TutorMentionPicker';
-import { citationFromHref, remarkTutorCitations } from '../tutor/citations';
 import { useCitationRecovery } from '../tutor/useCitationRecovery';
 import { AttachmentPicker } from '../tutor/AttachmentPicker';
 import { AttachmentInspector } from '../tutor/AttachmentInspector';
@@ -44,15 +60,12 @@ import {
   defaultTutorPreference,
   resolveTutorGeneration,
   type TutorPreference,
-  type TutorGeneration,
 } from '../../shared/tutor-generation';
 import type { AnnotationRequest } from '../annotations/AnnotationEditor';
 import {
   questionAttachmentSchema,
   MAX_QUESTION_ATTACHMENTS,
-  attachmentMention,
   type QuestionAttachment,
-  type AttachmentMention,
 } from '../../shared/tutor-attachments';
 
 function stored(key: string) {
@@ -100,7 +113,7 @@ export function ConversationPanel({
   cite: (sourceId: string, segment: Segment) => void;
 }) {
   const selectionKey = `tl:conversation:${sessionId}`;
-  const [threads, setThreads] = useState<Conversation[]>([]),
+  const [threads, setThreads] = useState<ConversationDetail[]>([]),
     [selected, select] = useState(() => stored(selectionKey)),
     [history, setHistory] = useState(false),
     [query, setQuery] = useState(''),
@@ -115,10 +128,17 @@ export function ConversationPanel({
   }, []);
   useEffect(() => {
     let cancelled = false;
-    void api<Conversation[]>(`/sessions/${sessionId}/conversations`)
+    void api<ConversationDetail[]>(`/sessions/${sessionId}/conversations`)
       .then((value) => {
         if (cancelled) return;
-        setThreads(value);
+        setThreads((old) =>
+          value.map((item) =>
+            newerConversation(
+              old.find((c) => c.id === item.id),
+              item,
+            ),
+          ),
+        );
         select((current) =>
           value.some((item) => item.id === current) ? current : value[0]?.id || '',
         );
@@ -135,17 +155,29 @@ export function ConversationPanel({
     store(selectionKey, selected);
   }, [selectionKey, selected]);
   const current = threads.find((item) => item.id === selected);
-  const receive = async (value: Conversation) => {
-    if (alive.current) setThreads((old) => [...old.filter((item) => item.id !== value.id), value]);
-    await changed();
+  const receive = async (value: ConversationDetail, refresh = true) => {
+    if (alive.current)
+      setThreads((old) => [
+        ...old.filter((item) => item.id !== value.id),
+        newerConversation(
+          old.find((item) => item.id === value.id),
+          value,
+        ),
+      ]);
+    if (refresh)
+      await changed().catch((error) => onError(error instanceof Error ? error.message : t.error));
   };
   const create = async () => {
     setCreating(true);
     try {
-      const created = await api<Conversation>(`/sessions/${sessionId}/conversations`, 'POST', {
-        name: `${t.conversation} ${threads.length + 1}`,
-        sourceIds: questionRequest ? [] : source ? [source.id] : [],
-      });
+      const created = await api<ConversationDetail>(
+        `/sessions/${sessionId}/conversations`,
+        'POST',
+        {
+          name: `${t.conversation} ${threads.length + 1}`,
+          sourceIds: questionRequest ? [] : source ? [source.id] : [],
+        },
+      );
       await receive(created);
       if (alive.current) {
         select(created.id);
@@ -271,7 +303,7 @@ function ConversationThread({
   prepareSource,
   createAttachment,
 }: {
-  conversation: Conversation;
+  conversation: ConversationDetail;
   catalog: Catalog;
   t: T;
   treeActions: TreeActions;
@@ -283,18 +315,30 @@ function ConversationThread({
   changed: () => Promise<unknown>;
   prepareSource: (source: Source) => void;
   createAttachment: () => Promise<AnnotationRequest | null>;
-  receive: (conversation: Conversation) => Promise<void>;
+  receive: (conversation: ConversationDetail, refresh?: boolean) => Promise<void>;
   onError: (message: string) => void;
   cite: (sourceId: string, segment: Segment) => void;
 }) {
   const [historyPages, setHistoryPages] = useState(new Map<number, ChatMessage>());
   const [historyLoading, setHistoryLoading] = useState(false);
+  const messageViewport = useRef<HTMLDivElement>(null),
+    followReply = useRef(true);
+  const historyAnchor = useRef<{ top: number; height: number } | null>(null);
   const messageCount = conversation.messageCount ?? conversation.messages.length;
   const displayed = new Map(historyPages);
   conversation.messages.forEach((message, index) =>
     displayed.set(messageCount - conversation.messages.length + index + 1, message),
   );
   const firstMessage = displayed.size ? Math.min(...displayed.keys()) : 1;
+  useLayoutEffect(() => {
+    const element = messageViewport.current;
+    if (!element) return;
+    if (historyAnchor.current) {
+      element.scrollTop =
+        historyAnchor.current.top + element.scrollHeight - historyAnchor.current.height;
+      historyAnchor.current = null;
+    } else if (followReply.current) element.scrollTop = element.scrollHeight;
+  }, [historyPages, messageCount, conversation.runState?.sequence]);
   useEffect(() => {
     // Keep already visible messages when the latest server page advances.
     setHistoryPages((previous) => {
@@ -311,6 +355,12 @@ function ConversationThread({
       const page = await api<{ messages: ChatMessage[] }>(
         `/conversations/${conversation.id}/messages?before=${firstMessage}`,
       );
+      followReply.current = false;
+      if (messageViewport.current)
+        historyAnchor.current = {
+          top: messageViewport.current.scrollTop,
+          height: messageViewport.current.scrollHeight,
+        };
       setHistoryPages((previous) => {
         const next = new Map(previous);
         page.messages.forEach((message, index) =>
@@ -325,9 +375,12 @@ function ConversationThread({
     }
   };
   const draftKey = `tl:conversation-draft:${conversation.id}`;
+  const draftStateKey = `tl:conversation-draft-state:${conversation.id}`;
+  const draftState = useRef(readTutorDraft(stored(draftStateKey), stored(draftKey)));
   const conceptKey = `tl:concept-draft:${conversation.id}`;
   const retryKey = `tl:conversation-request:${conversation.id}`;
   const attachmentKey = `tl:attachment-draft:${conversation.id}`;
+  const attachmentStampKey = `tl:attachment-selection:${conversation.id}`;
   const generationKey = `tl:generation-draft:${conversation.id}`;
   const [generationPreference, setGenerationPreference] = useState<TutorPreference>(() => {
     try {
@@ -344,8 +397,6 @@ function ConversationThread({
     setGenerationPreference(value);
     store(generationKey, JSON.stringify(value));
   };
-  const [runningGeneration, setRunningGeneration] = useState<TutorGeneration | null>(null),
-    [sentGeneration, setSentGeneration] = useState<TutorGeneration | null>(null);
   const [attachments, setAttachments] = useState<QuestionAttachment[]>(() => {
     try {
       const value = questionAttachmentSchema
@@ -359,16 +410,31 @@ function ConversationThread({
   });
   const attachmentRef = useRef(attachments);
   attachmentRef.current = attachments;
+  const attachmentStamps = useRef<Record<string, string>>(
+    (() => {
+      let saved: Record<string, string> = {};
+      try {
+        saved = JSON.parse(stored(attachmentStampKey) || '{}');
+      } catch {}
+      return Object.fromEntries(
+        attachments.map((item) => [
+          item.id,
+          typeof saved[item.id] === 'string' ? saved[item.id] : crypto.randomUUID(),
+        ]),
+      );
+    })(),
+  );
   const changeAttachments = (items: QuestionAttachment[]) => {
+    attachmentStamps.current = Object.fromEntries(
+      items.map((item) => [item.id, attachmentStamps.current[item.id] || crypto.randomUUID()]),
+    );
+    store(attachmentStampKey, JSON.stringify(attachmentStamps.current));
     attachmentRef.current = items;
     setAttachments(items);
     store(attachmentKey, JSON.stringify(items));
   };
-  const removeSentAttachments = (ids: string[]) =>
-    changeAttachments(attachmentRef.current.filter((item) => !ids.includes(item.id)));
   const [attachmentPicker, setAttachmentPicker] = useState(false),
-    [inspectedAttachment, setInspectedAttachment] = useState<string | null>(null),
-    [sentAttachments, setSentAttachments] = useState<AttachmentMention[]>([]);
+    [inspectedAttachment, setInspectedAttachment] = useState<string | null>(null);
   const [conceptDraft, setConceptDraft] = useState<{ items: ConceptMention[]; stamp: string }>(
     () => {
       try {
@@ -398,6 +464,7 @@ function ConversationThread({
     TutorCitation,
     { kind: 'source' }
   > | null>(null);
+  const citationAction = useRef<((reference: TutorCitation) => void) | null>(null);
   const mentionPicker = useRef<MentionPickerHandle>(null);
   const mentionBusy = useRef(false);
   const recoveredMaterials = useCitationRecovery(
@@ -433,11 +500,11 @@ function ConversationThread({
     consumeQuestion();
     composer.current?.focus();
   }, [questionRequest?.id]);
-  const [draft, setDraft] = useState(() => stored(draftKey)),
+  const [draft, setDraft] = useState(() => draftState.current.text),
     [pending, setPending] = useState(false),
-    [running, setRunning] = useState(false),
+    [submission, setSubmission] = useState(() => readTutorSubmission(stored(retryKey))),
+    [disconnected, setDisconnected] = useState(false),
     [mentionPending, setMentionPending] = useState(false),
-    [prompt, setPrompt] = useState(''),
     [picker, setPicker] = useState(false),
     [rename, setRename] = useState(false),
     [title, setTitle] = useState(conversation.name),
@@ -460,70 +527,236 @@ function ConversationThread({
       alive.current = false;
     };
   }, []);
+  const detailRef = useRef(conversation),
+    receiveRef = useRef(receive),
+    changedRef = useRef(changed);
+  detailRef.current = newerConversation(detailRef.current, conversation);
+  receiveRef.current = receive;
+  changedRef.current = changed;
+  const [controlBusy, setControlBusy] = useState(false);
+  const submitLock = useRef(false),
+    controlLock = useRef(false);
+  const writeDraft = (value: TutorDraft) => {
+    store(draftStateKey, JSON.stringify(value));
+    store(draftKey, value.text);
+  };
+  const changeDraft = (text: string) => {
+    const value = { text, stamp: crypto.randomUUID() };
+    draftState.current = value;
+    draftRef.current = text;
+    writeDraft(value);
+    setDraft(text);
+  };
+  const syncDraft = () => {
+    const value = readTutorDraft(stored(draftStateKey), stored(draftKey));
+    draftState.current = value;
+    draftRef.current = value.text;
+    setDraft(value.text);
+    const passage = questionContextSchema.safeParse(JSON.parse(stored(contextKey) || 'null'));
+    contextRef.current = passage.success ? passage.data : null;
+    setContext(contextRef.current);
+    contextStamp.current = stored(contextStampKey) || contextStamp.current;
+    try {
+      const saved = JSON.parse(stored(conceptKey) || '{}'),
+        items = conceptMentionsSchema.safeParse(saved.items);
+      if (items.success && typeof saved.stamp === 'string') {
+        conceptDraftRef.current = { items: items.data, stamp: saved.stamp };
+        setConceptDraft(conceptDraftRef.current);
+      }
+    } catch {}
+    try {
+      const saved = questionAttachmentSchema
+        .array()
+        .max(MAX_QUESTION_ATTACHMENTS)
+        .safeParse(JSON.parse(stored(attachmentKey) || '[]'));
+      if (saved.success) {
+        attachmentRef.current = saved.data;
+        setAttachments(saved.data);
+      }
+      attachmentStamps.current = JSON.parse(stored(attachmentStampKey) || '{}');
+    } catch {}
+    setSubmission(readTutorSubmission(stored(retryKey)));
+  };
+  const notifyDraft = () => window.dispatchEvent(new Event('tl:tutor-draft-sync'));
   useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
+    if (!stored(draftStateKey)) writeDraft(draftState.current);
+    if (!stored(contextStampKey)) store(contextStampKey, contextStamp.current);
+    if (!stored(conceptKey)) store(conceptKey, JSON.stringify(conceptDraftRef.current));
+    if (!stored(attachmentStampKey))
+      store(attachmentStampKey, JSON.stringify(attachmentStamps.current));
+    try {
+      syncDraft();
+    } catch {}
+    const sync = () => {
       try {
-        const value = await api<
-          Conversation & {
-            pending: boolean;
-            pendingGeneration?: TutorGeneration;
-          }
-        >(`/conversations/${conversation.id}`);
+        syncDraft();
+      } catch {}
+    };
+    window.addEventListener('storage', sync);
+    window.addEventListener('tl:tutor-draft-sync', sync);
+    return () => {
+      window.removeEventListener('storage', sync);
+      window.removeEventListener('tl:tutor-draft-sync', sync);
+    };
+  }, [conversation.id]);
+  const acknowledge = (sent: TutorSubmission) => {
+    const current = readTutorDraft(stored(draftStateKey), stored(draftKey));
+    const next = acknowledgeTutorDraft(current, sent);
+    if (next !== current) writeDraft(next);
+    try {
+      const concepts = JSON.parse(stored(conceptKey) || '{}');
+      if (sent.conceptStamp && concepts.stamp === sent.conceptStamp)
+        store(conceptKey, JSON.stringify({ items: [], stamp: crypto.randomUUID() }));
+      if (sent.contextStamp && stored(contextStampKey) === sent.contextStamp) {
+        store(contextKey, '');
+        store(contextStampKey, crypto.randomUUID());
+      }
+      const selected = questionAttachmentSchema
+        .array()
+        .safeParse(JSON.parse(stored(attachmentKey) || '[]'));
+      const stamps = JSON.parse(stored(attachmentStampKey) || '{}');
+      if (selected.success && sent.attachmentStamps) {
+        const kept = acknowledgeTutorAttachments(selected.data, stamps, sent);
+        store(
+          attachmentStampKey,
+          JSON.stringify(Object.fromEntries(kept.map((item) => [item.id, stamps[item.id]]))),
+        );
+        store(attachmentKey, JSON.stringify(kept));
+      }
+    } catch {}
+    if (readTutorSubmission(stored(retryKey))?.payload.requestId === sent.payload.requestId)
+      store(retryKey, '');
+    notifyDraft();
+  };
+  const reconcile = async (sent = readTutorSubmission(stored(retryKey))) => {
+    if (!sent) return false;
+    try {
+      const receipt = await api<{
+        accepted: boolean;
+        requestId: string;
+        acceptanceFingerprint?: string;
+      }>(`/conversations/${conversation.id}/turns/${sent.payload.requestId}`);
+      if (!receipt.accepted || receipt.requestId !== sent.payload.requestId) return false;
+      if (
+        receipt.acceptanceFingerprint &&
+        receipt.acceptanceFingerprint !== (await turnInputFingerprint(sent.payload))
+      ) {
+        if (readTutorSubmission(stored(retryKey))?.payload.requestId === sent.payload.requestId) {
+          store(retryKey, JSON.stringify({ ...sent, error: t.savedRequestConflict }));
+          notifyDraft();
+        }
+        return false;
+      }
+      acknowledge(sent);
+      return true;
+    } catch (error) {
+      if (error instanceof ApiResponseError && error.status === 404) return false;
+      throw error;
+    }
+  };
+  const reconcileRef = useRef(reconcile);
+  reconcileRef.current = reconcile;
+  useEffect(() => {
+    let cancelled = false,
+      loading = false,
+      timer: number | undefined;
+    const load = async () => {
+      if (loading || cancelled) return;
+      loading = true;
+      window.clearTimeout(timer);
+      try {
+        const value = await api<ConversationDetail>(`/conversations/${conversation.id}`);
         if (cancelled) return;
-        setRunning(value.pending);
-        setRunningGeneration(value.pendingGeneration || null);
-        if (value.updatedAt !== conversation.updatedAt) await receive(value);
+        setDisconnected(false);
+        const previous = detailRef.current,
+          next = newerConversation(previous, value);
+        if (next !== previous) {
+          detailRef.current = next;
+          await receiveRef.current(next, false);
+        }
+        if (
+          !next.pending &&
+          (previous.pending ||
+            (previous.messageCount ?? previous.messages.length) !==
+              (next.messageCount ?? next.messages.length))
+        )
+          void changedRef.current().catch(() => {});
+        await reconcileRef.current().catch(() => {});
       } catch {
-        /* A transient polling failure must not discard this conversation. */
+        if (!cancelled) setDisconnected(true);
+      } finally {
+        loading = false;
+        if (!cancelled)
+          timer = window.setTimeout(
+            () => void load(),
+            detailRef.current.pending || readTutorSubmission(stored(retryKey)) ? 750 : 2500,
+          );
       }
     };
+    const wake = () => {
+      if (document.visibilityState === 'visible') void load();
+    };
     void load();
-    const timer = setInterval(() => void load(), 2500);
+    window.addEventListener('online', wake);
+    document.addEventListener('visibilitychange', wake);
     return () => {
       cancelled = true;
-      clearInterval(timer);
+      window.clearTimeout(timer);
+      window.removeEventListener('online', wake);
+      document.removeEventListener('visibilitychange', wake);
     };
-  }, [conversation.id, conversation.updatedAt]);
-  const changeDraft = (value: string) => {
-    setDraft(value);
-    draftRef.current = value;
-    store(draftKey, value);
-  };
+  }, [conversation.id]);
   const patch = async (value: Partial<Conversation>) => {
     try {
-      await receive(await api<Conversation>(`/conversations/${conversation.id}`, 'PATCH', value));
+      await receive(
+        await api<ConversationDetail>(`/conversations/${conversation.id}`, 'PATCH', value),
+      );
       return true;
     } catch (error) {
       onError(error instanceof Error ? error.message : t.error);
       return false;
     }
   };
-  useEffect(() => {
-    let sent: {
-      requestId?: string;
-      conceptStamp?: string;
-      contextStamp?: string;
-      context?: QuestionContext;
-      attachments?: string[];
-    } = {};
+  const act = async (
+    turn: TurnView,
+    action: TurnAction['action'],
+    edit?: Pick<TurnAction, 'prompt' | 'generation'>,
+  ) => {
+    if (controlLock.current) return null;
+    controlLock.current = true;
+    setControlBusy(true);
+    const operationKey = `tl:tutor-control:${conversation.id}`;
+    const intent = JSON.stringify({ id: turn.id, action, revision: turn.revision, ...edit });
+    let operationId = crypto.randomUUID();
     try {
-      sent = JSON.parse(stored(retryKey) || '{}');
+      const previous = JSON.parse(stored(operationKey) || '{}');
+      if (previous.intent === intent && typeof previous.operationId === 'string')
+        operationId = previous.operationId;
     } catch {}
-    if (
-      !sent.requestId ||
-      !conversation.messages.some((m) => m.role === 'assistant' && m.requestId === sent.requestId)
-    )
-      return;
-    if (sent.conceptStamp === conceptDraftRef.current.stamp) changeConcepts([]);
-    removeSentAttachments(sent.attachments || []);
-    if (
-      sent.contextStamp === contextStamp.current &&
-      JSON.stringify(sent.context) === JSON.stringify(contextRef.current || undefined)
-    )
-      changeContext(null);
-    store(retryKey, '');
-  }, [conversation.messages]);
+    store(operationKey, JSON.stringify({ intent, operationId }));
+    try {
+      const value = await api<TurnView>(
+        `/conversations/${conversation.id}/turns/${turn.id}`,
+        'POST',
+        { action, revision: turn.revision, operationId, ...edit },
+      );
+      if (stored(operationKey) === JSON.stringify({ intent, operationId })) store(operationKey, '');
+      const next = await api<ConversationDetail>(`/conversations/${conversation.id}`);
+      detailRef.current = newerConversation(detailRef.current, next);
+      await receive(detailRef.current);
+      if (action !== 'edit' && action !== 'save') composer.current?.focus({ preventScroll: true });
+      return value;
+    } catch (error) {
+      onError(error instanceof Error ? error.message : t.error);
+      try {
+        await receive(await api<ConversationDetail>(`/conversations/${conversation.id}`), false);
+      } catch {}
+      return null;
+    } finally {
+      controlLock.current = false;
+      if (alive.current) setControlBusy(false);
+    }
+  };
   const resolve = async (sourceId: string, segmentId: string, question?: QuestionContext) => {
     if (question?.sourceId === sourceId && segmentId === 'selected-passage') {
       cite(sourceId, {
@@ -618,6 +851,7 @@ function ConversationThread({
       ...(ref.location.seconds != null ? { start: ref.location.seconds } : {}),
     });
   };
+  citationAction.current = openCitation;
   const contextFor = (message: (typeof conversation.messages)[number]) =>
     message.context ||
     (message.requestId
@@ -625,96 +859,100 @@ function ConversationThread({
           (item) => item.role === 'user' && item.requestId === message.requestId,
         )?.context
       : undefined);
-  async function send() {
-    const text = draftRef.current.trim(),
-      question = contextRef.current || undefined;
-    const questionConcepts = conceptDraftRef.current.items.map(({ id, version }) => ({
-      id,
-      version,
-    }));
-    const conceptStamp = conceptDraftRef.current.stamp,
-      questionStamp = contextStamp.current;
-    const questionAttachments = attachmentRef.current.map((item) => item.id);
-    const generation = resolveTutorGeneration(generationRef.current, catalog.settings.model);
-    const fingerprint = JSON.stringify({
-      prompt: text,
-      context: question,
-      concepts: questionConcepts,
-      sourceIds: [...conversation.sourceIds].sort(),
-      attachments: questionAttachments,
-      generation,
-    });
-    if (!text || pending || running || mentionBusy.current) return;
-    let previous: {
-      prompt?: string;
-      requestId?: string;
-      fingerprint?: string;
-      references?: string[];
-    } = {};
-    try {
-      previous = JSON.parse(stored(retryKey) || '{}');
-    } catch {}
-    const sameRequest = previous.fingerprint === fingerprint && previous.requestId;
-    const requestId = sameRequest ? previous.requestId! : crypto.randomUUID();
-    // An older receipt retains its original body format; new questions capture references at Send.
-    const references = sameRequest ? previous.references : [...conversation.sourceIds];
-    store(
-      retryKey,
-      JSON.stringify({
-        prompt: text,
-        context: question,
-        concepts: questionConcepts,
-        attachments: questionAttachments,
-        generation,
-        conceptStamp,
-        contextStamp: questionStamp,
-        fingerprint,
-        requestId,
-        ...(references ? { references } : {}),
-      }),
-    );
+  async function submitSaved(sent: TutorSubmission) {
+    if (submitLock.current) return;
+    submitLock.current = true;
     setPending(true);
-    setSentGeneration(generation);
-    setSentAttachments(attachmentRef.current.map(attachmentMention));
-    setPrompt(text);
-    changeDraft('');
     try {
-      const next = await api<Conversation>(`/conversations/${conversation.id}/turns`, 'POST', {
-        prompt: text,
-        requestId,
-        concepts: questionConcepts,
-        attachments: questionAttachments,
-        generation,
-        ...(references ? { references } : {}),
-        ...(question ? { context: question } : {}),
-      });
-      await receive(next);
-      store(retryKey, '');
-      removeSentAttachments(questionAttachments);
-      if (conceptDraftRef.current.stamp === conceptStamp) changeConcepts([]);
-      if (
-        contextStamp.current === questionStamp &&
-        JSON.stringify(contextRef.current || undefined) === JSON.stringify(question)
-      )
-        changeContext(null);
+      const next = await api<ConversationDetail>(
+        `/conversations/${conversation.id}/turns`,
+        'POST',
+        sent.payload,
+      );
+      if (next.acceptedRequestId !== sent.payload.requestId)
+        throw new Error(t.acceptanceUnconfirmed);
+      acknowledge(sent);
+      detailRef.current = newerConversation(detailRef.current, next);
+      await receive(detailRef.current);
     } catch (error) {
-      // Do not overwrite a new draft typed while this reply was running.
-      if (
-        !stored(draftKey) &&
-        JSON.stringify(contextRef.current || undefined) === JSON.stringify(question)
-      ) {
-        store(draftKey, text);
-        if (alive.current) setDraft(text);
+      try {
+        if (await reconcile(sent)) return;
+      } catch {}
+      if (readTutorSubmission(stored(retryKey))?.payload.requestId === sent.payload.requestId) {
+        const unchangedContext =
+          stored(contextStampKey) === sent.contextStamp &&
+          JSON.parse(stored(conceptKey) || '{}').stamp === sent.conceptStamp &&
+          JSON.stringify(JSON.parse(stored(attachmentStampKey) || '{}')) ===
+            JSON.stringify(sent.attachmentStamps || {});
+        const restored = restoreTutorDraft(
+          readTutorDraft(stored(draftStateKey), stored(draftKey)),
+          sent,
+          unchangedContext,
+        );
+        writeDraft(restored.draft);
+        store(
+          retryKey,
+          JSON.stringify({
+            ...restored.submission,
+            error: (error instanceof Error ? error.message : t.error).slice(0, 500),
+            rejected: error instanceof ApiResponseError && error.status < 500,
+          }),
+        );
+        notifyDraft();
       }
       onError(error instanceof Error ? error.message : t.error);
     } finally {
-      if (alive.current) {
-        setPending(false);
-        setPrompt('');
-        setSentAttachments([]);
-        setSentGeneration(null);
+      submitLock.current = false;
+      if (alive.current) setPending(false);
+    }
+  }
+  async function send() {
+    const text = draftRef.current.trim();
+    if (!text || submitLock.current || mentionBusy.current) return;
+    const saved = readTutorSubmission(stored(retryKey));
+    if (saved) {
+      const sameDraft =
+        draftState.current.stamp === saved.restoredStamp ||
+        draftState.current.stamp === saved.draftStamp;
+      const sameContext =
+        contextStamp.current === saved.contextStamp &&
+        conceptDraftRef.current.stamp === saved.conceptStamp &&
+        JSON.stringify(attachmentStamps.current) === JSON.stringify(saved.attachmentStamps || {});
+      if (sameDraft && sameContext) {
+        await submitSaved(saved);
+        return;
+      }
+      if (!saved.rejected) {
+        onError(t.resolveUnconfirmedFirst);
+        return;
       }
     }
+    const emptyStamp = crypto.randomUUID();
+    const sent: TutorSubmission = {
+      format: 2,
+      draftStamp: draftState.current.stamp,
+      emptyStamp,
+      conceptStamp: conceptDraftRef.current.stamp,
+      contextStamp: contextStamp.current,
+      attachmentStamps: { ...attachmentStamps.current },
+      payload: {
+        requestId: crypto.randomUUID(),
+        prompt: text,
+        concepts: conceptDraftRef.current.items.map(({ id, version }) => ({ id, version })),
+        attachments: attachmentRef.current.map((item) => item.id),
+        references: [...conversation.sourceIds],
+        generation: resolveTutorGeneration(generationRef.current, catalog.settings.model),
+        ...(contextRef.current ? { context: contextRef.current } : {}),
+      },
+    };
+    store(retryKey, JSON.stringify(sent));
+    setSubmission(sent);
+    const empty = { text: '', stamp: emptyStamp };
+    draftState.current = empty;
+    draftRef.current = '';
+    writeDraft(empty);
+    setDraft('');
+    await submitSaved(sent);
   }
   return (
     <div className="assistant">
@@ -761,7 +999,18 @@ function ConversationThread({
               ? t.attachmentQuestionContext
               : t.generalTutorNotice}
       </p>
-      <div className="conversation-messages" aria-live="polite" aria-relevant="additions text">
+      <div
+        ref={messageViewport}
+        className="conversation-messages"
+        role="log"
+        aria-live="polite"
+        aria-relevant="additions text"
+        onScroll={(event) => {
+          const element = event.currentTarget;
+          followReply.current =
+            element.scrollHeight - element.scrollTop - element.clientHeight < 48;
+        }}
+      >
         {firstMessage > 1 && (
           <Button variant="ghost" disabled={historyLoading} onClick={() => void loadEarlier()}>
             {historyLoading ? t.loading : t.earlierMessages}
@@ -772,12 +1021,19 @@ function ConversationThread({
           .map(([sequence, message]) => {
             const references =
               message.citations ?? recoverCitations(message, conversation, recoveredMaterials);
-            const byId = new Map(references.map((ref) => [ref.id, ref]));
             return (
               <div
                 className={`chat-message ${message.role}`}
                 key={`${conversation.id}:message:${sequence}`}
               >
+                {message.turnKind === 'steering' && (
+                  <small className="tutor-message-state">{t.steeringInstruction}</small>
+                )}
+                {message.status && (
+                  <small className="tutor-message-state">
+                    {t[`turn_${message.status}`]} · {t.partialReplyNotice}
+                  </small>
+                )}
                 {message.role === 'user' && !!message.attachments?.length && (
                   <div className="message-attachments" aria-label={t.questionAttachments}>
                     {message.attachments.map((attachment) => (
@@ -820,40 +1076,24 @@ function ConversationThread({
                     ))}
                   </div>
                 ) : null}
-                <StudyMarkdown
+                <SavedTutorMessage
+                  content={message.content}
+                  references={references}
+                  labels={Object.fromEntries(
+                    references.map((reference) => [reference.id, citationLabel(reference)]),
+                  )}
                   t={t}
-                  remarkPlugins={[[remarkTutorCitations, { references, label: citationLabel }]]}
-                  components={{
-                    a: ({ href, children }) => {
-                      const ref = citationFromHref(href, byId);
-                      if (ref)
-                        return (
-                          <button
-                            className="evidence-link"
-                            title={`${citationLabel(ref)}${ref.kind === 'concept' ? ` · ${t.revision} ${ref.version}` : ref.kind === 'source' && ref.recovered ? ` · ${t.recoveredCitationNotice}` : ''}`}
-                            onClick={() => openCitation(ref)}
-                          >
-                            {children}
-                          </button>
-                        );
-                      if (href?.startsWith('#tutor/') || href?.startsWith('#evidence/'))
-                        return <span>{children}</span>;
-                      return (
-                        <a href={href} target="_blank" rel="noreferrer">
-                          {children}
-                        </a>
-                      );
-                    },
-                  }}
-                >
-                  {message.content}
-                </StudyMarkdown>
+                  open={citationAction}
+                />
+
                 {message.role === 'assistant' && (
                   <Button
                     variant="ghost"
                     onClick={() =>
                       annotate(
-                        message.content,
+                        message.status
+                          ? `${t.partialReplyNotice}\n\n${message.content}`
+                          : message.content,
                         message.sourceIds || conversation.sourceIds,
                         contextFor(message),
                       )
@@ -890,40 +1130,47 @@ function ConversationThread({
               </div>
             );
           })}
-        {pending && (
-          <>
-            {!!sentAttachments.length && (
-              <p className="muted">
-                {t.questionAttachments}: {sentAttachments.map((item) => item.name).join(', ')}
-              </p>
-            )}
-            <div className="chat-message user">
-              <p>{prompt}</p>
-            </div>
-            <p role="status" className="muted">
-              <LoaderCircle className="spin" size={14} /> {t.thinking}
-              {sentGeneration && (
-                <>
-                  {' '}
-                  · <GenerationLabel value={sentGeneration} t={t} />
-                </>
-              )}
-            </p>
-          </>
-        )}
-        {!pending && running && (
-          <p role="status" className="muted">
-            <LoaderCircle className="spin" size={14} /> {t.thinking}
-            {runningGeneration && (
-              <>
-                {' '}
-                · <GenerationLabel value={runningGeneration} t={t} />
-              </>
-            )}
+        {pending && submission && (
+          <p className="muted" role="status">
+            {t.savingQuestion}
           </p>
         )}
+        {conversation.runState?.active && (
+          <TurnProgress turn={conversation.runState.active} t={t} busy={controlBusy} act={act} />
+        )}
+        {disconnected && (
+          <p role="status" className="tutor-connection-notice">
+            {t.reconnectingReply}
+          </p>
+        )}
+        {submission && !pending && (
+          <section className="tutor-submission" aria-label={t.acceptanceUnconfirmed}>
+            <strong>{t.acceptanceUnconfirmed}</strong>
+            <p>{submission.payload.prompt}</p>
+            {submission.payload.generation && (
+              <small>
+                <GenerationLabel value={submission.payload.generation} t={t} />
+              </small>
+            )}
+            {submission.error && <p className="tutor-turn-error">{submission.error}</p>}
+            <p className="muted">
+              {submission.rejected ? t.rejectedQuestionNotice : t.unconfirmedQuestionNotice}
+            </p>
+            <Button onClick={() => void submitSaved(submission)}>{t.resendSavedQuestion}</Button>
+          </section>
+        )}
+        <TurnOutbox
+          items={conversation.runState?.outbox || []}
+          catalog={catalog}
+          t={t}
+          busy={controlBusy}
+          act={act}
+          inspectAttachment={setInspectedAttachment}
+          conversationId={conversation.id}
+        />
       </div>
       <form
+        className="tutor-composer"
         onSubmit={(event) => {
           event.preventDefault();
           void send();
@@ -1065,10 +1312,10 @@ function ConversationThread({
           <Button
             variant="primary"
             type="submit"
-            disabled={pending || running || mentionPending || !draft.trim()}
+            disabled={pending || mentionPending || !draft.trim()}
           >
             <ArrowUp size={15} />
-            {t.send}
+            {conversation.pending ? t.queueQuestion : t.send}
           </Button>
         </div>
       </form>

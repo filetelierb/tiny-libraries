@@ -91,6 +91,7 @@ import { DirectoryTree, type TreeActions } from './workspace/DirectoryTree';
 import { SplitWorkspace } from './workspace/SplitWorkspace';
 import { UploadForm } from './workspace/UploadForm';
 import { ConversationPanel } from './workspace/ConversationPanel';
+import { conversationHasWork } from './tutor/turnDrafts';
 import { AnnotationsPanel } from './annotations/AnnotationsPanel';
 import { captureSource } from './annotations/capture';
 import type { AnnotationRequest } from './annotations/AnnotationEditor';
@@ -251,6 +252,25 @@ export function App() {
     setBookmarkTick((value) => value + 1);
     return value;
   }
+  const pendingConversations = !!catalog?.conversations.some(conversationHasWork);
+  useEffect(() => {
+    if (!pendingConversations) return;
+    let cancelled = false,
+      timer: number;
+    const poll = async () => {
+      try {
+        await refresh();
+      } catch {
+        /* Stored work remains authoritative while the local server reconnects. */
+      }
+      if (!cancelled) timer = window.setTimeout(() => void poll(), 2500);
+    };
+    timer = window.setTimeout(() => void poll(), 2500);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [pendingConversations]);
   useEffect(() => {
     document.documentElement.lang = locale;
     localStorage.setItem('tl:locale', locale);

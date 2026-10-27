@@ -209,6 +209,6 @@ function GenerationPopover({
         <RotateCcw size={14} /> {t.resetGeneration}
       </Button>
     </div>,
-    document.body,
+    anchor.closest('dialog') || document.body,
   );
 }

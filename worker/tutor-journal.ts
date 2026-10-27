@@ -171,6 +171,7 @@ export class TutorJournal {
         toolNames: [],
         stopRequested: false,
         steering: [],
+        appliedSteers: 0,
         blocking: false,
         createdAt: time,
         updatedAt: time,
@@ -283,6 +284,7 @@ export class TutorJournal {
         | 'providerSequence'
         | 'providerStart'
         | 'retiredProviders'
+        | 'appliedSteers'
         | 'modelCalls'
         | 'partial'
         | 'toolNames'
@@ -411,6 +413,7 @@ export class TutorJournal {
           record.generation = intent.generation;
           record.intentRevision++;
           record.modelCalls = 0;
+          record.appliedSteers = 0;
           record.toolNames = [];
           record.status = 'queued';
           record.blocking = false;
@@ -463,7 +466,7 @@ export class TutorJournal {
             running.stopRequested ||
             running.intentObject !== active!.intentObject ||
             running.modelCalls >= 20 ||
-            running.steering.length >= 20 ||
+            (running.appliedSteers || 0) + running.steering.length >= 20 ||
             !activeIntent ||
             !turnSteeringCompatible(intent.scope, activeIntent.scope)
           )
@@ -493,10 +496,14 @@ export class TutorJournal {
     const child = await this.get(childId);
     if (!child) throw new TutorJournalError('Steering question is unavailable', 500);
     const intent = await this.intent(child);
+    const activeIntent = await this.intent(record);
     const user = chatMessageSchema.parse({
       ...intent.userMessage,
+      sourceIds: activeIntent.userMessage.sourceIds,
+      context: intent.userMessage.context || activeIntent.userMessage.context,
       generation: record.generation,
       messageId: `${childId}:steer`,
+      turnKind: 'steering',
     });
     const object = await this.objects.put(user);
     return this.storage.transaction(async (tx) => {
@@ -519,6 +526,7 @@ export class TutorJournal {
         user,
       );
       current.steering.shift();
+      current.appliedSteers = (current.appliedSteers || 0) + 1;
       current.checkpointObject = checkpointObject;
       current.providerId = undefined;
       current.providerSequence = undefined;
@@ -659,6 +667,8 @@ export class TutorJournal {
       effectiveGeneration: record.effectiveGeneration,
       attachments: intent.userMessage.attachments,
       context: intent.userMessage.context,
+      references: intent.scope.references.map(({ id, version }) => ({ id, version })),
+      phase: record.phase,
       attempt: record.attempt,
       partial: record.partial,
       toolNames: record.toolNames,
@@ -672,7 +682,7 @@ export class TutorJournal {
         record.status === 'queued' &&
         !active.stopRequested &&
         active.modelCalls < 20 &&
-        active.steering.length < 20 &&
+        (active.appliedSteers || 0) + active.steering.length < 20 &&
         !!activeIntent &&
         turnSteeringCompatible(intent.scope, activeIntent.scope),
     };
@@ -685,7 +695,7 @@ export class TutorJournal {
       const ids = [...(await tx.list<string>({ prefix: 'queue:', limit: 20 })).values()];
       const attention = await tx.list<string>({ prefix: 'attention:', limit: 20, reverse: true });
       const records: TurnRecord[] = [];
-      for (const id of new Set([...ids, ...attention.values()]))
+      for (const id of new Set([...ids, ...attention.values(), ...(active?.steering || [])]))
         records.push((await tx.get<TurnRecord>(turnKey(id)))!);
       return { meta, active, records };
     });

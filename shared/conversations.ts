@@ -51,6 +51,7 @@ export const chatMessageSchema = z.object({
   sourceIds: z.array(z.string().uuid()).max(20).optional(),
   messageId: z.string().max(200).optional(),
   status: z.enum(['stopped', 'failed', 'interrupted']).optional(),
+  turnKind: z.literal('steering').optional(),
 });
 export const conversationSchema = z.object({
   id: z.string().min(1).max(200),

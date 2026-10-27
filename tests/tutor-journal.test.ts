@@ -309,3 +309,57 @@ test('assessment context reaches earlier linked messages even when the latest pa
   assert.equal(linked.messageCount, 92);
   assert.deepEqual((await f.journal.linkedMessages([crypto.randomUUID()], []))!.messages, []);
 });
+
+test('steering history keeps its inherited passage and active source association', async () => {
+  const f = await fixture(),
+    intent = f.intent(),
+    sourceId = crypto.randomUUID();
+  const context = {
+    sourceId,
+    sourceVersion: 1,
+    sourceName: 'Selected passage.md',
+    location: { quote: 'Frozen passage' },
+  };
+  intent.userMessage.context = context;
+  intent.userMessage.sourceIds = [sourceId];
+  intent.scope.context = context;
+  intent.scope.references = [{ id: sourceId, version: 1, prepared: 'prepared' }];
+  intent.scope.permanentReferences = [];
+  await f.accept(intent);
+  const running = (await f.journal.claim())!;
+  const next = f.intent('Explain that passage more briefly');
+  next.scope.permanentReferences = [];
+  const child = await f.accept(next);
+  await f.journal.action(child.id, f.action(child.revision, 'steer'));
+  await f.journal.appliedSteering(
+    (await f.journal.active())!,
+    child.id,
+    await f.journal.objects.put({ checkpoint: 'inherited' }),
+  );
+  const message = (await f.journal.history()).messages.at(-1)!;
+  assert.deepEqual(message.context, context);
+  assert.deepEqual(message.sourceIds, [sourceId]);
+  assert.equal(message.turnKind, 'steering');
+  assert.equal((await f.journal.active())!.id, running.id);
+});
+
+test('applied steering counts toward the admission limit without discarding the next queued question', async () => {
+  const f = await fixture();
+  await f.accept();
+  await f.journal.claim();
+  for (let n = 0; n < 20; n++) {
+    const child = await f.accept(f.intent(`Instruction ${n}`));
+    await f.journal.action(child.id, f.action(child.revision, 'steer'));
+    const current = (await f.journal.active())!;
+    await f.journal.appliedSteering(
+      current,
+      child.id,
+      await f.journal.objects.put({ checkpoint: n }),
+    );
+  }
+  const next = await f.accept(f.intent('Keep this question queued'));
+  assert.equal((await f.journal.active())!.appliedSteers, 20);
+  assert.equal((await f.journal.view(next, await f.journal.active())).canSteer, false);
+  await assert.rejects(f.journal.action(next.id, f.action(next.revision, 'steer')), /cannot steer/);
+  assert.equal((await f.journal.get(next.id))!.status, 'queued');
+});
