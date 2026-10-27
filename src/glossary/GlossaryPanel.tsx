@@ -14,6 +14,8 @@ import {
   FileText,
   Network,
   SlidersHorizontal,
+  ChevronRight,
+  Merge,
 } from 'lucide-react';
 import type { Catalog, ConceptSource, PublicLearning, Source } from '../../shared/domain';
 import type { SourceLocation } from '../../shared/annotations';
@@ -53,15 +55,16 @@ function Relation({
   const [expanded, setExpanded] = useState(false);
   return (
     <section className="glossary-relation">
-      <button className="text-link" onClick={open}>
-        <LinkIcon size={13} />
+      <button onClick={open}>
+        <Network />
         {title}
+        <ChevronRight />
       </button>
       <p className={expanded ? '' : 'clamped'}>{description}</p>
       {description.length > 100 && (
-        <Button variant="ghost" onClick={() => setExpanded((v) => !v)}>
+        <button type="button" className="text-link" onClick={() => setExpanded((v) => !v)}>
           {expanded ? t.showLess : t.showMore}
-        </Button>
+        </button>
       )}
     </section>
   );
@@ -327,51 +330,65 @@ export function GlossaryPanel({
     return (
       <div className="glossary-detail" ref={detail}>
         <header>
-          <Button variant="ghost" disabled={pending} onClick={back}>
-            <ArrowLeft size={14} />
-            {t.back}
+          <Button variant="ghost" size="sm" disabled={pending} onClick={back}>
+            <ArrowLeft />
+            {t.glossary}
           </Button>
           <details className="glossary-visited">
-            <summary>{t.visitedConcepts}</summary>
-            {visited.map((id) => (
-              <button key={id} disabled={pending} onClick={() => void open(id)}>
-                {name(id)}
-              </button>
-            ))}
+            <summary aria-label={t.visitedConcepts} title={t.visitedConcepts}>
+              <History />
+            </summary>
+            <div className="glossary-visited-menu" role="menu">
+              {visited.map((id) => (
+                <button key={id} disabled={pending} onClick={() => void open(id)}>
+                  {name(id)}
+                </button>
+              ))}
+            </div>
           </details>
         </header>
-        <h2>{entry.term}</h2>
-        <div className="glossary-meta">
-          <span>
-            {t.revision} {entry.version}
-          </span>
-          <Badge tone={entry.reviewed ? 'success' : 'warning'}>
-            {entry.reviewed ? t.reviewed : t.notReviewed}
-          </Badge>
-          {entry.archived && <Badge>{t.archived}</Badge>}
-        </div>
+        <h2 title={`${t.revision} ${entry.version}`}>{entry.term}</h2>
+        {entry.archived && (
+          <div className="glossary-meta">
+            <Badge tone="outline">{t.archived}</Badge>
+          </div>
+        )}
         {entry.mergedInto ? (
           <Button onClick={() => void open(entry.mergedInto!)}>
             {t.mergedConcept} {name(entry.mergedInto)}
           </Button>
         ) : (
           <div className="glossary-actions">
-            <Button disabled={pending} onClick={() => setEditing(structuredClone(entry))}>
-              <Pencil size={14} />
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={pending}
+              onClick={() => setEditing(structuredClone(entry))}
+            >
+              <Pencil />
               {t.edit}
             </Button>
-            <Button disabled={pending} onClick={() => void history()}>
-              <History size={14} />
+            <Button variant="ghost" size="sm" disabled={pending} onClick={() => void history()}>
+              <History />
               {t.versions}
             </Button>
             <Button
+              variant="ghost"
+              size="sm"
               disabled={pending}
               onClick={() => void task(() => save({ ...entry, archived: !entry.archived }))}
             >
-              {entry.archived ? <RotateCcw size={14} /> : <Archive size={14} />}
+              {entry.archived ? <RotateCcw /> : <Archive />}
               {entry.archived ? t.restore : t.archive}
             </Button>
-            <Button disabled={pending} onClick={() => setMerging((v) => !v)}>
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-pressed={merging}
+              disabled={pending}
+              onClick={() => setMerging((v) => !v)}
+            >
+              <Merge />
               {t.mergeConcept}
             </Button>
           </div>
@@ -490,10 +507,9 @@ export function GlossaryPanel({
         {entry.senses.map((sense, index) => (
           <section className="glossary-sense" key={sense.id}>
             <header>
-              <h3>{sense.label || `${t.meaning} ${index + 1}`}</h3>
-              <Badge tone={sense.reviewed ? 'success' : 'warning'}>
-                {sense.reviewed ? t.reviewed : t.notReviewed}
-              </Badge>
+              <h3>
+                {index + 1}. {sense.label || t.meaning}
+              </h3>
             </header>
             <div className="glossary-definition">
               <StudyMarkdown t={t}>{sense.definition}</StudyMarkdown>
@@ -501,11 +517,12 @@ export function GlossaryPanel({
             {!!sense.synonyms.length && (
               <div>
                 <h4>{t.linkedSynonyms}</h4>
-                <div className="glossary-actions">
+                <div className="glossary-chips">
                   {sense.synonyms.map((id) => (
-                    <Button key={id} disabled={pending} onClick={() => void open(id)}>
+                    <button type="button" key={id} disabled={pending} onClick={() => void open(id)}>
+                      <LinkIcon />
                       {name(id)}
-                    </Button>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -515,7 +532,12 @@ export function GlossaryPanel({
                 <h4>{t.sourceReferences}</h4>
                 {sense.sources.map((reference, i) => (
                   <div className="glossary-source" key={i}>
-                    <button className="text-link" onClick={() => void jump(reference)}>
+                    <button
+                      className="glossary-source-chip"
+                      title={`${t.sourceVersion} ${reference.sourceVersion}`}
+                      onClick={() => void jump(reference)}
+                    >
+                      <FileText />
                       {catalog.files.find((f) => f.id === reference.sourceId)?.name ||
                         t.sourceUnavailable}
                       {reference.location?.page
@@ -523,9 +545,7 @@ export function GlossaryPanel({
                         : reference.location?.seconds != null
                           ? ` · ${reference.location.seconds}s`
                           : ''}
-                      <small>
-                        {t.sourceVersion} {reference.sourceVersion}
-                      </small>
+                      <ArrowUpRight />
                     </button>
                     {reference.location?.quote && (
                       <blockquote>{reference.location.quote}</blockquote>
