@@ -229,6 +229,138 @@ export function MediaPlayer({
       void toggle();
     }
   };
+  const markedBookmarks = bookmarks.filter(
+    (bookmark) =>
+      bookmark.seconds != null &&
+      Number.isFinite(bookmark.seconds) &&
+      bookmark.seconds >= 0 &&
+      bookmark.seconds <= duration &&
+      duration > 0,
+  );
+  const tipSide = (percent: number) => (percent < 15 ? 'start' : percent > 85 ? 'end' : '');
+  const timeline = (
+    <div
+      className="media-timeline"
+      style={{ paddingTop: chapters.length ? 20 + laneCount * 16 : 16 }}
+    >
+      {chapters.length > 0 && (
+        <div className="chapter-markers" aria-label={t.chapterMarkers}>
+          {chapters.map((chapter, index) => {
+            const left = (chapter.start / duration) * 100;
+            const description = `${chapter.title} · ${formatTime(chapter.start)}–${formatTime(chapter.end)}`;
+            return (
+              <button
+                key={chapter.id}
+                type="button"
+                className={index % 2 ? 'alternate' : ''}
+                aria-label={`${t.chapters}: ${description}`}
+                aria-current={chapter.id === currentChapter?.id ? 'true' : undefined}
+                style={{
+                  left: `${left}%`,
+                  top: `${chapter.lane * 16}px`,
+                  width: `${((chapter.end - chapter.start) / duration) * 100}%`,
+                }}
+                onClick={() => changeTime(chapter.start)}
+              >
+                <span className="marker-bar" />
+                <span className={`marker-tip ${tipSide(left)}`}>{description}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <input
+        type="range"
+        aria-label={t.seekRecording}
+        aria-valuetext={`${formatTime(time)} / ${formatTime(duration)}`}
+        min={0}
+        max={duration || 0}
+        step={0.1}
+        disabled={!duration}
+        value={boundedTime(time, duration)}
+        onChange={(event) => changeTime(Number(event.target.value))}
+        onKeyDown={(event) => {
+          if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+            event.preventDefault();
+            event.stopPropagation();
+            changeTime(time + (event.key === 'ArrowRight' ? 5 : -5));
+          }
+        }}
+      />
+      {markedBookmarks.length > 0 && (
+        <div className="bookmark-markers" aria-label={t.bookmarkMarkers}>
+          {markedBookmarks.map((bookmark) => {
+            const left = (bookmark.seconds! / duration) * 100;
+            const description = `${formatTime(bookmark.seconds!)} · ${bookmark.label}`;
+            return (
+              <button
+                key={bookmark.id}
+                type="button"
+                style={{ left: `${left}%` }}
+                aria-label={`${t.addBookmark}: ${description}`}
+                onClick={() => changeTime(bookmark.seconds!)}
+              >
+                <Bookmark size={16} fill="currentColor" />
+                <span className={`marker-tip ${tipSide(left)}`}>{description}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+  const clock = (
+    <span className="player-time" aria-live="off">
+      {formatTime(time)} / {formatTime(duration)}
+    </span>
+  );
+  const speedGroup = (
+    <div className="player-speed" role="group" aria-label={t.playbackSpeed}>
+      <button
+        type="button"
+        aria-label={t.slower}
+        title={t.slower}
+        disabled={preferences.speed <= 0.25}
+        onClick={() => changeSpeed(preferences.speed - 0.25)}
+      >
+        <Minus size={14} />
+      </button>
+      <select
+        aria-label={t.playbackSpeed}
+        value={preferences.speed}
+        onChange={(event) => changeSpeed(Number(event.target.value))}
+      >
+        {playbackSpeeds.map((speed) => (
+          <option key={speed} value={speed}>
+            {speed}×
+          </option>
+        ))}
+      </select>
+      <button
+        type="button"
+        aria-label={t.faster}
+        title={t.faster}
+        disabled={preferences.speed >= 4}
+        onClick={() => changeSpeed(preferences.speed + 0.25)}
+      >
+        <Plus size={14} />
+      </button>
+    </div>
+  );
+  const captionSelect = (
+    <select
+      className="player-captions"
+      aria-label={t.subtitle}
+      value={preferences.track}
+      onChange={(event) =>
+        setPreferences((current) => ({ ...current, track: event.target.value }))
+      }
+    >
+      <option value="off">{t.captionsOff}</option>
+      <option value="original">{t.original}</option>
+      <option value="translated">{t.translated}</option>
+    </select>
+  );
   return (
     <div
       ref={root}
@@ -269,6 +401,7 @@ export function MediaPlayer({
         preload="metadata"
         playsInline
         aria-label={source.name}
+        onClick={source.kind === 'video' ? () => void toggle() : undefined}
         onLoadedMetadata={() => {
           const player = media.current!;
           setDuration(player.duration);
@@ -341,205 +474,120 @@ export function MediaPlayer({
           />
         ))}
       </Tag>
-      <div className="media-surface">
-        {source.kind === 'audio' && (
-          <div className="audio-artwork">
-            <Headphones size={44} />
-            <span>{source.name}</span>
-            {caption && <p className="audio-caption">{caption}</p>}
+      {source.kind === 'audio' ? (
+        <div className="audio-card">
+          <Headphones size={40} />
+          <p className="audio-title">{source.name}</p>
+          <p className="audio-subtitle">{t.audioRecording}</p>
+          {caption && <p className="audio-caption">{caption}</p>}
+          {timeline}
+          <div className="audio-row">
+            <button
+              type="button"
+              className="audio-play"
+              aria-label={playing ? t.pause : t.play}
+              disabled={!duration}
+              onClick={() => void toggle()}
+            >
+              {playing ? <Pause size={16} /> : <Play size={16} />}
+            </button>
+            {clock}
+            <div className="player-end">
+              {speedGroup}
+              {captionSelect}
+            </div>
           </div>
-        )}
-        <IconButton
-          label={playing ? t.pause : t.play}
-          onClick={() => void toggle()}
-          disabled={!duration}
-        >
-          {playing ? <Pause size={30} /> : <Play size={30} />}
-        </IconButton>
-      </div>
+        </div>
+      ) : null}
       {error && (
         <p className="player-error" role="alert">
           {error}
         </p>
       )}
-      <div className="player-controls" inert={!visible}>
-        {currentChapter && <div className="player-chapter">{currentChapter.title}</div>}
-        <div className="media-timeline" style={{ paddingTop: Math.max(24, 8 + laneCount * 14) }}>
-          {chapters.length > 0 && (
-            <div className="chapter-markers" aria-label={t.chapterMarkers}>
-              {chapters.map((chapter) => (
-                <button
-                  key={chapter.id}
-                  type="button"
-                  aria-label={`${t.chapters}: ${chapter.title} · ${formatTime(chapter.start)}–${formatTime(chapter.end)}`}
-                  title={`${chapter.title} · ${formatTime(chapter.start)}–${formatTime(chapter.end)}`}
-                  aria-current={chapter.id === currentChapter?.id ? 'true' : undefined}
-                  style={{
-                    left: `${(chapter.start / duration) * 100}%`,
-                    top: `${chapter.lane * 14}px`,
-                    width: `${((chapter.end - chapter.start) / duration) * 100}%`,
-                  }}
-                  onClick={() => changeTime(chapter.start)}
-                >
-                  <span />
-                </button>
-              ))}
+      {source.kind === 'video' && (
+        <div className="player-controls" inert={!visible}>
+          {timeline}
+          <div className="player-buttons">
+            <IconButton
+              label={t.skipBackward}
+              disabled={!duration}
+              onClick={() => changeTime(time - 5)}
+            >
+              <span className="skip-glyph" aria-hidden="true">
+                <RotateCcw />
+                <span>5</span>
+              </span>
+            </IconButton>
+            <IconButton
+              label={playing ? t.pause : t.play}
+              disabled={!duration}
+              onClick={() => void toggle()}
+            >
+              {playing ? <Pause /> : <Play />}
+            </IconButton>
+            <IconButton
+              label={t.skipForward}
+              disabled={!duration}
+              onClick={() => changeTime(time + 5)}
+            >
+              <span className="skip-glyph" aria-hidden="true">
+                <RotateCw />
+                <span>5</span>
+              </span>
+            </IconButton>
+            {clock}
+            <IconButton
+              label={preferences.muted || preferences.volume === 0 ? t.unmute : t.mute}
+              aria-pressed={preferences.muted}
+              onClick={() =>
+                setPreferences((current) => ({
+                  ...current,
+                  muted: current.volume === 0 ? false : !current.muted,
+                  volume: current.volume === 0 ? 1 : current.volume,
+                }))
+              }
+            >
+              {preferences.muted || preferences.volume === 0 ? <VolumeX /> : <Volume2 />}
+            </IconButton>
+            <input
+              className="player-volume"
+              aria-label={t.volume}
+              type="range"
+              min={0}
+              max={1}
+              step={0.05}
+              value={preferences.muted ? 0 : preferences.volume}
+              onChange={(event) =>
+                setPreferences((current) => ({
+                  ...current,
+                  volume: Number(event.target.value),
+                  muted: false,
+                }))
+              }
+            />
+            <div className="player-end">
+              {speedGroup}
+              {captionSelect}
+              <IconButton
+                label={fullscreen ? t.exitFullscreen : t.fullscreen}
+                onClick={() => {
+                  if (!root.current?.requestFullscreen) {
+                    setError(t.fullscreenError);
+                    return;
+                  }
+                  const operation =
+                    document.fullscreenElement === root.current
+                      ? document.exitFullscreen()
+                      : root.current?.requestFullscreen();
+                  void operation?.catch(() => setError(t.fullscreenError));
+                }}
+              >
+                {fullscreen ? <Minimize2 /> : <Maximize2 />}
+              </IconButton>
             </div>
-          )}
-          <input
-            type="range"
-            aria-label={t.seekRecording}
-            aria-valuetext={`${formatTime(time)} / ${formatTime(duration)}`}
-            min={0}
-            max={duration || 0}
-            step={0.1}
-            disabled={!duration}
-            value={boundedTime(time, duration)}
-            onChange={(event) => changeTime(Number(event.target.value))}
-            onKeyDown={(event) => {
-              if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-                event.preventDefault();
-                event.stopPropagation();
-                changeTime(time + (event.key === 'ArrowRight' ? 5 : -5));
-              }
-            }}
-          />
-          <div className="bookmark-markers" aria-label={t.bookmarkMarkers}>
-            {bookmarks
-              .filter(
-                (bookmark) =>
-                  bookmark.seconds != null &&
-                  Number.isFinite(bookmark.seconds) &&
-                  bookmark.seconds >= 0 &&
-                  bookmark.seconds <= duration &&
-                  duration > 0,
-              )
-              .map((bookmark) => (
-                <button
-                  key={bookmark.id}
-                  type="button"
-                  style={{ left: `${(bookmark.seconds! / duration) * 100}%` }}
-                  aria-label={`${t.addBookmark}: ${formatTime(bookmark.seconds!)} · ${bookmark.label}`}
-                  title={`${formatTime(bookmark.seconds!)} · ${bookmark.label}`}
-                  onClick={() => changeTime(bookmark.seconds!)}
-                >
-                  <Bookmark size={12} />
-                </button>
-              ))}
           </div>
         </div>
-        <div className="player-buttons">
-          <IconButton
-            label={playing ? t.pause : t.play}
-            disabled={!duration}
-            onClick={() => void toggle()}
-          >
-            {playing ? <Pause /> : <Play />}
-          </IconButton>
-          <IconButton
-            label={t.skipBackward}
-            disabled={!duration}
-            onClick={() => changeTime(time - 5)}
-          >
-            <RotateCcw />
-            <span>5</span>
-          </IconButton>
-          <IconButton
-            label={t.skipForward}
-            disabled={!duration}
-            onClick={() => changeTime(time + 5)}
-          >
-            <RotateCw />
-            <span>5</span>
-          </IconButton>
-          <span className="player-time" aria-live="off">
-            {formatTime(time)} / {formatTime(duration)}
-          </span>
-          <IconButton
-            label={preferences.muted || preferences.volume === 0 ? t.unmute : t.mute}
-            aria-pressed={preferences.muted}
-            onClick={() =>
-              setPreferences((current) => ({
-                ...current,
-                muted: current.volume === 0 ? false : !current.muted,
-                volume: current.volume === 0 ? 1 : current.volume,
-              }))
-            }
-          >
-            {preferences.muted || preferences.volume === 0 ? <VolumeX /> : <Volume2 />}
-          </IconButton>
-          <input
-            className="player-volume"
-            aria-label={t.volume}
-            type="range"
-            min={0}
-            max={1}
-            step={0.05}
-            value={preferences.muted ? 0 : preferences.volume}
-            onChange={(event) =>
-              setPreferences((current) => ({
-                ...current,
-                volume: Number(event.target.value),
-                muted: false,
-              }))
-            }
-          />
-          <div className="player-speed">
-            <IconButton
-              label={t.slower}
-              disabled={preferences.speed <= 0.25}
-              onClick={() => changeSpeed(preferences.speed - 0.25)}
-            >
-              <Minus />
-            </IconButton>
-            <select
-              aria-label={t.playbackSpeed}
-              value={preferences.speed}
-              onChange={(event) => changeSpeed(Number(event.target.value))}
-            >
-              {playbackSpeeds.map((speed) => (
-                <option key={speed} value={speed}>
-                  {speed}×
-                </option>
-              ))}
-            </select>
-            <IconButton
-              label={t.faster}
-              disabled={preferences.speed >= 4}
-              onClick={() => changeSpeed(preferences.speed + 0.25)}
-            >
-              <Plus />
-            </IconButton>
-          </div>
-          <select
-            aria-label={t.subtitle}
-            value={preferences.track}
-            onChange={(event) =>
-              setPreferences((current) => ({ ...current, track: event.target.value }))
-            }
-          >
-            <option value="off">{t.captionsOff}</option>
-            <option value="original">{t.original}</option>
-            <option value="translated">{t.translated}</option>
-          </select>
-          <IconButton
-            label={fullscreen ? t.exitFullscreen : t.fullscreen}
-            onClick={() => {
-              if (!root.current?.requestFullscreen) {
-                setError(t.fullscreenError);
-                return;
-              }
-              const operation =
-                document.fullscreenElement === root.current
-                  ? document.exitFullscreen()
-                  : root.current?.requestFullscreen();
-              void operation?.catch(() => setError(t.fullscreenError));
-            }}
-          >
-            {fullscreen ? <Minimize2 /> : <Maximize2 />}
-          </IconButton>
-        </div>
-      </div>
+      )}
     </div>
   );
 }
