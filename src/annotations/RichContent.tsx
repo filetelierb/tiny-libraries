@@ -1,7 +1,10 @@
 import { Fragment, type ReactNode } from 'react';
 import type { RichNode } from '../../shared/annotations';
+import type { T } from '../i18n';
+import { Formula } from '../study/Formula';
+import { Diagram } from '../study/Diagram';
 
-export function RichContent({ document }: { document: RichNode }) {
+export function RichContent({ document, t }: { document: RichNode; t: T }) {
   const render = (node: RichNode, key: number): ReactNode => {
     let children: ReactNode = node.type === 'text' ? node.text : node.content?.map(render);
     for (const mark of node.marks || []) {
@@ -18,6 +21,10 @@ export function RichContent({ document }: { document: RichNode }) {
         );
     }
     switch (node.type) {
+      case 'inlineMath':
+        return <Formula label={t.formula} key={key} source={node.attrs?.latex || ''} />;
+      case 'blockMath':
+        return <Formula label={t.formula} key={key} source={node.attrs?.latex || ''} display />;
       case 'doc':
       case 'text':
         return <Fragment key={key}>{children}</Fragment>;
@@ -44,8 +51,25 @@ export function RichContent({ document }: { document: RichNode }) {
       case 'blockquote':
         return <blockquote key={key}>{children}</blockquote>;
       case 'codeBlock':
+        if (node.attrs?.language === 'mermaid')
+          return (
+            <Diagram
+              key={key}
+              source={node.content?.map((part) => part.text || '').join('') || ''}
+              t={t}
+            />
+          );
+        if (node.attrs?.language === 'math')
+          return (
+            <Formula
+              label={t.formula}
+              key={key}
+              source={node.content?.map((part) => part.text || '').join('') || ''}
+              display
+            />
+          );
         return (
-          <pre key={key}>
+          <pre key={key} tabIndex={0}>
             <code>{children}</code>
           </pre>
         );
@@ -55,7 +79,13 @@ export function RichContent({ document }: { document: RichNode }) {
         return <hr key={key} />;
       case 'table':
         return (
-          <div className="rich-table-scroll" key={key}>
+          <div
+            className="rich-table-scroll study-table-scroll"
+            key={key}
+            tabIndex={0}
+            role="region"
+            aria-label={t.studyTable}
+          >
             <table>
               <tbody>{children}</tbody>
             </table>

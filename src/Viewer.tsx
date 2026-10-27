@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, lazy, Suspense } from 'react';
-import Markdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { StudyMarkdown } from './study/StudyMarkdown';
 import type { Source, PublicLearning, Bookmark, Segment } from '../shared/domain';
 import type { ReadingProgress } from '../shared/chapters';
 import type { SourceLocation } from '../shared/annotations';
@@ -228,7 +227,9 @@ export function Viewer({
       }}
     >
       {source.kind === 'markdown' ? (
-        <Markdown remarkPlugins={[remarkGfm, remarkSourceAnchors]}>{text}</Markdown>
+        <StudyMarkdown t={t} remarkPlugins={[remarkSourceAnchors]}>
+          {text}
+        </StudyMarkdown>
       ) : (
         <pre data-source-start="0" data-source-end={text.length}>
           {text}

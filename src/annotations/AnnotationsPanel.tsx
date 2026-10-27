@@ -298,7 +298,7 @@ export function AnnotationsPanel({
           closeLabel={t.close}
         >
           {opened.location.quote && <blockquote>{opened.location.quote}</blockquote>}
-          <RichContent document={opened.document} />
+          <RichContent document={opened.document} t={t} />
           {opened.capture && (
             <div
               className="sketch-surface annotation-capture"
@@ -368,7 +368,7 @@ function AnnotationPreview({ item, t, open }: { item: AnnotationSummary; t: T; o
     <div ref={root}>
       {value ? (
         <div className="annotation-rich-preview">
-          <RichContent document={value.document} />
+          <RichContent document={value.document} t={t} />
         </div>
       ) : (
         <p>

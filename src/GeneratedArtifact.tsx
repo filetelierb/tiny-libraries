@@ -3,6 +3,7 @@ import type { Artifact, Segment } from '../shared/domain';
 import type { T } from './i18n';
 import { SignalExplorer } from './SignalExplorer';
 import { Button } from './design/components';
+import { StudyMarkdown } from './study/StudyMarkdown';
 
 type Parameters = { frequency: number; sampling: number; amplitude: number };
 export function GeneratedArtifact({
@@ -27,7 +28,7 @@ export function GeneratedArtifact({
     <section className="generated-artifact">
       <div className="section-label">{t.explanation}</div>
       <h2>{artifact.title}</h2>
-      <p className="muted">{artifact.explanation}</p>
+      <StudyMarkdown t={t}>{artifact.explanation}</StudyMarkdown>
       <div className="citations">
         {artifact.segmentIds.map((id) => {
           const source = segments.find((s) => s.id === id);
@@ -61,8 +62,8 @@ export function GeneratedArtifact({
               </button>
               {selected === i && (
                 <div>
-                  <p>{row.left}</p>
-                  <p>{row.right}</p>
+                  <StudyMarkdown t={t}>{row.left}</StudyMarkdown>
+                  <StudyMarkdown t={t}>{row.right}</StudyMarkdown>
                 </div>
               )}
             </section>

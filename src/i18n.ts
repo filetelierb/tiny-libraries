@@ -1,5 +1,15 @@
 import type { Locale } from '../shared/domain';
 const en = {
+  studyTable: 'Study table',
+  formula: 'Formula',
+  diagram: 'Study diagram',
+  diagramDescription: 'Diagram. Its full description is available in Diagram source.',
+  expandDiagram: 'Expand diagram',
+  diagramSource: 'Diagram source',
+  diagramLoading: 'Rendering diagram…',
+  diagramUnavailable: 'Diagram preview unavailable. Source is shown below.',
+  resetZoom: 'Reset zoom',
+
   tabActions: 'Tab actions',
   closeTab: 'Close tab',
   splitWithCurrent: 'Split with current resource',
@@ -743,6 +753,16 @@ const en = {
 };
 type Dictionary = typeof en;
 const es: Dictionary = {
+  studyTable: 'Tabla de estudio',
+  formula: 'Fórmula',
+  diagram: 'Diagrama de estudio',
+  diagramDescription: 'Diagrama. Su descripción completa está disponible en Código del diagrama.',
+  expandDiagram: 'Ampliar diagrama',
+  diagramSource: 'Código del diagrama',
+  diagramLoading: 'Generando diagrama…',
+  diagramUnavailable: 'Vista previa no disponible. El código se muestra a continuación.',
+  resetZoom: 'Restablecer zoom',
+
   tabActions: 'Opciones de pestaña',
   closeTab: 'Cerrar pestaña',
   splitWithCurrent: 'Dividir con el recurso actual',

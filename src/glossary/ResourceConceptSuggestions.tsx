@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import Markdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { StudyMarkdown } from '../study/StudyMarkdown';
 import { ArrowLeft, Lightbulb, LoaderCircle, X } from 'lucide-react';
 import type { Catalog, Source } from '../../shared/domain';
 import type { SourceLocation } from '../../shared/annotations';
@@ -592,7 +591,7 @@ function SuggestionReview({
               {t.restoreSuggestion}
             </Button>
           )}
-          <Markdown remarkPlugins={[remarkGfm]}>{candidate.definition}</Markdown>
+          <StudyMarkdown t={t}>{candidate.definition}</StudyMarkdown>
         </div>
       ) : (
         <form
@@ -645,7 +644,7 @@ function SuggestionReview({
                       <Badge tone={sense.reviewed ? 'success' : 'warning'}>
                         {sense.reviewed ? t.reviewed : t.notReviewed}
                       </Badge>
-                      <Markdown remarkPlugins={[remarkGfm]}>{sense.definition}</Markdown>
+                      <StudyMarkdown t={t}>{sense.definition}</StudyMarkdown>
                     </div>
                   ))}
                 </section>
@@ -731,7 +730,7 @@ function SuggestionReview({
                       {related && (
                         <details>
                           <summary>{t.reviewRelatedConcept}</summary>
-                          <Markdown remarkPlugins={[remarkGfm]}>{related.definition}</Markdown>
+                          <StudyMarkdown t={t}>{related.definition}</StudyMarkdown>
                           {related.sources.map((s, k) => (
                             <button
                               type="button"

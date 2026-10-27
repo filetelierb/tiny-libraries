@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import Markdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { StudyMarkdown } from '../study/StudyMarkdown';
 import {
   ArrowLeft,
   ArrowUp,
@@ -650,11 +649,9 @@ function ConversationThread({
                   ))}
                 </div>
               ) : null}
-              <Markdown
-                remarkPlugins={[
-                  remarkGfm,
-                  [remarkTutorCitations, { references, label: citationLabel }],
-                ]}
+              <StudyMarkdown
+                t={t}
+                remarkPlugins={[[remarkTutorCitations, { references, label: citationLabel }]]}
                 components={{
                   a: ({ href, children }) => {
                     const ref = citationFromHref(href, byId);
@@ -679,7 +676,7 @@ function ConversationThread({
                 }}
               >
                 {message.content}
-              </Markdown>
+              </StudyMarkdown>
               {message.role === 'assistant' && (
                 <Button
                   variant="ghost"

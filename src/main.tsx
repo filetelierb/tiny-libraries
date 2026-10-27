@@ -4,3 +4,4 @@ import './design/tokens.css';
 import './styles.css';
 
 createRoot(document.getElementById('root')!).render(<App />);
+import 'katex/dist/katex.min.css';

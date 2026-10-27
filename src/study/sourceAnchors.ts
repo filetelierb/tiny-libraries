@@ -13,7 +13,9 @@ export function remarkSourceAnchors() {
       if (
         start != null &&
         end != null &&
-        ['paragraph', 'heading', 'listItem', 'blockquote', 'table', 'code'].includes(node.type)
+        ['paragraph', 'heading', 'listItem', 'blockquote', 'table', 'code', 'math'].includes(
+          node.type,
+        )
       ) {
         node.data ||= {};
         node.data.hProperties = {

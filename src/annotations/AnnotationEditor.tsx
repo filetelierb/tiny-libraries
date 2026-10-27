@@ -30,6 +30,7 @@ import { api } from '../api';
 import { Button, IconButton, Modal } from '../design/components';
 import { Sketch } from './Sketch';
 import type { T } from '../i18n';
+import { InlineMath, BlockMath } from './mathNodes';
 
 export type CaptureImage = { url: string; width: number; height: number; blob?: Blob };
 export type AnnotationRequest = {
@@ -120,6 +121,8 @@ export default function AnnotationEditor({
       }),
       TableKit.configure({ table: { resizable: true } }),
       Markdown,
+      InlineMath,
+      BlockMath,
     ],
     content: initialContent.current,
     contentType: typeof initialContent.current === 'string' ? 'markdown' : 'json',

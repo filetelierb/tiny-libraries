@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import Markdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { StudyMarkdown } from '../study/StudyMarkdown';
 import type { ConceptMention } from '../../shared/tutor-context';
 import type { Catalog, ConceptSource, PublicLearning, Segment } from '../../shared/domain';
 import type { GlossaryEntry } from '../../shared/glossary';
@@ -123,7 +122,7 @@ export function ConceptInspector({
               </Badge>
             </header>
             <div className="glossary-definition">
-              <Markdown remarkPlugins={[remarkGfm]}>{sense.definition}</Markdown>
+              <StudyMarkdown t={t}>{sense.definition}</StudyMarkdown>
             </div>
             {!!sense.sources.length && (
               <div>

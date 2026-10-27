@@ -4589,3 +4589,105 @@ body:has(.panel-resizer.resizing) {
     flex-wrap: wrap;
   }
 }
+
+.study-markdown {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.study-markdown pre,
+.study-diagram pre {
+  white-space: pre;
+  overflow: auto;
+  max-width: 100%;
+  font: 13px/1.65 var(--font-mono);
+}
+.study-table-scroll,
+.study-math-block,
+.study-formula-display {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.study-formula-display {
+  display: block;
+  padding: 4px 0;
+}
+.study-formula .katex {
+  font-size: 1.1em;
+  overflow-wrap: normal;
+}
+.study-formula:not(.study-formula-display) {
+  display: inline-block;
+  max-width: 100%;
+  overflow-x: auto;
+  vertical-align: middle;
+}
+.study-formula .katex-display {
+  margin: 0.6em 0;
+}
+.study-formula .formula-source {
+  white-space: pre-wrap;
+}
+.study-table-scroll table {
+  display: table;
+  border-collapse: collapse;
+  min-width: 100%;
+  width: max-content;
+}
+.study-table-scroll :is(th, td) {
+  min-width: 6rem;
+  max-width: 24rem;
+  overflow-wrap: normal;
+}
+.study-diagram {
+  margin: 16px 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.study-diagram > .button {
+  margin: 8px 0;
+}
+.study-diagram summary {
+  cursor: pointer;
+  color: var(--muted-text);
+  font-size: var(--font-size-control);
+  padding: 6px 0;
+}
+.diagram-scroll {
+  overflow: auto;
+  max-width: 100%;
+  background: #fff;
+  border-radius: 4px;
+}
+.diagram-scroll img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  margin: auto;
+}
+.modal.diagram-modal {
+  width: min(1100px, 96vw);
+  max-width: 96vw;
+}
+.diagram-expanded {
+  height: min(65vh, 680px);
+}
+.diagram-zoom {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.diagram-render-host {
+  position: fixed;
+  left: -100000px;
+  top: 0;
+  width: 1200px;
+  visibility: hidden;
+  pointer-events: none;
+}

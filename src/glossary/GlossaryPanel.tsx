@@ -1,6 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import Markdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { StudyMarkdown } from '../study/StudyMarkdown';
 import {
   Plus,
   ArrowLeft,
@@ -445,7 +444,7 @@ export function GlossaryPanel({
                 {revisionPreview.senses.map((sense) => (
                   <div key={sense.id}>
                     <h4>{sense.label}</h4>
-                    <Markdown remarkPlugins={[remarkGfm]}>{sense.definition}</Markdown>
+                    <StudyMarkdown t={t}>{sense.definition}</StudyMarkdown>
                   </div>
                 ))}
               </section>
@@ -491,7 +490,7 @@ export function GlossaryPanel({
               </Badge>
             </header>
             <div className="glossary-definition">
-              <Markdown remarkPlugins={[remarkGfm]}>{sense.definition}</Markdown>
+              <StudyMarkdown t={t}>{sense.definition}</StudyMarkdown>
             </div>
             {!!sense.synonyms.length && (
               <div>
@@ -565,7 +564,7 @@ export function GlossaryPanel({
             <p>{t.proposalsBody}</p>
             {entry.proposals.map((proposal) => (
               <section key={proposal.id}>
-                <Markdown remarkPlugins={[remarkGfm]}>{proposal.definition}</Markdown>
+                <StudyMarkdown t={t}>{proposal.definition}</StudyMarkdown>
                 <button className="text-link" onClick={() => void jump(proposal.source)}>
                   {catalog.files.find((f) => f.id === proposal.source.sourceId)?.name ||
                     t.sourceUnavailable}

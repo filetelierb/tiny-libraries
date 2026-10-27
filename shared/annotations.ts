@@ -74,6 +74,7 @@ export type RichNode = {
     rowspan?: number;
     colwidth?: number[] | null;
     language?: string | null;
+    latex?: string;
   };
   marks?: Array<{ type: string; attrs?: { href: string } }>;
 };
@@ -102,6 +103,8 @@ const richNode: z.ZodType<RichNode> = z.lazy(() =>
       'tableRow',
       'tableCell',
       'tableHeader',
+      'inlineMath',
+      'blockMath',
     ]),
     text: z.string().max(40000).optional(),
     content: z.array(richNode).max(2000).optional(),
@@ -113,6 +116,7 @@ const richNode: z.ZodType<RichNode> = z.lazy(() =>
         rowspan: z.number().int().min(1).max(100).optional(),
         colwidth: z.array(z.number().min(25).max(2000)).max(20).nullable().optional(),
         language: z.string().max(40).nullable().optional(),
+        latex: z.string().max(8000).optional(),
       })
       .optional(),
     marks: z
@@ -165,6 +169,7 @@ export function plainDocument(text = ''): RichNode {
   };
 }
 export function richText(node: RichNode): string {
+  if (node.type === 'inlineMath' || node.type === 'blockMath') return node.attrs?.latex || '';
   if (node.type === 'text') return node.text || '';
   if (node.type === 'hardBreak') return '\n';
   const text = (node.content || [])

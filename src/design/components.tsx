@@ -80,6 +80,7 @@ export function Modal({
       ref={ref}
       onCancel={(event) => {
         event.preventDefault();
+        event.stopPropagation();
         close();
       }}
       onClick={(e) => {
