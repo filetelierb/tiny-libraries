@@ -109,6 +109,7 @@ const en = {
     'Add a Meta API key in Settings to prepare an assessment. Saved reports remain available.',
   assessmentClose: 'Close assessment',
   assessmentSetup: 'Assessment setup',
+  assessmentHistory: 'History',
   assessmentSetupHint:
     'Choose studied files, saved evidence, or both, then the kind of review you want. Questions use only this captured selection.',
   assessmentGuidance: 'How would you like to review?',
@@ -1159,6 +1160,7 @@ const es: Dictionary = {
     'Añade una clave de API de Meta en Ajustes para preparar una evaluación. Los informes guardados siguen disponibles.',
   assessmentClose: 'Cerrar repaso',
   assessmentSetup: 'Configurar repaso',
+  assessmentHistory: 'Historial',
   assessmentSetupHint:
     'Elige archivos estudiados, evidencia guardada o ambos, y después el tipo de repaso. Las preguntas usan solo esta selección.',
   assessmentGuidance: '¿Cómo quieres repasar?',

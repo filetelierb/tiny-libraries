@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { z } from 'zod';
-import { ArrowLeft, Plus, RefreshCw, Search } from 'lucide-react';
+import { Plus, RefreshCw, Search } from 'lucide-react';
 import {
   assessmentSetupSchema,
   assessmentCounts,
@@ -274,11 +274,8 @@ export function AssessmentWorkspace({
           )}
           {selected ? (
             <>
-              <Button variant="ghost" onClick={() => choose(null)}>
-                <ArrowLeft size={14} />
-                {t.assessmentSetup}
-              </Button>
               <AssessmentRun
+                back={() => choose(null)}
                 key={selected}
                 id={selected}
                 sessionId={sessionId}

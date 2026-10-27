@@ -128,8 +128,7 @@ export function ChapterQuiz({
     <Modal title={t.quiz} close={() => close(false)} closeLabel={t.closeQuiz}>
       <div className="chapter-quiz-heading">
         <p>
-          {t.quiz} · {t.chapter} {learning.synthesis.chapters.indexOf(chapter) + 1} ·{' '}
-          {source.name}
+          {t.quiz} · {t.chapter} {learning.synthesis.chapters.indexOf(chapter) + 1} · {source.name}
         </p>
         <h3>{chapter.title}</h3>
       </div>
@@ -155,8 +154,7 @@ export function ChapterQuiz({
                   {i + 1}. {q.prompt}
                 </h4>
                 <p>
-                  {t.yourAnswer}:{' '}
-                  {q.kind === 'short' ? result.answer : q.choices[result.selected]}
+                  {t.yourAnswer}: {q.kind === 'short' ? result.answer : q.choices[result.selected]}
                 </p>
                 <p
                   className={`quiz-verdict ${result.pendingReview ? 'pending' : result.correct ? 'correct' : 'incorrect'}`}

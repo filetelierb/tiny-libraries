@@ -19,10 +19,10 @@ export function AssessmentCitations({
   inspect: (id: string, imageId?: string) => void;
 }) {
   return (
-    <details className="assessment-citations">
-      <summary>
+    <div className="assessment-citations">
+      <p className="assessment-citations-heading">
         {t.sourceEvidence} ({citations.length})
-      </summary>
+      </p>
       {citations.map((citation, index) => {
         if ('attachmentId' in citation) {
           const item = context.attachments?.find(
@@ -44,12 +44,17 @@ export function AssessmentCitations({
                   loading="lazy"
                 />
               )}
-              <Button variant="ghost" onClick={() => inspect(item.attachment.id, image?.id)}>
+              <button
+                type="button"
+                className="assessment-citation-link"
+                onClick={() => inspect(item.attachment.id, image?.id)}
+              >
                 {image?.capture?.label || item.attachment.name} · {t.assessmentSavedEvidence}
                 {item.attachment.annotationRevision
                   ? ` · ${t.revision} ${item.attachment.annotationRevision}`
-                  : ''}
-              </Button>
+                  : ''}{' '}
+                ↗
+              </button>
             </div>
           );
         }
@@ -58,19 +63,23 @@ export function AssessmentCitations({
         return source && segment ? (
           <div key={index}>
             <blockquote>{citation.quote}</blockquote>
-            <Button variant="ghost" onClick={() => navigate(source.id, segment)}>
+            <button
+              type="button"
+              className="assessment-citation-link"
+              onClick={() => navigate(source.id, segment)}
+            >
               {source.name} ·{' '}
               {segment.page
                 ? `${t.page} ${segment.page}`
                 : segment.start != null
                   ? formatTime(segment.start)
                   : segment.id}{' '}
-              · v{source.version}
-            </Button>
+              · v{source.version} ↗
+            </button>
           </div>
         ) : null;
       })}
-    </details>
+    </div>
   );
 }
 export function AssessmentScope({

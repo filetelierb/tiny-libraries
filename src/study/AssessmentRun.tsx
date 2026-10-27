@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, ChevronLeft, ChevronRight, Download, LoaderCircle, RefreshCw } from 'lucide-react';
+import { Check, ChevronLeft, Download, LoaderCircle, Play } from 'lucide-react';
 import {
   validAssessmentResponse,
   type AssessmentDetail,
@@ -31,6 +31,7 @@ export function AssessmentRun({
   changed,
   followup,
   summaryChanged,
+  back,
 }: {
   id: string;
   sessionId: string;
@@ -41,6 +42,7 @@ export function AssessmentRun({
   changed: () => void;
   followup: (detail: AssessmentDetail) => void;
   summaryChanged: () => void;
+  back: () => void;
 }) {
   const storageKey = `tl:assessment-draft:${id}`;
   const [detail, setDetail] = useState<AssessmentDetail | null>(null),
@@ -248,22 +250,41 @@ export function AssessmentRun({
   const report = detail.report;
   return (
     <div className="assessment-run">
-      <div className="assessment-run-title">
-        <div>
-          <h3>{detail.title || t.assessmentPreparing}</h3>
-          <p className="muted">
-            {new Date(detail.createdAt).toLocaleString()} · {detail.config.count}{' '}
-            {t.assessmentQuestions} · {t[`assessmentDifficulty_${detail.config.difficulty}`]}
-          </p>
-        </div>
-        <Button
-          variant="ghost"
-          aria-label={t.assessmentReload}
-          disabled={busy}
-          onClick={() => void load().catch((e) => setError((e as Error).message))}
-        >
-          <RefreshCw size={15} />
+      <div className="assessment-run-header">
+        <Button variant="ghost" size="sm" onClick={back}>
+          <ChevronLeft size={14} />
+          {t.assessmentHistory}
         </Button>
+        <span className="assessment-history-status">{t[`assessmentStatus_${detail.status}`]}</span>
+        {!['completed', 'cancelled'].includes(detail.status) && !confirmCancel && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="assessment-run-cancel"
+            disabled={busy}
+            onClick={() => setConfirmCancel(true)}
+          >
+            {t.assessmentCancel}
+          </Button>
+        )}
+      </div>
+      {confirmCancel && !['completed', 'cancelled'].includes(detail.status) && (
+        <div className="notice assessment-cancel">
+          <p>{t.assessmentCancelConfirm}</p>
+          <Button variant="danger" disabled={busy} onClick={() => void action('cancel')}>
+            {t.assessmentCancel}
+          </Button>
+          <Button disabled={busy} onClick={() => setConfirmCancel(false)}>
+            {t.assessmentKeepWorking}
+          </Button>
+        </div>
+      )}
+      <div className="assessment-run-title">
+        <h3>{detail.title || t.assessmentPreparing}</h3>
+        <p className="muted">
+          {new Date(detail.createdAt).toLocaleString()} · {detail.config.count}{' '}
+          {t.assessmentQuestions} · {t[`assessmentDifficulty_${detail.config.difficulty}`]}
+        </p>
       </div>
       {error && (
         <p className="notice" role="alert">
@@ -273,7 +294,7 @@ export function AssessmentRun({
       <AssessmentScope context={detail.context} t={t} inspect={inspectEvidence} />
       {detail.status === 'preparing' || detail.status === 'grading' ? (
         <div className="assessment-working" role="status">
-          <LoaderCircle className="spin" />
+          <LoaderCircle size={32} className="spin" />
           <p>{detail.status === 'preparing' ? t.assessmentPreparing : t.assessmentGrading}</p>
           {detail.status === 'preparing' && (
             <>
@@ -395,7 +416,6 @@ export function AssessmentRun({
           ) : (
             <div className="assessment-confidence">
               <Button
-                variant="primary"
                 disabled={busy || !validAssessmentResponse(question, response)}
                 onClick={() => void answer('sure')}
               >
@@ -407,7 +427,7 @@ export function AssessmentRun({
               >
                 {t.assessmentUnsure}
               </Button>
-              <Button disabled={busy} onClick={() => void answer('unknown')}>
+              <Button variant="secondary" disabled={busy} onClick={() => void answer('unknown')}>
                 {t.assessmentUnknown}
               </Button>
             </div>
@@ -420,22 +440,6 @@ export function AssessmentRun({
           ) : readOnly ? (
             <p className="muted">{t.assessmentUnanswered}</p>
           ) : null}
-          <div className="assessment-step-actions">
-            <Button
-              disabled={busy || (!readOnly && !!draft.operation) || step === 0}
-              onClick={() => commit({ ...draft, step: step - 1 })}
-            >
-              <ChevronLeft size={14} />
-              {t.quizPrevious}
-            </Button>
-            <Button
-              disabled={busy || (!readOnly && !!draft.operation) || step === questions.length - 1}
-              onClick={() => commit({ ...draft, step: step + 1 })}
-            >
-              {t.quizNext}
-              <ChevronRight size={14} />
-            </Button>
-          </div>
           <nav className="assessment-question-nav" aria-label={t.assessmentQuestionNavigation}>
             {questions.map((q, i) => (
               <button
@@ -448,12 +452,6 @@ export function AssessmentRun({
                 onClick={() => commit({ ...draft, step: i })}
               >
                 {i + 1}
-                {!readOnly &&
-                draft.responses[q.id] !== undefined &&
-                draft.responses[q.id] !==
-                  (detail.answers.find((a) => a.questionId === q.id)?.response || '')
-                  ? '*'
-                  : ''}
               </button>
             ))}
           </nav>
@@ -481,18 +479,17 @@ export function AssessmentRun({
               <p>
                 {report.count} {t.assessmentQuestions} · {t.assessmentRecordedSample}
               </p>
+              <a href={`/api/assessments/${id}/export-html`} download>
+                {t.assessmentDownloadImages}
+              </a>
             </div>
-            <a className="button" href={`/api/assessments/${id}/export`} download>
+            <a className="button button-default" href={`/api/assessments/${id}/export`} download>
               <Download size={15} />
               {t.assessmentDownload}
             </a>
-            <a className="button" href={`/api/assessments/${id}/export-html`} download>
-              <Download size={15} />
-              {t.assessmentDownloadImages}
-            </a>
           </div>
           <p>{report.analysis}</p>
-          <div className="assessment-topic-grid">
+          <div className="assessment-topic-grid assessment-report-topics">
             {report.topics.map((topic) => (
               <section key={topic.topicId}>
                 <h4>
@@ -507,77 +504,101 @@ export function AssessmentRun({
               </section>
             ))}
           </div>
-          <h4>{t.assessmentRecommendedSteps}</h4>
-          {report.recommendations.map((rec, i) => (
-            <section className="assessment-recommendation" key={i}>
-              <h4>{rec.title}</h4>
-              <p>{rec.reason}</p>
-              <AssessmentCitations
-                citations={rec.citations}
-                context={detail.context}
-                t={t}
-                navigate={navigate}
-                inspect={inspectEvidence}
-              />
-              {rec.bookmarkId && (
-                <Button onClick={() => bookmark(rec.bookmarkId!)}>
-                  {t.assessmentOpenBookmark}
-                </Button>
-              )}
-            </section>
-          ))}
+          <section className="assessment-report-card">
+            <h4>{t.assessmentRecommendedSteps}</h4>
+            {report.recommendations.map((rec, i) => (
+              <section className="assessment-recommendation" key={i}>
+                <h4>{rec.title}</h4>
+                <p>{rec.reason}</p>
+                <AssessmentCitations
+                  citations={rec.citations}
+                  context={detail.context}
+                  t={t}
+                  navigate={navigate}
+                  inspect={inspectEvidence}
+                />
+                {rec.bookmarkId && (
+                  <button
+                    type="button"
+                    className="assessment-recommendation-link"
+                    onClick={() => bookmark(rec.bookmarkId!)}
+                  >
+                    <Play size={16} />
+                    {t.assessmentOpenBookmark}
+                  </button>
+                )}
+              </section>
+            ))}
+          </section>
           <Button variant="primary" onClick={() => followup(detail)}>
             {t.assessmentFollowup}
           </Button>
-          <h4>{t.assessmentAnswerReport}</h4>
-          {detail.grades.map((grade, i) => (
-            <details className="assessment-grade" key={grade.questionId}>
-              <summary>
-                {i + 1}. {grade.prompt} · {Math.round(grade.score * 100)}%
-              </summary>
-              <p className="muted">
-                {t[`assessmentType_${grade.type}`]} ·{' '}
-                {t[`assessmentDifficulty_${grade.difficulty}`]} ·{' '}
-                {t[`assessmentConfidence_${grade.confidence}`]}
-              </p>
-              <p>
-                <strong>{t.yourAnswer}:</strong>{' '}
-                {grade.responseText || t.assessmentConfidence_unknown}
-              </p>
-              <p>
-                <strong>{t.assessmentCorrectAnswer}:</strong> {grade.correctAnswer}
-              </p>
-              <p>{grade.feedback}</p>
-              {grade.pairs.map((pair, j) => (
-                <section key={j}>
-                  <h4>
-                    {pair.prompt} · {pair.correct ? t.correct : t.recordedIncorrect}
-                  </h4>
-                  <p>
-                    {t.yourAnswer}: {pair.response || t.assessmentUnanswered}
-                  </p>
-                  <p>
-                    {t.assessmentCorrectAnswer}: {pair.correctAnswer}
-                  </p>
-                  <p>{pair.feedback}</p>
-                  <AssessmentCitations
-                    citations={pair.citations}
-                    context={detail.context}
-                    t={t}
-                    navigate={navigate}
-                    inspect={inspectEvidence}
-                  />
-                </section>
-              ))}
-              <AssessmentCitations
-                citations={grade.citations}
-                context={detail.context}
-                t={t}
-                navigate={navigate}
-                inspect={inspectEvidence}
-              />
-            </details>
-          ))}
+          <details className="assessment-report-card assessment-grades">
+            <summary>
+              {t.assessmentAnswerReport} ({detail.grades.length})
+            </summary>
+            {detail.grades.map((grade, i) => (
+              <article className="assessment-grade" key={grade.questionId}>
+                <h4>
+                  <span
+                    className={`assessment-grade-mark ${grade.score >= 1 ? 'correct' : grade.score > 0 ? 'partial' : grade.confidence === 'unknown' ? 'skipped' : 'incorrect'}`}
+                    aria-hidden="true"
+                  >
+                    {grade.score >= 1
+                      ? '✓'
+                      : grade.score > 0
+                        ? '½'
+                        : grade.confidence === 'unknown'
+                          ? '—'
+                          : '✕'}
+                  </span>
+                  {i + 1}. {grade.prompt} · {Math.round(grade.score * 100)}%
+                </h4>
+                <p className="muted">
+                  {t[`assessmentType_${grade.type}`]} ·{' '}
+                  {t[`assessmentDifficulty_${grade.difficulty}`]} ·{' '}
+                  {t[`assessmentConfidence_${grade.confidence}`]}
+                </p>
+                <p>
+                  <strong>{t.yourAnswer}:</strong>{' '}
+                  {grade.responseText || t.assessmentConfidence_unknown}
+                </p>
+                <p>
+                  <strong>{t.assessmentCorrectAnswer}:</strong> {grade.correctAnswer}
+                </p>
+                <p>{grade.feedback}</p>
+                {grade.pairs.map((pair, j) => (
+                  <section key={j} className={pair.correct ? 'correct' : 'incorrect'}>
+                    <h4>
+                      <span aria-hidden="true">{pair.correct ? '✓' : '✕'}</span> {pair.prompt} ·{' '}
+                      {pair.correct ? t.correct : t.recordedIncorrect}
+                    </h4>
+                    <p>
+                      {t.yourAnswer}: {pair.response || t.assessmentUnanswered}
+                    </p>
+                    <p>
+                      {t.assessmentCorrectAnswer}: {pair.correctAnswer}
+                    </p>
+                    <p>{pair.feedback}</p>
+                    <AssessmentCitations
+                      citations={pair.citations}
+                      context={detail.context}
+                      t={t}
+                      navigate={navigate}
+                      inspect={inspectEvidence}
+                    />
+                  </section>
+                ))}
+                <AssessmentCitations
+                  citations={grade.citations}
+                  context={detail.context}
+                  t={t}
+                  navigate={navigate}
+                  inspect={inspectEvidence}
+                />
+              </article>
+            ))}
+          </details>
         </div>
       )}
       {inspectedEvidence && (
@@ -590,25 +611,6 @@ export function AssessmentRun({
           cite={navigate}
           notice={t.assessmentSavedEvidenceNotice}
         />
-      )}
-      {!['completed', 'cancelled'].includes(detail.status) && (
-        <div className="assessment-cancel">
-          {confirmCancel ? (
-            <div className="notice">
-              <p>{t.assessmentCancelConfirm}</p>
-              <Button variant="danger" disabled={busy} onClick={() => void action('cancel')}>
-                {t.assessmentCancel}
-              </Button>
-              <Button disabled={busy} onClick={() => setConfirmCancel(false)}>
-                {t.assessmentKeepWorking}
-              </Button>
-            </div>
-          ) : (
-            <Button variant="ghost" disabled={busy} onClick={() => setConfirmCancel(true)}>
-              {t.assessmentCancel}
-            </Button>
-          )}
-        </div>
       )}
     </div>
   );
