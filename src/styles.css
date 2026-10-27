@@ -774,9 +774,11 @@ hr {
 }
 .resource-tabs > .icon-button {
   flex-shrink: 0;
+  width: 40px;
   height: 100%;
   min-height: 0;
   border-radius: 0;
+  background: color-mix(in oklch, var(--card) 65%, transparent);
 }
 .resource-tabs > .icon-button:first-child {
   border-right: 1px solid var(--border);
@@ -1060,6 +1062,12 @@ hr {
   display: flex;
   gap: 2px;
 }
+.panel-heading-actions > .icon-button[aria-pressed='true'] {
+  color: var(--primary);
+}
+.panel-heading-actions > .icon-button[aria-pressed='true'] svg {
+  fill: currentColor;
+}
 .study-heading .panel-heading-actions {
   flex-shrink: 0;
   gap: 0;
@@ -1134,6 +1142,44 @@ hr {
 .study-panel.floating {
   right: 0;
   width: min(var(--study-width), calc(100vw - 48px));
+}
+/* Below 1024px a panel covers the whole workspace instead of floating beside it. */
+.library-panel.narrow,
+.study-panel.narrow {
+  inset: 0;
+  width: auto;
+  box-shadow: none;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  animation: panel-enter 160ms ease-out;
+}
+.narrow :is(.library-heading, .study-heading) {
+  height: 48px;
+  min-height: 48px;
+  border-bottom: 1px solid var(--border);
+}
+.narrow :is(.library-heading, .study-heading) .panel-heading-actions > .icon-button {
+  width: 44px;
+  min-width: 44px;
+  min-height: 44px;
+}
+@keyframes panel-enter {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :is(.library-panel, .study-panel).narrow {
+    animation: none;
+  }
+}
+@media (max-width: 1023px) {
+  .resource-tabs {
+    --resource-strip-height: 44px;
+  }
+  .resource-tabs > .icon-button {
+    width: 44px;
+  }
 }
 .drawer-backdrop {
   position: fixed;

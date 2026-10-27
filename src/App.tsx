@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState, lazy, Suspense, type CSSProperties } from 'react';
 import {
   BookOpen,
-  PanelLeft,
-  PanelRight,
+  PanelLeftClose,
+  PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
   Plus,
   Settings as SettingsIcon,
   Search,
@@ -675,7 +677,7 @@ export function App() {
         aria-label={t.library}
         hidden={!left || focus}
         inert={!!panels.drawer && panels.drawer !== 'left'}
-        className={`library-panel ${panels.resolved.left.docked ? 'docked' : 'floating'}`}
+        className={`library-panel ${panels.resolved.left.docked ? 'docked' : 'floating'}${panels.narrow ? ' narrow' : ''}`}
         role={panels.drawer === 'left' ? 'dialog' : undefined}
         aria-modal={panels.drawer === 'left' ? true : undefined}
       >
@@ -692,19 +694,27 @@ export function App() {
             }}
           />
           <div className="panel-heading-actions">
-            <IconButton
-              label={panels.preferences.left.pinned ? t.unpinPanel : t.pinPanel}
-              aria-pressed={panels.preferences.left.pinned}
-              onClick={() => panels.pin('left')}
-            >
-              {panels.preferences.left.pinned ? <Pin /> : <PinOff />}
-            </IconButton>
-            <IconButton
-              label={panels.drawer === 'left' ? t.backToSession : t.hideFiles}
-              onClick={() => setLeft(false)}
-            >
-              <PanelLeft />
-            </IconButton>
+            {panels.narrow ? (
+              <IconButton label={t.showStudy} onClick={() => setRight(true)}>
+                <PanelRightOpen />
+              </IconButton>
+            ) : (
+              <IconButton
+                label={panels.preferences.left.pinned ? t.unpinPanel : t.pinPanel}
+                aria-pressed={panels.preferences.left.pinned}
+                onClick={() => panels.pin('left')}
+              >
+                {panels.preferences.left.pinned ? <Pin /> : <PinOff />}
+              </IconButton>
+            )}
+            {!panels.resolved.left.docked && (
+              <IconButton
+                label={panels.drawer === 'left' ? t.backToSession : t.hideFiles}
+                onClick={() => setLeft(false)}
+              >
+                <X />
+              </IconButton>
+            )}
           </div>
         </div>
         <div
@@ -899,7 +909,7 @@ export function App() {
           change={(value) => panels.resize('left', value)}
         />
       )}
-      {panels.drawer && !focus && (
+      {panels.drawer && !focus && !panels.narrow && (
         <button
           className="drawer-backdrop"
           tabIndex={-1}
@@ -916,7 +926,7 @@ export function App() {
             data-panel-toggle="left"
             onClick={() => setLeft(!left)}
           >
-            <PanelLeft />
+            {left && !focus ? <PanelLeftClose /> : <PanelLeftOpen />}
           </IconButton>
           <ResourceTabs
             workspace={resources}
@@ -930,13 +940,13 @@ export function App() {
             splitWith={splitResourceTab}
           />
           <IconButton
-            label={t.study}
+            label={right && !focus ? t.hideStudy : t.showStudy}
             aria-expanded={right && !focus}
             aria-controls="right-panel"
             data-panel-toggle="right"
             onClick={() => setRight(!right)}
           >
-            <PanelRight />
+            {right && !focus ? <PanelRightClose /> : <PanelRightOpen />}
           </IconButton>
         </div>
         {error && (
@@ -1344,7 +1354,7 @@ export function App() {
         aria-label={t.study}
         hidden={!right || focus}
         inert={!!panels.drawer && panels.drawer !== 'right'}
-        className={`study-panel ${panels.resolved.right.docked ? 'docked' : 'floating'}`}
+        className={`study-panel ${panels.resolved.right.docked ? 'docked' : 'floating'}${panels.narrow ? ' narrow' : ''}`}
         role={panels.drawer === 'right' ? 'dialog' : undefined}
         aria-modal={panels.drawer === 'right' ? true : undefined}
       >
@@ -1356,19 +1366,27 @@ export function App() {
             bookmarkCount={activeBookmarks.filter((bookmark) => !bookmark.deleted).length}
           />
           <div className="panel-heading-actions">
-            <IconButton
-              label={panels.preferences.right.pinned ? t.unpinPanel : t.pinPanel}
-              aria-pressed={panels.preferences.right.pinned}
-              onClick={() => panels.pin('right')}
-            >
-              {panels.preferences.right.pinned ? <Pin /> : <PinOff />}
-            </IconButton>
-            <IconButton
-              label={panels.drawer === 'right' ? t.backToSession : t.close}
-              onClick={() => setRight(false)}
-            >
-              <X />
-            </IconButton>
+            {panels.narrow ? (
+              <IconButton label={t.openFiles} onClick={() => setLeft(true)}>
+                <PanelLeftOpen />
+              </IconButton>
+            ) : (
+              <IconButton
+                label={panels.preferences.right.pinned ? t.unpinPanel : t.pinPanel}
+                aria-pressed={panels.preferences.right.pinned}
+                onClick={() => panels.pin('right')}
+              >
+                {panels.preferences.right.pinned ? <Pin /> : <PinOff />}
+              </IconButton>
+            )}
+            {!panels.resolved.right.docked && (
+              <IconButton
+                label={panels.drawer === 'right' ? t.backToSession : t.close}
+                onClick={() => setRight(false)}
+              >
+                <X />
+              </IconButton>
+            )}
           </div>
         </div>
         {!isPrimaryStudyTool(tab) && (

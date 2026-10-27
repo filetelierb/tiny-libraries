@@ -5,7 +5,7 @@ export const PANEL_STORAGE_KEY = 'tl:panels:v1';
 export const PANEL_MIN = { left: 220, right: 280 };
 export const PANEL_MAX = { left: 520, right: 720 };
 export const PANEL_DEFAULT = { left: 300, right: 360 };
-export const DRAWER_BREAKPOINT = 960;
+export const DRAWER_BREAKPOINT = 1024;
 export const READER_MIN = 280;
 export const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));

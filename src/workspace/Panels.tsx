@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import {
+  DRAWER_BREAKPOINT,
   clamp,
   PANEL_DEFAULT,
   PANEL_MIN,
@@ -33,7 +34,7 @@ export function usePanels() {
       /* Reading still works without browser storage. */
     }
   }, [preferences]);
-  const narrow = viewport < 960;
+  const narrow = viewport < DRAWER_BREAKPOINT;
   const effective = narrow
     ? {
         left: { ...preferences.left, open: mobileOpen === 'left' },

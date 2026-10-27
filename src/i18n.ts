@@ -717,6 +717,8 @@ const en = {
   openSeparate: 'Open in separate tab',
   tabLimit: 'Close a resource tab before opening another (100 tab limit).',
   study: 'Study panel',
+  hideStudy: 'Hide study panel',
+  showStudy: 'Show study panel',
   welcome: 'No files open',
   welcomeBody: 'Explore the library to open a resource, or use the study panel to begin.',
   empty: 'Add your first file',
@@ -1732,6 +1734,8 @@ const es: Dictionary = {
   openSeparate: 'Abrir en pestaña aparte',
   tabLimit: 'Cierra una pestaña antes de abrir otra (límite de 100 pestañas).',
   study: 'Panel de estudio',
+  hideStudy: 'Ocultar panel de estudio',
+  showStudy: 'Mostrar panel de estudio',
   welcome: 'Sin archivos abiertos',
   welcomeBody:
     'Explora la biblioteca para abrir un recurso o utiliza el panel de estudio para comenzar.',

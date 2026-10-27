@@ -25,6 +25,7 @@ import {
   PANEL_DEFAULT,
   READER_MIN,
   PANEL_MAX,
+  DRAWER_BREAKPOINT,
   panelsForSplit,
 } from '../src/workspace/layout';
 
@@ -150,12 +151,16 @@ test('resizing a viewport retains reading room without changing saved preference
     }),
     1500,
   );
-  for (const width of [960, 1000, 1150, 1500]) {
+  for (const width of [DRAWER_BREAKPOINT, 1100, 1150, 1500]) {
     const layout = resolvePanels(preferences, width);
-    assert.ok(layout.left.width >= 240);
-    assert.ok(layout.right.width >= 280);
+    assert.ok(layout.left.docked && layout.right.docked);
+    assert.ok(layout.left.width >= PANEL_MIN.left);
+    assert.ok(layout.right.width >= PANEL_MIN.right);
     assert.ok(width - layout.left.width - layout.right.width - 12 >= READER_MIN);
   }
+  const tablet = resolvePanels(preferences, DRAWER_BREAKPOINT - 1);
+  assert.equal(tablet.left.docked, false);
+  assert.equal(tablet.right.docked, false);
   const mobile = resolvePanels(preferences, 390);
   assert.equal(mobile.left.docked, false);
   assert.equal(mobile.right.docked, false);
