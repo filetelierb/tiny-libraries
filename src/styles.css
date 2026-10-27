@@ -4001,17 +4001,50 @@ body:has(.panel-resizer.resizing) {
   padding-top: 16px;
   border-top: 1px solid var(--border);
 }
+.tutor-composer {
+  position: relative;
+}
+.assistant > .tutor-composer:has(.tutor-mention-picker) {
+  overflow: visible;
+}
 .tutor-mention-picker {
-  width: 100%;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  box-shadow: 0 3px 10px rgb(21 45 52 / 10%);
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: calc(100% - 4px);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  max-height: min(55dvh, 26rem);
   overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: var(--card);
+  box-shadow: 0 25px 50px -12px rgb(0 0 0 / 25%);
+}
+.mention-head {
+  padding: 8px 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.mention-heading {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0 4px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
+  color: var(--muted-text);
+}
+.mention-heading svg {
+  width: 12px;
+  height: 12px;
 }
 .tutor-mention-picker [role='tablist'] {
   display: flex;
-  border-bottom: 1px solid var(--border);
+  gap: 4px;
 }
 .tutor-mention-picker [role='tab'] {
   display: flex;
@@ -4020,46 +4053,86 @@ body:has(.panel-resizer.resizing) {
   justify-content: center;
   gap: 6px;
   padding: 8px;
-  font-size: var(--font-size-control);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  font-size: 12px;
+  color: var(--muted-text);
 }
-.tutor-mention-picker [aria-selected='true'] {
+.tutor-mention-picker [role='tab'] svg {
+  width: 14px;
+  height: 14px;
+}
+.tutor-mention-picker [role='tab']:hover {
+  background: var(--muted);
+}
+.tutor-mention-picker [role='tab'][aria-selected='true'] {
+  background: color-mix(in oklch, var(--primary) 10%, transparent);
   color: var(--primary);
-  background: var(--secondary);
+  font-weight: 600;
 }
-.tutor-mention-picker > p {
-  margin: 7px 10px;
-  font-size: var(--font-size-small);
+.mention-hint {
+  margin: 0;
+  padding: 6px 12px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 11px;
+  color: var(--muted-text);
 }
 .tutor-mention-picker [role='tabpanel'] {
-  max-height: min(38dvh, 280px);
+  min-height: 0;
+  max-height: min(43dvh, 20rem);
   overflow: auto;
+  overscroll-behavior: contain;
+  padding: 6px;
 }
 .tutor-mention-picker .directory-tree {
-  max-height: min(38dvh, 280px);
+  max-height: none;
+}
+.mention-concepts {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 .mention-concepts > button {
-  display: block;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
   width: 100%;
+  min-width: 0;
+  padding: 8px;
+  border-radius: var(--radius-sm);
   text-align: left;
-  padding: 10px;
-  border-bottom: 1px solid var(--border);
+}
+.mention-concepts > button:hover,
+.mention-concepts > button[aria-selected='true'] {
+  background: color-mix(in oklch, var(--primary) 10%, transparent);
+}
+.mention-concepts > button > svg {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  color: var(--primary);
+}
+.mention-concepts > button > span {
+  flex: 1;
+  min-width: 0;
+}
+.mention-concepts strong,
+.mention-concepts small {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .mention-concepts strong {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-.mention-concepts p {
-  margin: 5px 0;
-  font-size: var(--font-size-control);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  font-size: 12px;
+  font-weight: 500;
 }
 .mention-concepts small {
+  margin-top: 2px;
+  font-size: 11px;
   color: var(--muted-text);
-  font-size: var(--font-size-small);
 }
 .question-concepts {
   padding: 10px;
@@ -5679,7 +5752,40 @@ body:has(.panel-resizer.resizing) {
   min-width: 28px;
   min-height: 28px;
 }
-.composer-card > textarea {
+.composer-input {
+  position: relative;
+}
+.composer-mirror {
+  position: absolute;
+  inset: 0;
+  padding: 12px 16px;
+  overflow-y: auto;
+  scrollbar-width: none;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  pointer-events: none;
+  color: var(--foreground);
+}
+.composer-mirror mark {
+  border-radius: 4px;
+  background: color-mix(in oklch, var(--primary) 20%, transparent);
+  color: var(--primary);
+}
+.composer-mirror,
+.composer-input > textarea {
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 20px;
+  letter-spacing: normal;
+}
+.composer-input > textarea.mention-active {
+  position: relative;
+  z-index: 1;
+  color: transparent;
+  caret-color: var(--foreground);
+  scrollbar-width: none;
+}
+.composer-input > textarea {
   display: block;
   width: 100%;
   min-height: 80px;
@@ -5691,8 +5797,8 @@ body:has(.panel-resizer.resizing) {
   font-size: 14px;
   resize: none;
 }
-.composer-card > textarea:focus,
-.composer-card > textarea:focus-visible {
+.composer-input > textarea:focus,
+.composer-input > textarea:focus-visible {
   outline: none;
   border: 0;
   box-shadow: none;
@@ -5739,7 +5845,7 @@ body:has(.panel-resizer.resizing) {
   .assistant > .tutor-composer {
     max-height: 55%;
   }
-  .composer-card > textarea {
+  .composer-input > textarea {
     min-height: 54px;
   }
 }

@@ -59,6 +59,7 @@ export function DirectoryTree({
   toggleFile,
   disabledFileIds,
   fileStatuses,
+  editable = true,
 }: {
   directories: Directory[];
   files: Source[];
@@ -77,6 +78,8 @@ export function DirectoryTree({
   toggleFile?: (file: Source, checked: boolean) => void;
   disabledFileIds?: Set<string>;
   fileStatuses?: Map<string, string>;
+  /** False for choose-only pickers that never create or edit folders. */
+  editable?: boolean;
 }) {
   const [collapsed, setCollapsed] = useState<Set<string>>(() => {
     try {
@@ -309,7 +312,7 @@ export function DirectoryTree({
                 >
                   <ChevronDown size={12} />
                 </button>
-                {!contextOnly && mode !== 'filter' && (
+                {editable && !contextOnly && mode !== 'filter' && (
                   <ActionMenu
                     label={`${t.directoryOptions}: ${directory.path}`}
                     icon={<Plus size={16} />}
@@ -420,7 +423,7 @@ export function DirectoryTree({
           {t.libraryRoot}
         </button>
       )}
-      {mode !== 'manage' && mode !== 'filter' && (
+      {editable && mode !== 'manage' && mode !== 'filter' && (
         <div className="tree-picker-actions">
           <Button onClick={() => actions.create('')}>
             <FolderPlus size={16} />

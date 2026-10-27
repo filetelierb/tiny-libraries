@@ -569,6 +569,9 @@ function ConversationThread({
   }, [mentionDismissed, draft, mentionDismissedKey]);
   const mentionQuery = draft.match(/(?:^|\s)@([^\n@]*)$/)?.[1];
   const mentionOpen = !mentionDismissed && mentionQuery !== undefined;
+  // The active @token always ends the draft; the mirror highlights it behind the textarea.
+  const mentionStart = draft.length - (mentionQuery?.length ?? 0) - 1;
+  const mirror = useRef<HTMLDivElement>(null);
   const draftRef = useRef(draft),
     alive = useRef(true);
   draftRef.current = draft;
@@ -1358,30 +1361,44 @@ function ConversationThread({
               </span>
             ))}
           </div>
-          <textarea
-            ref={composer}
-            aria-label={t.assistant}
-            placeholder={t.chatPlaceholder}
-            maxLength={8000}
-            value={draft}
-            aria-autocomplete="list"
-            aria-controls={mentionOpen ? `mentions-${conversation.id}` : undefined}
-            aria-expanded={mentionOpen}
-            onChange={(event) => {
-              changeDraft(event.target.value);
-              setMentionDismissed(false);
-            }}
-            onKeyDown={(event) => {
-              if (!mentionOpen) return;
-              if (event.key === 'Escape') {
-                event.preventDefault();
-                event.stopPropagation();
-                setMentionDismissed(true);
-                return;
-              }
-              if (!event.shiftKey && mentionPicker.current?.key(event.key)) event.preventDefault();
-            }}
-          />
+          <div className="composer-input">
+            {mentionOpen && (
+              <div className="composer-mirror" aria-hidden="true" ref={mirror}>
+                {draft.slice(0, mentionStart)}
+                <mark>{draft.slice(mentionStart)}</mark>
+                {'\u200b'}
+              </div>
+            )}
+            <textarea
+              ref={composer}
+              className={mentionOpen ? 'mention-active' : undefined}
+              onScroll={(event) => {
+                if (mirror.current) mirror.current.scrollTop = event.currentTarget.scrollTop;
+              }}
+              aria-label={t.assistant}
+              placeholder={t.chatPlaceholder}
+              maxLength={8000}
+              value={draft}
+              aria-autocomplete="list"
+              aria-controls={mentionOpen ? `mentions-${conversation.id}` : undefined}
+              aria-expanded={mentionOpen}
+              onChange={(event) => {
+                changeDraft(event.target.value);
+                setMentionDismissed(false);
+              }}
+              onKeyDown={(event) => {
+                if (!mentionOpen) return;
+                if (event.key === 'Escape') {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setMentionDismissed(true);
+                  return;
+                }
+                if (!event.shiftKey && mentionPicker.current?.key(event.key))
+                  event.preventDefault();
+              }}
+            />
+          </div>
           <div className="composer-actions">
             <IconButton
               label={t.addQuestionAttachment}

@@ -1,5 +1,5 @@
 import { useEffect, useImperativeHandle, useRef, useState, forwardRef } from 'react';
-import { BookOpen, FileText } from 'lucide-react';
+import { AtSign, BookOpen, FileText } from 'lucide-react';
 import type { Catalog, Source } from '../../shared/domain';
 import { sourceState } from '../../shared/directories';
 import {
@@ -73,40 +73,48 @@ export const TutorMentionPicker = forwardRef<
   }));
   return (
     <div className="tutor-mention-picker" ref={panel} aria-label={t.mentionOptions}>
-      <div role="tablist" aria-label={t.mentionType}>
-        {(['files', 'glossary'] as const).map((value, i) => (
-          <button
-            key={value}
-            type="button"
-            role="tab"
-            id={`mention-tab-${value}`}
-            aria-selected={tab === value}
-            aria-controls={`mention-panel-${value}`}
-            onClick={() => {
-              setTab(value);
-              focusComposer();
-            }}
-            onKeyDown={(event) => {
-              if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
-                event.preventDefault();
-                setTab(
-                  event.key === 'Home'
-                    ? 'files'
-                    : event.key === 'End'
-                      ? 'glossary'
-                      : value === 'files'
-                        ? 'glossary'
-                        : 'files',
-                );
+      <div className="mention-head">
+        <p className="mention-heading">
+          <AtSign aria-hidden="true" />
+          {t.mentionHeading}
+        </p>
+        <div role="tablist" aria-label={t.mentionType}>
+          {(['files', 'glossary'] as const).map((value, i) => (
+            <button
+              key={value}
+              type="button"
+              role="tab"
+              id={`mention-tab-${value}`}
+              aria-selected={tab === value}
+              aria-controls={`mention-panel-${value}`}
+              onClick={() => {
+                setTab(value);
                 focusComposer();
-              }
-            }}
-          >
-            {i === 0 ? <FileText size={14} /> : <BookOpen size={14} />} {t[value]}
-          </button>
-        ))}
+              }}
+              onKeyDown={(event) => {
+                if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
+                  event.preventDefault();
+                  setTab(
+                    event.key === 'Home'
+                      ? 'files'
+                      : event.key === 'End'
+                        ? 'glossary'
+                        : value === 'files'
+                          ? 'glossary'
+                          : 'files',
+                  );
+                  focusComposer();
+                }
+              }}
+            >
+              {i === 0 ? <FileText /> : <BookOpen />} {t[value]}
+            </button>
+          ))}
+        </div>
       </div>
-      <p className="muted">{query.trim() ? query : t.mentionFilterHint}</p>
+      <p className="mention-hint">
+        {query.trim() ? t.mentionFiltering.replace('{query}', query.trim()) : t.mentionFilterHint}
+      </p>
       <div id={`mention-panel-${tab}`} role="tabpanel" aria-labelledby={`mention-tab-${tab}`}>
         {tab === 'files' ? (
           <DirectoryTree
@@ -117,6 +125,7 @@ export const TutorMentionPicker = forwardRef<
             mode="file"
             query={query}
             storageKey="tl:tree:mentions"
+            editable={false}
             active={fileId}
             chooseFile={pickFile}
           />
@@ -131,16 +140,13 @@ export const TutorMentionPicker = forwardRef<
                   aria-selected={index === i}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => pickConcept(entry)}
-                  title={entry.definition}
+                  title={`${entry.term} · ${t.revision} ${entry.version} · ${entry.reviewed ? t.reviewed : t.notReviewed}\n${entry.definition}`}
                 >
-                  <strong>
-                    <BookOpen size={14} />
-                    {entry.term}
-                  </strong>
-                  <p>{entry.definition.slice(0, 260)}</p>
-                  <small>
-                    {t.revision} {entry.version} · {entry.reviewed ? t.reviewed : t.notReviewed}
-                  </small>
+                  <BookOpen />
+                  <span>
+                    <strong>{entry.term}</strong>
+                    <small>{entry.definition.slice(0, 260)}</small>
+                  </span>
                 </button>
               ))
             ) : (
