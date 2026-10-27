@@ -18,7 +18,7 @@ export const diagramConfig: MermaidConfig = {
   htmlLabels: false,
   maxTextSize: MAX_DIAGRAM_LENGTH,
   maxEdges: 300,
-  fontFamily: 'Times New Roman, Times, serif',
+  fontFamily: 'Arial, sans-serif',
   theme: 'neutral',
   layout: 'dagre',
   secure: [

@@ -4993,26 +4993,65 @@ body:has(.panel-resizer.resizing) {
   overflow-wrap: normal;
 }
 .study-diagram {
-  margin: 16px 0;
-  padding: 12px;
+  margin: 12px 0;
+  padding: 0;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
+  border-radius: var(--radius-lg);
+  background: var(--background);
 }
-.study-diagram > .button {
-  margin: 8px 0;
+.diagram-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 500;
+}
+.diagram-head button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 0;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  font-weight: 400;
+  cursor: pointer;
+}
+.diagram-head button:hover {
+  background: var(--muted);
+}
+.study-diagram > p[role='status'] {
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--muted-text);
+}
+.study-diagram details {
+  border-top: 1px solid var(--border);
+  padding: 8px 12px;
+  font-size: 12px;
 }
 .study-diagram summary {
   cursor: pointer;
   color: var(--muted-text);
-  font-size: var(--font-size-control);
-  padding: 6px 0;
+}
+.study-diagram details pre {
+  max-height: 18rem;
 }
 .diagram-scroll {
   overflow: auto;
   max-width: 100%;
   background: #fff;
-  border-radius: 4px;
+  padding: 8px;
 }
 .diagram-scroll img {
   display: block;
@@ -5022,18 +5061,35 @@ body:has(.panel-resizer.resizing) {
   margin: auto;
 }
 .modal.diagram-modal {
-  width: min(1100px, 96vw);
-  max-width: 96vw;
+  width: min(94vw, 80rem);
+  max-width: 94vw;
 }
 .diagram-expanded {
   height: min(65vh, 680px);
+  border-radius: var(--radius-lg);
+  padding: 12px;
 }
 .diagram-zoom {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 12px;
+  gap: 12px;
+  margin: -8px 0 12px;
+}
+.diagram-zoom p {
+  flex: 1;
+  margin: 0;
+  font-size: 14px;
+  color: var(--muted-text);
+}
+.diagram-zoom select {
+  flex: none;
+  width: auto;
+  min-height: 0;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--background);
+  font-size: 12px;
 }
 .diagram-render-host {
   position: fixed;

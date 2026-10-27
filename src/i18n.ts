@@ -74,6 +74,7 @@ const en = {
   diagramLoading: 'Rendering diagram…',
   diagramUnavailable: 'Diagram preview unavailable. Source is shown below.',
   resetZoom: 'Reset zoom',
+  diagramZoomHint: 'Zoom and scroll to read the details.',
 
   tabActions: 'Tab actions',
   closeTab: 'Close tab',
@@ -1103,6 +1104,7 @@ const es: Dictionary = {
   diagramLoading: 'Generando diagrama…',
   diagramUnavailable: 'Vista previa no disponible. El código se muestra a continuación.',
   resetZoom: 'Restablecer zoom',
+  diagramZoomHint: 'Amplía y desplázate para leer los detalles.',
 
   tabActions: 'Opciones de pestaña',
   closeTab: 'Cerrar pestaña',

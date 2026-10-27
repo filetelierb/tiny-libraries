@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
-import { Maximize2, ZoomIn, ZoomOut } from 'lucide-react';
+import { Maximize2 } from 'lucide-react';
 import type { T } from '../i18n';
-import { Button, IconButton, Modal } from '../design/components';
+import { Modal } from '../design/components';
 import { renderDiagram, type DiagramImage } from './diagrams';
 
 export function Diagram({ source, t }: { source: string; t: T }) {
   const [image, setImage] = useState<DiagramImage | null>(null),
     [failed, setFailed] = useState(false),
     [expanded, setExpanded] = useState(false),
-    [zoom, setZoom] = useState(1);
+    [zoom, setZoom] = useState(100);
   useEffect(() => {
     let disposed = false;
     setImage(null);
@@ -27,26 +27,31 @@ export function Diagram({ source, t }: { source: string; t: T }) {
   }, [source]);
   return (
     <figure className="study-diagram">
-      {image ? (
-        <>
-          <div className="diagram-scroll" tabIndex={0} role="region" aria-label={t.diagram}>
-            <img
-              src={image.url}
-              alt={t.diagramDescription}
-              width={image.width}
-              height={image.height}
-            />
-          </div>
-          <Button
+      <div className="diagram-head">
+        <span>{t.diagram}</span>
+        {image && (
+          <button
+            type="button"
+            aria-label={t.expandDiagram}
             onClick={() => {
-              setZoom(1);
+              setZoom(100);
               setExpanded(true);
             }}
           >
             <Maximize2 size={14} />
-            {t.expandDiagram}
-          </Button>
-        </>
+            {t.expand}
+          </button>
+        )}
+      </div>
+      {image ? (
+        <div className="diagram-scroll" tabIndex={0} role="region" aria-label={t.diagram}>
+          <img
+            src={image.url}
+            alt={t.diagramDescription}
+            width={image.width}
+            height={image.height}
+          />
+        </div>
       ) : (
         <p role="status">{failed ? t.diagramUnavailable : t.diagramLoading}</p>
       )}
@@ -64,22 +69,18 @@ export function Diagram({ source, t }: { source: string; t: T }) {
           className="diagram-modal"
         >
           <div className="diagram-zoom">
-            <IconButton
-              label={t.zoomOut}
-              disabled={zoom <= 0.5}
-              onClick={() => setZoom((z) => Math.max(0.5, z - 0.25))}
+            <p>{t.diagramZoomHint}</p>
+            <select
+              aria-label={t.zoom}
+              value={zoom}
+              onChange={(e) => setZoom(Number(e.target.value))}
             >
-              <ZoomOut />
-            </IconButton>
-            <output aria-live="polite">{Math.round(zoom * 100)}%</output>
-            <IconButton
-              label={t.zoomIn}
-              disabled={zoom >= 3}
-              onClick={() => setZoom((z) => Math.min(3, z + 0.25))}
-            >
-              <ZoomIn />
-            </IconButton>
-            <Button onClick={() => setZoom(1)}>{t.resetZoom}</Button>
+              {[50, 75, 100, 150, 200].map((n) => (
+                <option key={n} value={n}>
+                  {n}%
+                </option>
+              ))}
+            </select>
           </div>
           <div
             className="diagram-scroll diagram-expanded"
@@ -90,7 +91,7 @@ export function Diagram({ source, t }: { source: string; t: T }) {
             <img
               src={image.url}
               alt={t.diagramDescription}
-              style={{ width: image.width * zoom, maxWidth: 'none' }}
+              style={{ width: (image.width * zoom) / 100, maxWidth: 'none' }}
             />
           </div>
           <details>
