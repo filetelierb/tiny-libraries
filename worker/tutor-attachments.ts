@@ -131,11 +131,17 @@ export async function createQuestionAttachment(
     if (annotation.sourceId)
       source = await availableSource(storage, annotation.sourceId, annotation.sourceVersion);
     name = annotation.title || source?.name || 'Annotation';
-    kind = annotation.capture
-      ? 'capture'
-      : annotation.kind === 'bookmark'
-        ? 'bookmark'
-        : 'annotation';
+    if (annotation.captures?.length)
+      throw new AttachmentError(
+        'Choose capture images from the gallery before attaching this note.',
+        409,
+      );
+    kind =
+      annotation.capture && annotation.captures === undefined
+        ? 'capture'
+        : annotation.kind === 'bookmark'
+          ? 'bookmark'
+          : 'annotation';
     const text = [annotation.title, annotation.text, annotation.location.quote]
       .filter(Boolean)
       .join('\n\n');
@@ -148,7 +154,7 @@ export async function createQuestionAttachment(
           ...(annotation.location.seconds != null ? { start: annotation.location.seconds } : {}),
         },
       ];
-    if (annotation.capture) {
+    if (annotation.capture && annotation.captures === undefined) {
       const original = await originalBytes(
         files,
         `annotation/${annotation.id}/${annotation.capture.id}`,

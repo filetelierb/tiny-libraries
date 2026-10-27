@@ -14,6 +14,8 @@ import {
   type Annotation,
   type AnnotationSummary,
 } from '../shared/annotations';
+import { captureDigest, type SourceStamp } from '../shared/captures';
+import { captureStore } from './capture-runtime';
 import type { StudySession, Source, Directory } from '../shared/domain';
 import { sourceState } from '../shared/directories';
 
@@ -38,8 +40,8 @@ export async function saveAnnotation(
 }
 const json = (data: unknown, status = 200) =>
   Response.json(data, { status, headers: { 'Cache-Control': 'no-store' } });
-async function requireContext(
-  storage: import('./glossary').GlossaryStorage,
+export async function requireAnnotationContext(
+  storage: Pick<import('./glossary').GlossaryStore, 'get' | 'list'>,
   value: { sessionId: string; sourceId: string | null; sourceVersion: number | null },
 ) {
   if (!(await storage.get(`session:${value.sessionId}`)))
@@ -54,6 +56,40 @@ async function requireContext(
   const directories = [...(await storage.list<Directory>({ prefix: 'directory:' })).values()];
   if (sourceState(source, directories) === 'trash')
     throw new AnnotationError('Restore the source before editing its annotations', 409);
+}
+async function receipt(
+  storage: Pick<import('./glossary').GlossaryStore, 'get'>,
+  id: string,
+  mutationId: string,
+  fingerprint: string,
+) {
+  const key = `annotation-receipt:${id}:${mutationId}`,
+    saved = await storage.get<string>(key);
+  if (!saved) return null;
+  if (saved !== fingerprint)
+    throw new AnnotationError('Annotation retry used different changes', 409);
+  const value = await storage.get<Annotation>(`annotation-receipt-value:${id}:${mutationId}`);
+  if (!value)
+    throw new AnnotationError(
+      'Saved annotation receipt is unavailable. Reload before making another change.',
+      503,
+    );
+  return value;
+}
+export async function requireStampContext(
+  storage: Pick<import('./glossary').GlossaryStore, 'get' | 'list'>,
+  stamp: SourceStamp,
+) {
+  const file = await storage.get<Source>(`file:${stamp.sourceId}`);
+  if (!file || file.version !== stamp.sourceVersion)
+    throw new AnnotationError('A source location changed. Choose its current version again.', 409);
+  if (stamp.location.page !== undefined && file.kind !== 'pdf')
+    throw new AnnotationError('Choose a PDF page for this source location');
+  if (stamp.location.seconds !== undefined && !['audio', 'video'].includes(file.kind))
+    throw new AnnotationError('Choose an audio or video time for this source location');
+  const directories = [...(await storage.list<Directory>({ prefix: 'directory:' })).values()];
+  if (sourceState(file, directories) === 'trash')
+    throw new AnnotationError('Restore the source before adding its location', 409);
 }
 async function importNotes(
   storage: import('./glossary').GlossaryStorage,
@@ -175,7 +211,9 @@ export async function annotationRoute(
       });
     }
     if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
-    await requireContext(storage, existing);
+    if (existing.captures !== undefined)
+      throw new AnnotationError('Use the capture collection to edit this annotation', 409);
+    await requireAnnotationContext(storage, existing);
     const expectedRevision = z.coerce
         .number()
         .int()
@@ -262,14 +300,33 @@ export async function annotationRoute(
   if (request.method === 'PUT') {
     const input = annotationInputSchema.parse(await body());
     if (input.id !== id) throw new AnnotationError('Annotation identity mismatch');
-    await requireContext(storage, input);
+    const fingerprint = input.mutationId ? await captureDigest(JSON.stringify(input)) : null;
+    if (input.mutationId && fingerprint) {
+      const saved = await receipt(storage, id, input.mutationId, fingerprint);
+      if (saved) return json(saved);
+    }
+    await requireAnnotationContext(storage, input);
+    const resolvedCaptures =
+      input.captures === undefined
+        ? undefined
+        : await captureStore(env, storage).resolve(id, input, input.captures);
+    for (const stamp of [
+      ...(input.stamps || []),
+      ...(resolvedCaptures || []).flatMap((item) => (item.stamp ? [item.stamp] : [])),
+    ])
+      await requireStampContext(storage, stamp);
     for (const ref of input.references)
       if (!(await storage.get(`file:${ref}`)))
         throw new AnnotationError('Reference not found', 404);
     const value = await storage.transaction(async (tx) => {
+      if (input.mutationId && fingerprint) {
+        const saved = await receipt(tx, id, input.mutationId, fingerprint);
+        if (saved) return saved;
+      }
       const current = await tx.get<Annotation>(key);
       if (current?.deleted) throw new AnnotationError('Restore the annotation before editing', 409);
       if (
+        !input.mutationId &&
         current?.revision === 1 &&
         input.expectedRevision === 0 &&
         JSON.stringify([
@@ -311,9 +368,42 @@ export async function annotationRoute(
           current.sourceVersion !== input.sourceVersion)
       )
         throw new AnnotationError('Keep the original annotation source and session');
-      const { expectedRevision: _revision, ...data } = input;
+      await requireAnnotationContext(tx, input);
+      const {
+        expectedRevision: _revision,
+        mutationId: _mutation,
+        captures: _captures,
+        ...data
+      } = input;
+      const captures = resolvedCaptures ?? current?.captures,
+        stamps = input.stamps ?? current?.stamps;
+      for (const stamp of [
+        ...(stamps || []),
+        ...(captures || []).flatMap((item) => (item.stamp ? [item.stamp] : [])),
+      ])
+        await requireStampContext(tx, stamp);
+      const references =
+        input.captures !== undefined ||
+        input.stamps !== undefined ||
+        current?.captures !== undefined ||
+        current?.stamps !== undefined
+          ? [
+              ...new Set([
+                ...data.references,
+                ...(stamps || []).map((item) => item.sourceId),
+                ...(captures || []).flatMap((item) => (item.stamp ? [item.stamp.sourceId] : [])),
+              ]),
+            ]
+          : data.references;
+      if (references.length > 20)
+        throw new AnnotationError('Annotation references exceed 20 sources');
+      for (const ref of references)
+        if (!(await tx.get(`file:${ref}`))) throw new AnnotationError('Reference not found', 404);
       const next: Annotation = {
         ...data,
+        references,
+        ...(captures !== undefined ? { captures } : {}),
+        ...(stamps !== undefined ? { stamps } : {}),
         text: richText(data.document),
         revision: (current?.revision || 0) + 1,
         deleted: current?.deleted || false,
@@ -324,6 +414,10 @@ export async function annotationRoute(
       if (new TextEncoder().encode(JSON.stringify(next)).length > 120000)
         throw new AnnotationError('Annotation is too large; split it into separate notes', 413);
       await saveAnnotation(tx, next);
+      if (input.mutationId && fingerprint) {
+        await tx.put(`annotation-receipt:${id}:${input.mutationId}`, fingerprint);
+        await tx.put(`annotation-receipt-value:${id}:${input.mutationId}`, next);
+      }
       return next;
     });
     return json(value, existing ? 200 : 201);
@@ -383,7 +477,7 @@ export async function createSuggestedBookmark(
     references: [input.sourceId],
     expectedRevision: 0,
   });
-  await requireContext(storage, data);
+  await requireAnnotationContext(storage, data);
   return storage.transaction(async (tx) => {
     const existing = await tx.get<Annotation>(`annotation:${id}`);
     if (existing)
@@ -393,7 +487,12 @@ export async function createSuggestedBookmark(
         location: existing.location,
         deleted: existing.deleted,
       };
-    const { expectedRevision: _revision, ...record } = data;
+    const {
+      expectedRevision: _revision,
+      mutationId: _mutation,
+      captures: _captures,
+      ...record
+    } = data;
     const value: Annotation = {
       ...record,
       text: input.label,

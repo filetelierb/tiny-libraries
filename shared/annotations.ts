@@ -1,4 +1,7 @@
 import { z } from 'zod';
+import { locationSchema, type SourceLocation } from './locations';
+export { locationSchema, type SourceLocation } from './locations';
+import { captureSelectionsSchema, sourceStampsSchema, type PublishedCapture } from './captures';
 import { MAX_RESOURCE_TABS, type StudySession, type Source } from './domain';
 
 export const annotationQuerySchema = z.object({
@@ -181,12 +184,6 @@ export function richText(node: RichNode): string {
     );
   return text;
 }
-export const locationSchema = z.object({
-  page: z.number().int().positive().max(100000).optional(),
-  seconds: z.number().nonnegative().max(86400).optional(),
-  quote: z.string().max(8000).optional(),
-});
-export type SourceLocation = z.infer<typeof locationSchema>;
 export const strokeSchema = z.object({
   color: z.enum(['#007f76', '#e5913f', '#1f6bbb', '#c33d45', '#202f36']),
   width: z.number().min(1).max(12),
@@ -203,22 +200,38 @@ export const drawingSchema = z
     (strokes) => strokes.reduce((sum, stroke) => sum + stroke.points.length, 0) <= 3000,
     'Drawing is too detailed; save this annotation and start another',
   );
-export const annotationInputSchema = z.object({
-  kind: z.enum(['annotation', 'bookmark']).default('annotation'),
-  id: z.string().uuid(),
-  sessionId: z.string().uuid(),
-  sourceId: z.string().uuid().nullable(),
-  sourceVersion: z.number().int().positive().nullable(),
-  title: z.string().trim().max(240),
-  document: richDocumentSchema,
-  location: locationSchema,
-  strokes: drawingSchema.default([]),
-  origin: z.enum(['manual', 'tutor']).default('manual'),
-  references: z.array(z.string().uuid()).max(20).default([]),
-  expectedRevision: z.number().int().nonnegative(),
-});
+export const annotationInputSchema = z
+  .object({
+    kind: z.enum(['annotation', 'bookmark']).default('annotation'),
+    id: z.string().uuid(),
+    sessionId: z.string().uuid(),
+    sourceId: z.string().uuid().nullable(),
+    sourceVersion: z.number().int().positive().nullable(),
+    title: z.string().trim().max(240),
+    document: richDocumentSchema,
+    location: locationSchema,
+    strokes: drawingSchema.default([]),
+    origin: z.enum(['manual', 'tutor']).default('manual'),
+    references: z.array(z.string().uuid()).max(20).default([]),
+    expectedRevision: z.number().int().nonnegative(),
+    mutationId: z.string().uuid().optional(),
+    captures: captureSelectionsSchema.optional(),
+    stamps: sourceStampsSchema.optional(),
+  })
+  .refine(
+    (value) => (value.captures === undefined && value.stamps === undefined) || !!value.mutationId,
+    'Capture and location saves require a mutation identity',
+  )
+  .refine(
+    (value) => value.kind !== 'bookmark' || (!value.captures?.length && !value.stamps?.length),
+    'Bookmarks use a single source location',
+  );
 export type AnnotationInput = z.infer<typeof annotationInputSchema>;
-export type Annotation = Omit<AnnotationInput, 'expectedRevision' | 'kind'> & {
+export type Annotation = Omit<
+  AnnotationInput,
+  'expectedRevision' | 'kind' | 'mutationId' | 'captures'
+> & {
+  captures?: PublishedCapture[];
   kind?: 'annotation' | 'bookmark';
   revision: number;
   text: string;

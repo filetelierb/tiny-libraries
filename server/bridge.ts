@@ -8,6 +8,8 @@ import { museStatus, codeSession } from './muse';
 import { z } from 'zod';
 import { composeCapture } from './capture-image';
 import { drawingSchema } from '../shared/annotations';
+import { captureDrawingSchema } from '../shared/capture-drawing';
+import { renderCapture } from './capture-render';
 import { TutorTransport, TutorTransportError, type TutorProvider } from './tutor-transport';
 
 export async function startBridge(
@@ -57,6 +59,34 @@ export async function startBridge(
           return;
         }
         send(result || { error: 'Stream request not found' }, result ? 200 : 404);
+        return;
+      }
+      if (url.pathname === '/render-capture' && req.method === 'POST') {
+        const parts: Buffer[] = [];
+        let length = 0;
+        for await (const part of req) {
+          length += part.length;
+          if (length > 12 * 1024 * 1024) throw new Error('Capture request exceeds 12 MB');
+          parts.push(Buffer.from(part));
+        }
+        const input = z
+          .object({
+            image: z
+              .string()
+              .max(12 * 1024 * 1024)
+              .regex(/^[A-Za-z0-9+/]*={0,2}$/),
+            drawing: captureDrawingSchema,
+          })
+          .parse(JSON.parse(Buffer.concat(parts).toString()));
+        const result = await renderCapture(Buffer.from(input.image, 'base64'), input.drawing);
+        res.writeHead(200, {
+          'Content-Type': 'image/png',
+          'Content-Length': result.bytes.length,
+          'X-Capture-Width': result.width,
+          'X-Capture-Height': result.height,
+          'Cache-Control': 'no-store',
+        });
+        res.end(result.bytes);
         return;
       }
       if (url.pathname === '/capture-image' && req.method === 'POST') {

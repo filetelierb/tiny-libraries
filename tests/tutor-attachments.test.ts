@@ -141,6 +141,30 @@ test('annotation attachments freeze the chosen revision independently of subsequ
     /this study session/,
   );
 });
+test('an explicit empty capture collection never resurrects an earlier single image in a tutor attachment', async () => {
+  const { memory, storage, files } = fixtures();
+  await memory.put(`annotation:${note.id}`, {
+    ...note,
+    capture: { id: crypto.randomUUID(), width: 64, height: 48, size: 100 },
+    captures: [],
+  });
+  const attachment = await createQuestionAttachment(
+    storage,
+    files,
+    {
+      id: crypto.randomUUID(),
+      sessionId,
+      kind: 'annotation',
+      annotationId: note.id,
+      revision: note.revision,
+    },
+    async () => {
+      assert.fail('An explicitly removed capture must not be composed or sent');
+    },
+  );
+  assert.equal(attachment.image, undefined);
+  assert.equal(attachment.kind, 'annotation');
+});
 
 test('file attachment snapshots preserve the selected prepared evidence and never trigger hidden preparation', async () => {
   const { memory, storage, blobs, files } = fixtures();

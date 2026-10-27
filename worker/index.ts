@@ -54,6 +54,8 @@ import {
 import { TutorJournalError } from './tutor-journal';
 import { attachmentRoute } from './attachment-route';
 import { AttachmentError } from './tutor-attachments';
+import { captureRoute } from './capture-route';
+import { CaptureError } from './capture-store';
 import { recordAttempt, PracticeError } from './practice';
 import {
   annotationRoute,
@@ -623,6 +625,10 @@ export class Library extends DurableObject<Env> {
         boundedJson(request),
       );
       if (glossaryResponse) return glossaryResponse;
+      const captureResponse = await captureRoute(request, this.env, this.ctx.storage, () =>
+        boundedJson(request),
+      );
+      if (captureResponse) return captureResponse;
       const annotationResponse = await annotationRoute(request, this.env, this.ctx.storage, () =>
         boundedJson(request),
       );
@@ -633,6 +639,7 @@ export class Library extends DurableObject<Env> {
         error instanceof ApiError ||
         error instanceof DirectoryError ||
         error instanceof AnnotationError ||
+        error instanceof CaptureError ||
         error instanceof AttachmentError ||
         error instanceof GlossaryError ||
         error instanceof CardError ||
