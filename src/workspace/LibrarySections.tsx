@@ -177,8 +177,11 @@ export type LibraryArtifact = {
   sessionId?: string;
   title: string;
   kind: string;
+  /** Latest version number; review artifacts have a single version. */
+  revision?: number;
   createdAt: string;
 };
+const ARTIFACT_PAGE = 20;
 export function useLibraryArtifacts(refreshKey: unknown) {
   const [items, setItems] = useState<LibraryArtifact[] | null>(null),
     [error, setError] = useState(''),
@@ -199,18 +202,22 @@ export function ArtifactList({
   files,
   refreshKey,
   sessionId,
+  sessions = [],
   open,
   t,
 }: {
   files: Source[];
   refreshKey: unknown;
   sessionId: string;
+  sessions?: StudySession[];
   open: (item: LibraryArtifact, file: Source) => void;
   t: T;
 }) {
   const { items, error, reload } = useLibraryArtifacts(refreshKey);
   const [query, setQuery] = useState(''),
-    [allSessions, setAllSessions] = useState(false);
+    [allSessions, setAllSessions] = useState(false),
+    [limit, setLimit] = useState(ARTIFACT_PAGE);
+  const sessionName = new Map(sessions.map((session) => [session.id, session.name]));
   const byId = new Map(files.map((file) => [file.id, file]));
   const available = (items || []).filter(
     (item) =>
@@ -222,6 +229,7 @@ export function ArtifactList({
   );
   const toolbar = (
     <div className="artifact-list-tools">
+      <p className="panel-section-hint">{t.artifactListHint}</p>
       <label className="search-field">
         <Search size={14} aria-hidden="true" />
         <input
@@ -267,8 +275,9 @@ export function ArtifactList({
       {toolbar}
       {!visible.length && <p className="panel-section-note">{t.noResults}</p>}
       <ul className="artifact-list">
-        {visible.map((item) => {
+        {visible.slice(0, limit).map((item) => {
           const file = byId.get(item.sourceId)!;
+          const session = item.sessionId && sessionName.get(item.sessionId);
           return (
             <li key={item.id}>
               <button type="button" onClick={() => open(item, file)}>
@@ -276,8 +285,14 @@ export function ArtifactList({
                 <span>
                   <span>{item.title}</span>
                   <small title={file.name}>
-                    {item.origin === 'reinforcement' ? `${t.reviewArtifact} · ` : ''}
-                    {file.name}
+                    {[
+                      item.origin === 'reinforcement' ? t.reviewArtifact : '',
+                      item.revision ? `v${item.revision}` : '',
+                      session || '',
+                      file.name,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
                   </small>
                 </span>
               </button>
@@ -285,6 +300,11 @@ export function ArtifactList({
           );
         })}
       </ul>
+      {visible.length > limit && (
+        <Button size="sm" variant="ghost" onClick={() => setLimit(limit + ARTIFACT_PAGE)}>
+          {t.loadMore}
+        </Button>
+      )}
     </>
   );
 }

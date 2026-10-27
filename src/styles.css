@@ -8320,6 +8320,10 @@ body:has(.panel-resizer.resizing) {
   gap: 4px;
   padding: 0 10px 8px;
 }
+.artifact-list-tools .panel-section-hint {
+  flex-basis: 100%;
+  padding: 0 4px 4px;
+}
 .artifact-scope {
   display: flex;
   flex-basis: 100%;

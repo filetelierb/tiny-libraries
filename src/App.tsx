@@ -777,9 +777,10 @@ export function App() {
         ? { seconds: position }
         : {};
   }
-  function askAbout(source: Source) {
+  function askAbout(source: Source, prompt?: string) {
     setQuestionRequest({
       id: crypto.randomUUID(),
+      prompt,
       context: {
         sourceId: source.id,
         sourceVersion: source.version,
@@ -1043,6 +1044,7 @@ export function App() {
                   )}
                   refreshKey={catalog.files}
                   sessionId={session.id}
+                  sessions={catalog.sessions}
                   open={(item, file) => openLibraryArtifact(item, file)}
                   t={t}
                 />
@@ -1369,15 +1371,39 @@ export function App() {
                         <span className="toolbar-count">{sourceArtifacts.length}</span>
                       </>
                     }
-                    options={{ heading: t.sourceArtifacts, placement: 'below' }}
-                    actions={sourceArtifacts.map((item) => ({
-                      label:
-                        item.origin === 'reinforcement'
-                          ? `${t.reviewArtifact} · ${item.title}`
-                          : item.title,
-                      icon: <Activity size={16} />,
-                      run: () => openLibraryArtifact(item, active),
-                    }))}
+                    options={{
+                      heading: t.sourceArtifacts,
+                      placement: 'below',
+                      footnote: sourceArtifacts.some((item) => item.origin === 'source')
+                        ? t.artifactTutorHint
+                        : t.noArtifactUsesFileHint,
+                    }}
+                    actions={[
+                      ...sourceArtifacts.map((item) => ({
+                        label: [
+                          item.origin === 'reinforcement' ? t.reviewArtifact : '',
+                          item.title,
+                          item.revision ? `v${item.revision}` : '',
+                        ]
+                          .filter(Boolean)
+                          .join(' · '),
+                        icon: <Activity size={16} />,
+                        run: () => openLibraryArtifact(item, active),
+                      })),
+                      sourceArtifacts.some((item) => item.origin === 'source')
+                        ? {
+                            label: t.askTutorForArtifactVersion,
+                            icon: <Sparkles size={16} />,
+                            tone: 'primary' as const,
+                            run: () => askAbout(active, t.artifactVersionPrompt),
+                          }
+                        : {
+                            label: t.noArtifactUsesFile,
+                            icon: <FileStack size={16} />,
+                            disabled: true,
+                            run: () => {},
+                          },
+                    ]}
                   />
                   <span className="toolbar-divider" aria-hidden="true" />
                   <IconButton

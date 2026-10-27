@@ -625,6 +625,7 @@ export class Library extends DurableObject<Env> {
           sessionId?: string;
           title: string;
           kind: string;
+          revision: number;
           createdAt: string;
         }> = [];
         for (const value of records.values()) {
@@ -636,6 +637,7 @@ export class Library extends DurableObject<Env> {
               sourceId: value.sourceId,
               title: latest.artifact.title,
               kind: latest.artifact.kind,
+              revision: latest.revision,
               createdAt: value.createdAt,
             });
         }
@@ -650,6 +652,7 @@ export class Library extends DurableObject<Env> {
               sessionId: value.sessionId,
               title: value.plan.artifact.title,
               kind: value.plan.artifact.kind,
+              revision: 1,
               createdAt: value.createdAt,
             });
         items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
