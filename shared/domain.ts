@@ -43,7 +43,7 @@ export type NormalizedSource = {
 };
 export const questionSchema = z.object({
   id: z.string(),
-  kind: z.enum(['single', 'short']).nullable(),
+  kind: z.enum(['single', 'boolean', 'short']).nullable(),
   prompt: z.string(),
   choices: z.array(z.string()).max(5),
   correctIndex: z.number().int().min(0).max(4).nullable(),
@@ -278,6 +278,24 @@ export type Catalog = {
   settings: Settings;
 };
 export const MAX_FILE_BYTES = 512 * 1024 * 1024;
+/**
+ * Rejects questions without a usable solution. True/false questions always offer
+ * true (index 0) then false (index 1); the interface shows them in the student's language.
+ */
+export function checkQuestion<Q extends Question>(q: Q): Q {
+  if (q.kind === 'short') {
+    if (!q.expectedAnswer?.trim() || !q.rubric?.trim())
+      throw new Error('Short answers require an explicit rubric');
+    return q;
+  }
+  if (q.kind === 'boolean') {
+    if (q.correctIndex !== 0 && q.correctIndex !== 1) throw new Error('Invalid question solution');
+    return { ...q, choices: ['true', 'false'] };
+  }
+  if (q.correctIndex == null || q.choices.length < 2 || q.correctIndex >= q.choices.length)
+    throw new Error('Invalid question solution');
+  return q;
+}
 export function kindFor(name: string): Kind | null {
   const ext = name.split('.').pop()?.toLowerCase();
   if (['mp4', 'webm', 'mov', 'mkv'].includes(ext || '')) return 'video';
@@ -340,16 +358,8 @@ export function validateSynthesis(
     seen.add(chapter.id);
     for (const id of chapter.segmentIds)
       if (!ids.has(id)) throw new Error('Unresolvable chapter reference');
+    chapter.questions = chapter.questions.map(checkQuestion);
     for (const q of chapter.questions) {
-      if (q.kind === 'short') {
-        if (!q.expectedAnswer?.trim() || !q.rubric?.trim())
-          throw new Error('Short answers require an explicit rubric');
-      } else if (
-        q.correctIndex == null ||
-        q.choices.length < 2 ||
-        q.correctIndex >= q.choices.length
-      )
-        throw new Error('Invalid question solution');
       for (const id of q.segmentIds)
         if (!ids.has(id)) throw new Error('Unresolvable question reference');
     }

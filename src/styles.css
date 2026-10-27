@@ -4605,6 +4605,14 @@ body:has(.panel-resizer.resizing) {
   background: var(--background);
   cursor: pointer;
 }
+.chapter-question .quiz-options.boolean {
+  flex-direction: row;
+}
+.chapter-question .quiz-options.boolean > label {
+  flex: 1;
+  justify-content: center;
+  font-weight: 600;
+}
 .chapter-question .quiz-options > label:focus-within {
   outline: 2px solid var(--ring);
   outline-offset: 2px;

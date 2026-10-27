@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { questionSchema, type Question, type Segment } from './domain';
+import { checkQuestion, questionSchema, type Question, type Segment } from './domain';
 
 /** An artifact's `## ` headings are its chapters; text before the first one is an introduction. */
 export function artifactChapters(markdown: string) {
@@ -106,16 +106,8 @@ export function validateArtifactStudy(
     const generated = byIndex.get(chapter.index);
     if (!generated) return [];
     const id = artifactChapterId(revision, chapter.index);
-    const questions = generated.questions.map((question, number) => {
-      if (question.kind === 'short') {
-        if (!question.expectedAnswer?.trim() || !question.rubric?.trim())
-          throw new Error('Short answers require an explicit rubric');
-      } else if (
-        question.correctIndex == null ||
-        question.choices.length < 2 ||
-        question.correctIndex >= question.choices.length
-      )
-        throw new Error('Invalid question solution');
+    const questions = generated.questions.map((generatedQuestion, number) => {
+      const question = checkQuestion(generatedQuestion);
       if (question.segmentIds.some((segmentId) => !ids.has(segmentId)))
         throw new Error('Unresolvable question reference');
       // Ids are namespaced so they never collide with the source's own chapter questions.

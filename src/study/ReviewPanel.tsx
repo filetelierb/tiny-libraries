@@ -18,6 +18,7 @@ import { api } from '../api';
 import { Badge, Button, Modal } from '../design/components';
 import { GeneratedArtifact } from '../GeneratedArtifact';
 import type { T } from '../i18n';
+import { questionChoices } from './ChapterQuiz';
 
 type Parameters = { frequency: number; sampling: number; amplitude: number };
 export function ReviewPanel({
@@ -137,7 +138,7 @@ export function ReviewPanel({
         <p>
           <strong>{t.yourAnswer}:</strong>{' '}
           {attempt.answer ||
-            attempt.question?.choices[attempt.selected] ||
+            (attempt.question && questionChoices(attempt.question, t)[attempt.selected]) ||
             String(attempt.selected)}
         </p>
         <p>

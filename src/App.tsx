@@ -61,7 +61,7 @@ import type { QuestionAttachment } from '../shared/tutor-attachments';
 import { dictionaries, type T } from './i18n';
 import { Badge, Button, Empty, IconButton, Modal, ToolbarButton } from './design/components';
 import { StudyReader } from './study/StudyReader';
-import { ChapterQuiz, type ChapterQuizRequest } from './study/ChapterQuiz';
+import { ChapterQuiz, questionChoices, type ChapterQuizRequest } from './study/ChapterQuiz';
 import { FlashcardDeck, type DeckRequest } from './study/FlashcardDeck';
 import { ReviewPanel } from './study/ReviewPanel';
 import { reinforcementLearning } from '../shared/review';
@@ -2712,7 +2712,7 @@ function Practice({
                 onChange={(e) => setWritten((v) => ({ ...v, [q.id]: e.target.value }))}
               />
             ) : (
-              q.choices.map((choice, index) => (
+              questionChoices(q, t).map((choice, index) => (
                 <label key={index} className={answers[q.id] === index ? 'chosen' : ''}>
                   <input
                     type="radio"

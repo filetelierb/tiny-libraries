@@ -78,6 +78,24 @@ test('invalid solution indices and repeated question identities are rejected', (
   duplicate.chapters[0].questions.push(duplicate.chapters[0].questions[0]);
   assert.throws(() => validateSynthesis(duplicate, segments), /Duplicate question/);
 });
+test('true/false questions keep a two-answer key and reject any other solution', () => {
+  const statement = {
+    ...synthesis.chapters[0].questions[0],
+    id: 'q2',
+    kind: 'boolean' as const,
+    prompt: 'Sampling at 12 Hz is enough for an 8 Hz signal.',
+    choices: ['Verdadero', 'Falso', 'Quizás'],
+    correctIndex: 1,
+  };
+  const withStatement = structuredClone(synthesis) as unknown as {
+    chapters: Array<{ questions: unknown[] }>;
+  };
+  withStatement.chapters[0].questions.push(statement);
+  const question = validateSynthesis(withStatement, segments).chapters[0].questions[1];
+  assert.deepEqual([question.choices, question.correctIndex], [['true', 'false'], 1]);
+  withStatement.chapters[0].questions[1] = { ...statement, correctIndex: 2 };
+  assert.throws(() => validateSynthesis(withStatement, segments), /Invalid question/);
+});
 test('glossary deduplicates normalized terms and preserves the first definition', () => {
   const value = structuredClone(synthesis);
   value.glossary.push({ term: 'NÝQUIST', definition: 'Conflicting text', segmentIds: ['a'] });

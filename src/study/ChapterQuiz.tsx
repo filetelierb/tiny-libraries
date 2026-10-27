@@ -14,6 +14,11 @@ import {
   type QuizDraft,
 } from './quizDrafts';
 
+/** The answers a question offers, with true/false shown in the student's language. */
+export function questionChoices(question: { kind: string | null; choices: string[] }, t: T) {
+  return question.kind === 'boolean' ? [t.trueAnswer, t.falseAnswer] : question.choices;
+}
+
 export type ChapterQuizRequest = {
   source: Source;
   learning: PublicLearning;
@@ -160,7 +165,8 @@ export function ChapterQuiz({
                   {i + 1}. {q.prompt}
                 </h4>
                 <p>
-                  {t.yourAnswer}: {q.kind === 'short' ? result.answer : q.choices[result.selected]}
+                  {t.yourAnswer}:{' '}
+                  {q.kind === 'short' ? result.answer : questionChoices(q, t)[result.selected]}
                 </p>
                 <p
                   className={`quiz-verdict ${result.pendingReview ? 'pending' : result.correct ? 'correct' : 'incorrect'}`}
@@ -233,8 +239,8 @@ export function ChapterQuiz({
                 }
               />
             ) : (
-              <div className="quiz-options">
-                {question.choices.map((choice, i) => (
+              <div className={`quiz-options ${question.kind === 'boolean' ? 'boolean' : ''}`}>
+                {questionChoices(question, t).map((choice, i) => (
                   <label className={draft.answers[question.id] === i ? 'chosen' : ''} key={i}>
                     <input
                       className="sr-only"
@@ -248,7 +254,7 @@ export function ChapterQuiz({
                         })
                       }
                     />
-                    <span>{String.fromCharCode(65 + i)}</span>
+                    {question.kind !== 'boolean' && <span>{String.fromCharCode(65 + i)}</span>}
                     <span>{choice}</span>
                   </label>
                 ))}
@@ -321,7 +327,7 @@ export function ChapterQuiz({
                     <p>
                       {t.yourAnswer}:{' '}
                       {a.answer ??
-                        a.question?.choices[a.selected] ??
+                        (a.question && questionChoices(a.question, t)[a.selected]) ??
                         String.fromCharCode(65 + a.selected)}
                     </p>
                     <p>
