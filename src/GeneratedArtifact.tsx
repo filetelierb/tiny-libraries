@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import type { Artifact, Segment } from '../shared/domain';
 import type { T } from './i18n';
 import { SignalExplorer } from './SignalExplorer';
@@ -23,7 +22,6 @@ export function GeneratedArtifact({
   persist: (p: Parameters) => void;
   storageKey?: string;
 }) {
-  const [selected, setSelected] = useState<number | null>(null);
   return (
     <section className="generated-artifact">
       <div className="section-label">{t.explanation}</div>
@@ -47,28 +45,30 @@ export function GeneratedArtifact({
           onPersist={persist}
         />
       ) : (
-        <div className="comparison">
-          <div className="comparison-head">
-            <span>{artifact.leftTitle}</span>
-            <span>{artifact.rightTitle}</span>
-          </div>
-          {artifact.rows.map((row, i) => (
-            <section className={selected === i ? 'selected' : ''} key={i}>
-              <button
-                onClick={() => setSelected(selected === i ? null : i)}
-                aria-expanded={selected === i}
-              >
-                {row.label}
-              </button>
-              {selected === i && (
-                <div>
-                  <StudyMarkdown t={t}>{row.left}</StudyMarkdown>
-                  <StudyMarkdown t={t}>{row.right}</StudyMarkdown>
-                </div>
-              )}
-            </section>
-          ))}
-        </div>
+        <figure className="artifact-widget comparison">
+          <table className="artifact-table">
+            <thead>
+              <tr>
+                <th scope="col" />
+                <th scope="col">{artifact.leftTitle}</th>
+                <th scope="col">{artifact.rightTitle}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {artifact.rows.map((row, i) => (
+                <tr key={i}>
+                  <th scope="row">{row.label}</th>
+                  <td>
+                    <StudyMarkdown t={t}>{row.left}</StudyMarkdown>
+                  </td>
+                  <td>
+                    <StudyMarkdown t={t}>{row.right}</StudyMarkdown>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </figure>
       )}
     </section>
   );

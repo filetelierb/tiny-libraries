@@ -2891,43 +2891,33 @@ body:has(.panel-resizer.resizing) {
 }
 .comparison {
   margin: 25px 0;
+  overflow-x: auto;
 }
-.comparison-head {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 15px;
-  background: var(--secondary);
-  color: var(--primary);
-  font-size: var(--font-size-control);
-  padding: 15px;
-  border-radius: 8px;
-}
-.comparison > section {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  margin-top: 8px;
-  overflow: hidden;
-}
-.comparison > section > button {
+.artifact-table {
   width: 100%;
+  border-collapse: collapse;
+  font-size: 0.93rem;
+  line-height: 1.5;
+}
+.artifact-table :is(th, td) {
+  border-bottom: 1px solid var(--border);
+  padding: 0.6rem 0.75rem;
   text-align: left;
-  font-weight: 500;
-  padding: 15px;
-  font-size: 15px;
+  vertical-align: top;
 }
-.comparison > section.selected > button {
-  background: var(--muted);
+.artifact-table thead th {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted-text);
+  font-weight: 650;
 }
-.comparison > section > div {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-  padding: 15px;
-  font-size: var(--font-size-control);
+.artifact-table tbody th {
+  font-weight: 650;
+  white-space: nowrap;
 }
-.comparison p {
+.artifact-table p {
   margin: 0;
-  line-height: 1.8;
 }
 .generated-artifact .citations {
   margin-bottom: 20px;
