@@ -35,8 +35,10 @@ import {
   Trash2,
   ArrowLeftRight,
   FolderOpen,
-  Pencil,
   Lightbulb,
+  Circle,
+  PenLine,
+  MessageCircleQuestion,
 } from 'lucide-react';
 import {
   type Catalog,
@@ -56,7 +58,7 @@ import {
 } from '../shared/domain';
 import { api, uploadFile } from './api';
 import { dictionaries, type T } from './i18n';
-import { Badge, Button, Empty, IconButton, Modal } from './design/components';
+import { Badge, Button, Empty, IconButton, Modal, ToolbarButton } from './design/components';
 import { StudyReader } from './study/StudyReader';
 import { ChapterQuiz, type ChapterQuizRequest } from './study/ChapterQuiz';
 import { FlashcardDeck, type DeckRequest } from './study/FlashcardDeck';
@@ -742,7 +744,13 @@ export function App() {
                 <IconButton label={t.newFolder} onClick={() => treeActions.create('')}>
                   <FolderPlus />
                 </IconButton>
-                <IconButton label={t.settings} onClick={() => setModal('settings')}>
+                <IconButton
+                  label={
+                    catalog.settings.configured ? t.settings : `${t.settings} · ${t.notConfigured}`
+                  }
+                  data-attention={catalog.settings.configured ? undefined : ''}
+                  onClick={() => setModal('settings')}
+                >
                   <SettingsIcon />
                 </IconButton>
               </div>
@@ -891,13 +899,6 @@ export function App() {
             />
           )}
         </div>
-        <div className="sidebar-foot">
-          <span className={`connection-dot ${catalog.settings.configured ? 'connected' : ''}`} />
-          <button onClick={() => setModal('settings')}>
-            {catalog.settings.configured ? t.configured : t.notConfigured}
-          </button>
-          <span className="language-pill">{locale.toUpperCase()}</span>
-        </div>
       </aside>
       {left && !focus && panels.resolved.left.docked && (
         <PanelResizer
@@ -985,35 +986,76 @@ export function App() {
         ) : (
           <>
             <div className="file-toolbar">
-              <div className="file-title">
-                <span>{active.folder || t.library}</span>
-                {split ? (
-                  <select
-                    className="pane-target"
-                    aria-label={t.toolsTarget}
-                    value={active.id}
-                    onChange={(event) => focusPane(event.target.value)}
-                  >
-                    {[primary!, split].map((source) => (
-                      <option key={source.id} value={source.id}>
-                        {source.name}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <strong title={active.name}>{active.name}</strong>
-                )}
-              </div>
+              {split && (
+                <select
+                  className="pane-target"
+                  aria-label={t.toolsTarget}
+                  value={active.id}
+                  onChange={(event) => focusPane(event.target.value)}
+                >
+                  {[primary!, split].map((source) => (
+                    <option key={source.id} value={source.id}>
+                      {source.name}
+                    </option>
+                  ))}
+                </select>
+              )}
               <div className="reader-commands">
-                <div className="toolbar-actions" aria-label={t.resourceTools}>
-                  <IconButton
+                <div className="toolbar-actions" role="toolbar" aria-label={t.resourceTools}>
+                  <ToolbarButton
                     label={t.addBookmark}
+                    icon={<Bookmark />}
                     onClick={() =>
                       setBookmarkIntent({ source: active, location: resourceLocation(active) })
                     }
-                  >
-                    <Bookmark />
-                  </IconButton>
+                  />
+                  <ToolbarButton
+                    label={t.annotateResource}
+                    text={t.annotateShort}
+                    icon={<PenLine />}
+                    onClick={() =>
+                      void run(() => beginAnnotation(active.id, resourceLocation(active), true))
+                    }
+                  />
+                  <ToolbarButton
+                    label={t.askTutor}
+                    text={t.askShort}
+                    icon={<MessageCircleQuestion />}
+                    onClick={() => askAbout(active)}
+                  />
+                  {split ? (
+                    <>
+                      <ToolbarButton
+                        label={t.replaceResource}
+                        icon={<FolderOpen />}
+                        onClick={showSplitPicker}
+                      />
+                      <ToolbarButton
+                        label={t.swapPanes}
+                        icon={<ArrowLeftRight />}
+                        onClick={() => {
+                          if (sessionRef.current)
+                            commitWorkspace(swapSplit(usable(sessionRef.current)));
+                        }}
+                      />
+                      <ToolbarButton label={t.noSplit} icon={<X />} onClick={closeSplit} />
+                    </>
+                  ) : (
+                    <ToolbarButton
+                      label={t.split}
+                      text={t.splitShort}
+                      icon={<Columns2 />}
+                      onClick={showSplitPicker}
+                    />
+                  )}
+                  <ToolbarButton
+                    label={active.reviewed ? t.reviewed : t.markReviewed}
+                    variant={active.reviewed ? 'secondary' : 'ghost'}
+                    aria-pressed={active.reviewed}
+                    icon={active.reviewed ? <Check /> : <Circle />}
+                    onClick={() => void run(() => editFile(active, { reviewed: !active.reviewed }))}
+                  />
+                  <span className="toolbar-divider" aria-hidden="true" />
                   <IconButton
                     label={t.notes}
                     onClick={() => {
@@ -1024,47 +1066,10 @@ export function App() {
                     <StickyNote />
                   </IconButton>
                   <IconButton
-                    label={t.annotateResource}
-                    onClick={() =>
-                      void run(() => beginAnnotation(active.id, resourceLocation(active), true))
-                    }
-                  >
-                    <Pencil />
-                  </IconButton>
-                  <IconButton
                     label={t.conceptSuggestions}
                     onClick={() => setConceptSuggestionsOpen(true)}
                   >
                     <Lightbulb />
-                  </IconButton>
-                  <IconButton label={t.askTutor} onClick={() => askAbout(active)}>
-                    <MessageSquare />
-                  </IconButton>
-                  <IconButton label={split ? t.replaceResource : t.split} onClick={showSplitPicker}>
-                    {split ? <FolderOpen /> : <Columns2 />}
-                  </IconButton>
-                  {split && (
-                    <IconButton
-                      label={t.swapPanes}
-                      onClick={() => {
-                        if (sessionRef.current)
-                          commitWorkspace(swapSplit(usable(sessionRef.current)));
-                      }}
-                    >
-                      <ArrowLeftRight />
-                    </IconButton>
-                  )}
-                  {split && (
-                    <IconButton label={t.noSplit} onClick={closeSplit}>
-                      <X />
-                    </IconButton>
-                  )}
-                  <IconButton
-                    label={active.reviewed ? t.reviewed : t.markReviewed}
-                    aria-pressed={active.reviewed}
-                    onClick={() => void run(() => editFile(active, { reviewed: !active.reviewed }))}
-                  >
-                    <Check />
                   </IconButton>
                   <a
                     className="button icon-button button-ghost"
@@ -1330,13 +1335,6 @@ export function App() {
             </div>
           </>
         )}
-        <div className="workspace-foot">
-          <span>{session.name}</span>
-          <span>
-            <span className="connection-dot connected" />
-            {t.local}
-          </span>
-        </div>
       </main>
       {right && !focus && panels.resolved.right.docked && (
         <PanelResizer

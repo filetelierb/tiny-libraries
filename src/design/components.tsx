@@ -19,6 +19,20 @@ export function Button({
     />
   );
 }
+/** Labelled command for the viewer bar; the label hides when the bar is narrow. */
+export function ToolbarButton({
+  label,
+  text = label,
+  icon,
+  ...props
+}: Parameters<typeof Button>[0] & { label: string; text?: string; icon: ReactNode }) {
+  return (
+    <Button variant="ghost" size="sm" title={label} aria-label={label} {...props}>
+      {icon}
+      <span className="toolbar-label">{text}</span>
+    </Button>
+  );
+}
 export function IconButton({
   label,
   children,

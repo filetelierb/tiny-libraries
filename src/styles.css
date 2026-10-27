@@ -721,38 +721,6 @@ hr {
 .chat-message :is(p, ul, ol, pre, table) + :is(p, ul, ol, pre, table) {
   margin-top: 12px;
 }
-.sidebar-foot {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 12px 18px;
-  border-top: 1px solid var(--border);
-  font-size: var(--font-size-small);
-  color: var(--muted-text);
-}
-.sidebar-foot > button {
-  font-size: var(--font-size-small);
-  color: var(--muted-text);
-  padding: 0;
-}
-.language-pill {
-  margin-left: auto;
-  font-family: var(--font-mono);
-  font-size: var(--font-size-small);
-}
-.connection-dot {
-  display: inline-block;
-  width: 5px;
-  height: 5px;
-  flex-shrink: 0;
-  background: var(--muted-text);
-  border-radius: 50%;
-  margin-right: 3px;
-  vertical-align: middle;
-}
-.connection-dot.connected {
-  background: var(--primary);
-}
 .workspace {
   display: flex;
   flex: 1;
@@ -873,70 +841,76 @@ hr {
   opacity: 1;
 }
 .file-toolbar {
-  display: flex;
-  align-items: center;
-  flex-direction: column;
-  gap: 8px;
-  min-height: 84px;
-  padding: 8px 14px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-}
-.file-title {
-  display: flex;
-  flex-direction: row;
-  align-items: baseline;
-  gap: 8px;
-  min-width: 0;
-  flex: 1;
-}
-.file-title > span {
-  font-size: var(--font-size-small);
-  color: var(--muted-text);
-  max-width: 45%;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.file-title strong {
-  font-size: var(--font-size-control);
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.reader-commands {
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 100%;
+  gap: 8px;
+  height: 48px;
+  min-height: 48px;
+  flex-shrink: 0;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in oklch, var(--card) 80%, transparent);
+  container-type: inline-size;
+}
+.file-toolbar .pane-target {
+  flex: 0 1 180px;
+}
+.reader-commands {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+}
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  max-width: calc(100% - 40px);
+  padding: 2px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: color-mix(in oklch, var(--card) 95%, transparent);
+  box-shadow:
+    0 10px 15px -3px rgb(0 0 0 / 10%),
+    0 4px 6px -4px rgb(0 0 0 / 10%);
+  backdrop-filter: blur(8px);
+}
+.toolbar-actions > .button {
+  flex-shrink: 0;
+}
+.toolbar-actions .icon-button {
+  width: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  color: var(--foreground);
+}
+.toolbar-divider {
+  width: 1px;
+  height: 16px;
+  margin: 0 2px;
+  background: var(--border);
 }
 .focus-action {
   position: absolute;
-  right: 0;
+  right: 8px;
 }
 .focus-action .icon-button {
   background: var(--secondary);
   color: var(--primary);
 }
-.toolbar-actions {
-  display: flex;
-  gap: 2px;
-  padding: 3px 6px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  box-shadow: 0 2px 5px rgb(21 45 52 / 5%);
-  background: var(--surface);
-}
-.toolbar-actions .icon-button {
-  width: 30px;
-  min-width: 30px;
-  color: var(--foreground);
-}
-.toolbar-actions [aria-pressed='true'] {
-  background: var(--secondary);
-  color: var(--primary);
+/* Labels collapse to icons when the reader is too narrow for the full bar. */
+@container (max-width: 700px) {
+  .toolbar-label {
+    display: none;
+  }
+  .toolbar-actions > .button-sm {
+    width: 28px;
+    padding: 0;
+  }
 }
 .viewers {
   display: flex;
@@ -980,18 +954,6 @@ hr {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-.workspace-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 14px;
-  min-height: 30px;
-  font-size: var(--font-size-small);
-  gap: 10px;
-  background: var(--background);
-  color: var(--muted-text);
-  border-top: 1px solid var(--border);
 }
 .empty {
   display: flex;
@@ -1061,6 +1023,19 @@ hr {
 .panel-heading-actions {
   display: flex;
   gap: 2px;
+}
+[data-attention] {
+  position: relative;
+}
+[data-attention]::after {
+  content: '';
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--danger);
 }
 .panel-heading-actions > .icon-button[aria-pressed='true'] {
   color: var(--primary);
@@ -2617,18 +2592,6 @@ body:has(.panel-resizer.resizing) {
   }
 }
 @media (max-width: 1150px) {
-  .toolbar-actions {
-    gap: 0;
-  }
-  .file-toolbar {
-    padding-left: 12px;
-    padding-right: 6px;
-  }
-  .toolbar-actions .icon-button {
-    width: 27px;
-    min-width: 27px;
-    padding: 4px;
-  }
   .signal-controls {
     gap: 10px;
   }
@@ -2642,9 +2605,6 @@ body:has(.panel-resizer.resizing) {
 @media (max-width: 1000px) {
   .document-reader {
     padding: 32px;
-  }
-  .file-title strong {
-    font-size: 13px;
   }
 }
 @media (max-width: 720px) {
@@ -2662,16 +2622,6 @@ body:has(.panel-resizer.resizing) {
   .study-content {
     padding: 22px 18px;
   }
-  .file-toolbar {
-    min-height: 75px;
-    gap: 8px;
-    padding: 8px;
-  }
-  .file-title {
-    flex: 1;
-    padding-left: 6px;
-    gap: 4px;
-  }
   .button {
     min-height: 40px;
   }
@@ -2679,18 +2629,6 @@ body:has(.panel-resizer.resizing) {
     min-height: 40px;
     width: 40px;
     min-width: 40px;
-  }
-  .toolbar-actions .icon-button {
-    min-height: 30px;
-    width: 35px;
-    min-width: 35px;
-  }
-  .resource-tabs {
-    min-height: 48px;
-  }
-  .resource-tabs > .icon-button {
-    width: 32px;
-    min-width: 32px;
   }
   .resource-tab > button:first-child {
     padding: 0 10px;
@@ -2742,9 +2680,6 @@ body:has(.panel-resizer.resizing) {
   select {
     font-size: 16px;
   }
-  .modal {
-    padding: 22px;
-  }
   .settings-grid {
     grid-template-columns: 1fr;
   }
@@ -2781,14 +2716,6 @@ body:has(.panel-resizer.resizing) {
   }
   .signal-result > .muted {
     flex: 1 1 100%;
-  }
-  .workspace-foot > span {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .workspace-foot {
-    font-size: var(--font-size-small);
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -3229,21 +3156,6 @@ body:has(.panel-resizer.resizing) {
   background: transparent;
   font-weight: 600;
   text-overflow: ellipsis;
-}
-.reader-commands {
-  gap: 8px;
-  justify-content: space-between;
-}
-.reader-commands .toolbar-actions {
-  flex-wrap: wrap;
-  max-width: calc(100% - 42px);
-  justify-content: center;
-  margin-left: auto;
-  margin-right: auto;
-}
-.reader-commands .focus-action {
-  position: static;
-  flex-shrink: 0;
 }
 .study-resource {
   display: flex;
