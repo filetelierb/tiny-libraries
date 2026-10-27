@@ -136,6 +136,11 @@ textarea {
   line-height: 1.5;
 }
 label {
+  font-size: inherit;
+  font-weight: 400;
+}
+/* Stacked field labels: opt in with .field, or wrap a text control directly. */
+:where(.field, label:has(> input:not([type='checkbox'], [type='radio']), > select, > textarea)) {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -4980,6 +4985,7 @@ body:has(.panel-resizer.resizing) {
 .assessment-config-grid label {
   flex-direction: row;
   align-items: center;
+  gap: 12px;
 }
 .assessment-config-grid select {
   width: auto;
@@ -5171,11 +5177,16 @@ body:has(.panel-resizer.resizing) {
   min-width: 0;
 }
 .assessment-choice legend,
-.assessment-matching legend,
-.assessment-fill > label {
+.assessment-matching legend {
   font-size: 21px;
   line-height: 1.6;
   margin-bottom: 18px;
+}
+.assessment-fill > label {
+  display: block;
+  font-size: 18px;
+  font-weight: 400;
+  line-height: 2;
 }
 .assessment-choice > label {
   display: flex;
