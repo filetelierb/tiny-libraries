@@ -8,7 +8,15 @@ export type MenuAction = {
   run: () => void;
   danger?: boolean;
   disabled?: boolean;
+  /** Kept for call-site compatibility; menus render without separators. */
   separator?: boolean;
+  tone?: 'primary';
+};
+export type MenuOptions = {
+  heading?: string;
+  footnote?: string;
+  variant?: 'folder' | 'file';
+  placement?: 'below' | 'right-start';
 };
 export type MenuAnchor = { element: HTMLElement; point?: { x: number; y: number } };
 
@@ -19,6 +27,7 @@ export function ActionMenuSurface({
   anchor,
   close,
   focusLast = false,
+  options = {},
 }: {
   id: string;
   label: string;
@@ -26,26 +35,34 @@ export function ActionMenuSurface({
   anchor: MenuAnchor;
   close: (restoreFocus?: boolean) => void;
   focusLast?: boolean;
+  options?: MenuOptions;
 }) {
   const [point, setPoint] = useState({ left: 8, top: 8 });
   const menu = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     if (!menu.current) return;
     const rect = menu.current.getBoundingClientRect(),
-      target = anchor.element.getBoundingClientRect();
-    const left = anchor.point?.x ?? target.right - rect.width;
+      target = anchor.element.getBoundingClientRect(),
+      row = (anchor.element.closest('.tree-row') || anchor.element).getBoundingClientRect();
+    const beside =
+      !anchor.point &&
+      options.placement === 'right-start' &&
+      row.right + 4 + rect.width <= window.innerWidth - 8;
+    const left = anchor.point?.x ?? (beside ? row.right + 4 : target.right - rect.width);
     const top =
       anchor.point?.y ??
-      (target.bottom + rect.height + 8 <= window.innerHeight
-        ? target.bottom + 4
-        : target.top - rect.height - 4);
+      (beside
+        ? row.top
+        : target.bottom + rect.height + 8 <= window.innerHeight
+          ? target.bottom + 4
+          : target.top - rect.height - 4);
     setPoint({
       left: Math.max(8, Math.min(left, window.innerWidth - rect.width - 8)),
       top: Math.max(8, Math.min(top, window.innerHeight - rect.height - 8)),
     });
     const items = menu.current.querySelectorAll<HTMLButtonElement>('button:not(:disabled)');
     items[focusLast ? items.length - 1 : 0]?.focus({ preventScroll: true });
-  }, [anchor.element, anchor.point?.x, anchor.point?.y, focusLast]);
+  }, [anchor.element, anchor.point?.x, anchor.point?.y, focusLast, options.placement]);
   useEffect(() => {
     const dismiss = (event: PointerEvent) => {
       if (
@@ -73,7 +90,7 @@ export function ActionMenuSurface({
     <div
       id={id}
       ref={menu}
-      className="action-menu"
+      className={`action-menu action-menu-${options.variant || 'folder'}`}
       role="menu"
       aria-label={label}
       style={point}
@@ -111,15 +128,19 @@ export function ActionMenuSurface({
         }
       }}
     >
+      {options.heading && (
+        <div className="action-menu-heading" role="presentation">
+          {options.heading}
+        </div>
+      )}
       {actions.map((action) => (
         <div key={action.label} role="none">
-          {action.separator && <hr />}
           <button
             type="button"
             role="menuitem"
             tabIndex={-1}
             disabled={action.disabled}
-            className={action.danger ? 'danger' : ''}
+            className={action.danger ? 'danger' : action.tone === 'primary' ? 'tone-primary' : ''}
             onClick={() => {
               close();
               action.run();
@@ -130,6 +151,11 @@ export function ActionMenuSurface({
           </button>
         </div>
       ))}
+      {options.footnote && (
+        <p className="action-menu-footnote" role="presentation">
+          {options.footnote}
+        </p>
+      )}
     </div>,
     host,
   );
@@ -139,10 +165,12 @@ export function ActionMenu({
   label,
   actions,
   icon = <MoreHorizontal size={16} />,
+  options,
 }: {
   label: string;
   actions: MenuAction[];
   icon?: ReactNode;
+  options?: MenuOptions;
 }) {
   const [open, setOpen] = useState(false),
     [focusLast, setFocusLast] = useState(false);
@@ -189,6 +217,7 @@ export function ActionMenu({
           anchor={{ element: trigger.current }}
           close={close}
           focusLast={focusLast}
+          options={options}
         />
       )}
     </>

@@ -357,22 +357,23 @@ hr {
   color: var(--muted-text);
 }
 .library-search {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  position: relative;
   margin: 0 16px;
-  background: var(--surface);
-  padding-left: 10px;
   color: var(--muted-text);
 }
+.library-search > svg {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  translate: 0 -50%;
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+}
 .library-search input {
-  background: none;
-  border: 0;
-  padding: 9px 4px;
-  font-size: var(--font-size-control);
-  min-width: 0;
+  height: 36px;
+  padding-left: 32px;
+  color: var(--foreground);
 }
 .library-actions {
   display: flex;
@@ -445,25 +446,29 @@ hr {
   display: flex;
   align-items: center;
   position: relative;
-  border-radius: var(--radius-sm);
-  margin: 2px 0;
+  border-radius: var(--radius);
+}
+.directory-tree li + li {
+  margin-top: 2px;
 }
 .file-row:hover {
   background: var(--muted);
 }
 .file-row.active {
-  color: var(--primary);
-  background: color-mix(in oklch, var(--secondary), transparent 25%);
+  color: var(--foreground);
+  background: color-mix(in oklch, var(--primary), transparent 88%);
 }
 .file-row > button:first-child {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 9px 5px;
+  min-height: 32px;
+  padding: 6px 8px;
   min-width: 0;
   flex: 1;
   text-align: left;
   font-size: 13px;
+  border-radius: var(--radius);
 }
 .file-row > button:first-child span {
   flex: 1;
@@ -473,8 +478,25 @@ hr {
 }
 .file-row > button:first-child svg:first-child {
   color: var(--muted-text);
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
+}
+.file-row > button:first-child svg.resource-icon-video,
+.resource-icon-video {
+  color: var(--primary);
+}
+.file-row .tree-menu-trigger {
+  opacity: 0;
+}
+.file-row:hover .tree-menu-trigger,
+.file-row:focus-within .tree-menu-trigger,
+.file-row .tree-menu-trigger[aria-expanded='true'] {
+  opacity: 1;
+}
+@media (hover: none) {
+  .file-row .tree-menu-trigger {
+    opacity: 1;
+  }
 }
 .file-row .reviewed-marker {
   color: var(--primary);
@@ -2800,10 +2822,10 @@ body:has(.panel-resizer.resizing) {
   display: flex;
   align-items: center;
   min-width: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
 }
 .directory-row {
-  min-height: 36px;
+  min-height: 32px;
   gap: 2px;
 }
 .directory-row:hover {
@@ -2812,9 +2834,9 @@ body:has(.panel-resizer.resizing) {
 .directory-label {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   text-align: left;
-  padding: 7px 2px;
+  padding: 6px 0 6px 8px;
   flex: 1;
   min-width: 0;
   font-size: 13px;
@@ -2830,29 +2852,37 @@ body:has(.panel-resizer.resizing) {
 .directory-disclosure {
   display: grid;
   place-items: center;
-  flex: 0 0 18px;
-  padding: 4px 0;
-  min-height: 30px;
-  color: var(--muted-text);
+  flex: 0 0 24px;
+  min-height: 28px;
+  color: currentColor;
 }
-.directory-disclosure[aria-expanded='true'] > svg {
-  transform: rotate(90deg);
+.directory-disclosure > svg {
+  transition: transform 150ms;
+}
+.directory-disclosure[aria-expanded='false'] > svg {
+  transform: rotate(-90deg);
 }
 .directory-row.selected,
 .directory-root.selected {
-  background: var(--secondary);
-  color: var(--primary);
+  background: color-mix(in oklch, var(--primary), transparent 88%);
 }
 .context-directory > .directory-row {
-  color: var(--muted-text);
+  opacity: 0.9;
 }
 .tree-row .tree-menu-trigger {
   flex: 0 0 28px;
   min-width: 28px;
   width: 28px;
   min-height: 28px;
-  padding: 4px;
-  opacity: 0.7;
+  padding: 0;
+}
+.tree-row .tree-menu-trigger svg {
+  width: 14px;
+  height: 14px;
+}
+.file-row .tree-menu-trigger svg {
+  width: 16px;
+  height: 16px;
 }
 .tree-row .tree-menu-trigger:hover,
 .tree-row .tree-menu-trigger[aria-expanded='true'] {
@@ -2885,37 +2915,90 @@ body:has(.panel-resizer.resizing) {
 .action-menu {
   position: fixed;
   z-index: 100;
-  width: 238px;
+  width: 192px;
   max-width: calc(100vw - 16px);
   max-height: calc(100dvh - 16px);
   overflow: auto;
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--radius-lg);
-  padding: 6px;
+  padding: 4px;
   background: var(--surface);
   color: var(--foreground);
-  box-shadow: var(--paper-shadow);
+  box-shadow:
+    0 0 0 1px color-mix(in oklch, var(--foreground), transparent 90%),
+    0 4px 6px -1px rgb(0 0 0 / 10%),
+    0 2px 4px -2px rgb(0 0 0 / 10%);
+  animation: menu-in 100ms ease-out;
+}
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+}
+.action-menu-file {
+  width: 224px;
+  padding: 6px;
 }
 .action-menu button {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 9px;
+  gap: 6px;
+  padding: 4px 6px;
   width: 100%;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   font-size: var(--font-size-control);
   text-align: left;
-  line-height: 1.4;
+  line-height: 20px;
+  outline: none;
+}
+.action-menu-file button {
+  gap: 8px;
+  padding: 8px;
+  font-size: 12px;
+}
+.action-menu button svg {
+  width: 16px;
+  height: 16px;
 }
 .action-menu button:hover,
 .action-menu button:focus-visible {
   background: var(--accent);
 }
+.action-menu-file button:hover,
+.action-menu-file button:focus-visible {
+  background: var(--muted);
+}
+.action-menu button.tone-primary svg {
+  color: var(--primary);
+}
 .action-menu button.danger {
   color: var(--danger);
 }
-.action-menu hr {
-  margin: 5px 0;
+.action-menu button.danger:hover,
+.action-menu button.danger:focus-visible {
+  background: color-mix(in oklch, var(--danger), transparent 90%);
+  color: var(--danger);
+}
+.action-menu-heading {
+  padding: 4px 8px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
+  color: var(--muted-text);
+}
+.action-menu-footnote {
+  margin: 4px 0 2px;
+  padding: 0 8px;
+  font-size: 9px;
+  line-height: 1.4;
+  color: var(--muted-text);
+}
+@media (prefers-reduced-motion: reduce) {
+  .action-menu {
+    animation: none;
+  }
 }
 .destination-picker {
   min-width: 0;

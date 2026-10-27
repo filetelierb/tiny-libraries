@@ -1,19 +1,8 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import {
-  ArrowLeft,
-  ArrowRight,
-  Columns2,
-  FileImage,
-  FileText,
-  Film,
-  Headphones,
-  MoreHorizontal,
-  Pencil,
-  Pin,
-  X,
-} from 'lucide-react';
+import { ArrowLeft, ArrowRight, Columns2, MoreHorizontal, Pencil, Pin, X } from 'lucide-react';
 import type { Source } from '../../shared/domain';
 import { IconButton } from '../design/components';
+import { ResourceIcon } from '../design/ResourceIcon';
 import { ActionMenuSurface, type MenuAction, type MenuAnchor } from '../design/ActionMenu';
 import type { T } from '../i18n';
 import type { ResourceWorkspace } from './tabs';
@@ -171,16 +160,7 @@ export function ResourceTabs({
           const sources = tab.sources.map((id) => files.find((file) => file.id === id)!);
           const label = sources.map((file) => file.name).join(' + '),
             kind = sources[0].kind;
-          const Icon =
-            sources.length === 2
-              ? Columns2
-              : kind === 'video'
-                ? Film
-                : kind === 'audio'
-                  ? Headphones
-                  : kind === 'image'
-                    ? FileImage
-                    : FileText;
+          const icon = sources.length === 2 ? <Columns2 size={16} /> : <ResourceIcon kind={kind} />;
           const selected = tab.id === workspace.activeTabId,
             expanded = context?.tabId === tab.id;
           return (
@@ -278,7 +258,7 @@ export function ResourceTabs({
                   select(visible[next].id);
                 }}
               >
-                <Icon size={14} />
+                {icon}
                 <span>{label}</span>
                 {tab.preview && <span className="sr-only"> · {t.preview}</span>}
               </button>

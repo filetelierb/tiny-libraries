@@ -1,18 +1,16 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import {
   Archive,
-  ChevronRight,
+  ArchiveRestore,
+  ChevronDown,
   CircleCheck,
-  FileImage,
+  File,
   FileText,
-  Film,
   Folder,
   FolderOpen,
   FolderPlus,
-  Headphones,
   PenLine,
   Plus,
-  RotateCcw,
   Trash2,
   Upload,
 } from 'lucide-react';
@@ -27,6 +25,7 @@ import {
 } from '../../shared/directories';
 import { ActionMenu, type MenuAction } from '../design/ActionMenu';
 import { Button } from '../design/components';
+import { ResourceIcon } from '../design/ResourceIcon';
 import type { T } from '../i18n';
 
 export type TreeActions = {
@@ -154,7 +153,7 @@ export function DirectoryTree({
         ? [
             {
               label: t.restore,
-              icon: <RotateCcw size={16} />,
+              icon: <ArchiveRestore size={16} />,
               disabled: parentState === 'trash',
               run: () => actions.restoreDirectory(directory),
             },
@@ -180,7 +179,7 @@ export function DirectoryTree({
       state === 'archived'
         ? {
             label: t.restore,
-            icon: <RotateCcw size={16} />,
+            icon: <ArchiveRestore size={16} />,
             disabled: !directory.archived || parentState !== 'files',
             run: () => actions.archiveDirectory(directory, true),
           }
@@ -213,7 +212,7 @@ export function DirectoryTree({
         ? [
             {
               label: t.restore,
-              icon: <RotateCcw size={16} />,
+              icon: <ArchiveRestore size={16} />,
               disabled: parentState === 'trash',
               run: () => actions.restoreFile(file),
             },
@@ -224,12 +223,14 @@ export function DirectoryTree({
         ? [
             {
               label: t.openCurrent,
-              icon: <FileText size={16} />,
+              icon: <File size={16} />,
+              tone: 'primary' as const,
               run: () => chooseFile?.(file, 'preview'),
             },
             {
               label: t.openSeparate,
               icon: <Plus size={16} />,
+              tone: 'primary' as const,
               run: () => chooseFile?.(file, 'retain'),
             },
           ]
@@ -243,7 +244,7 @@ export function DirectoryTree({
       view === 'archived'
         ? {
             label: t.restore,
-            icon: <RotateCcw size={16} />,
+            icon: <ArchiveRestore size={16} />,
             disabled: !file.archived || parentState !== 'files',
             run: () => actions.archiveFile(file, true),
           }
@@ -288,15 +289,6 @@ export function DirectoryTree({
               >
                 <button
                   type="button"
-                  className="directory-disclosure"
-                  aria-label={`${expanded ? t.collapse : t.expand}: ${directoryName(directory.path)}`}
-                  aria-expanded={expanded}
-                  onClick={() => toggle(directory)}
-                >
-                  <ChevronRight size={13} />
-                </button>
-                <button
-                  type="button"
                   className="directory-label"
                   title={directory.path}
                   onClick={() =>
@@ -307,6 +299,15 @@ export function DirectoryTree({
                 >
                   <Icon size={16} />
                   <span>{directoryName(directory.path)}</span>
+                </button>
+                <button
+                  type="button"
+                  className="directory-disclosure"
+                  aria-label={`${expanded ? t.collapse : t.expand}: ${directoryName(directory.path)}`}
+                  aria-expanded={expanded}
+                  onClick={() => toggle(directory)}
+                >
+                  <ChevronDown size={12} />
                 </button>
                 {!contextOnly && mode !== 'filter' && (
                   <ActionMenu
@@ -324,14 +325,7 @@ export function DirectoryTree({
         .filter((file) => file.folder === parent)
         .sort((a, b) => a.name.localeCompare(b.name))
         .map((file) => {
-          const Icon =
-            file.kind === 'video'
-              ? Film
-              : file.kind === 'audio'
-                ? Headphones
-                : file.kind === 'image'
-                  ? FileImage
-                  : FileText;
+          const icon = <ResourceIcon kind={file.kind} />;
           return (
             <li key={file.id}>
               <div
@@ -347,7 +341,7 @@ export function DirectoryTree({
                       disabled={disabledFileIds?.has(file.id)}
                       onChange={(event) => toggleFile?.(file, event.target.checked)}
                     />
-                    <Icon size={16} />
+                    {icon}
                     <span title={file.name}>{file.name}</span>
                     {fileStatuses?.has(file.id) && <small>{fileStatuses.get(file.id)}</small>}
                     <small
@@ -360,12 +354,18 @@ export function DirectoryTree({
                   <button
                     type="button"
                     data-file-choice={file.id}
-                    title={view === 'trash' ? `${file.name} · ${t.restoreToOpen}` : file.name}
+                    title={
+                      view === 'trash'
+                        ? `${file.name} · ${t.restoreToOpen}`
+                        : mode === 'manage'
+                          ? `${file.name} · ${t.doubleClickHint}`
+                          : file.name
+                    }
                     disabled={view === 'trash'}
                     onClick={() => chooseFile?.(file, 'preview')}
                     onDoubleClick={() => chooseFile?.(file, 'retain')}
                   >
-                    <Icon size={16} />
+                    {icon}
                     <span>{file.name}</span>
                     {file.reviewed && (
                       <CircleCheck className="reviewed-marker" size={16} aria-label={t.reviewed}>
@@ -375,7 +375,20 @@ export function DirectoryTree({
                   </button>
                 )}
                 {mode !== 'filter' && (
-                  <ActionMenu label={`${t.options}: ${file.name}`} actions={fileActions(file)} />
+                  <ActionMenu
+                    label={`${t.options}: ${file.name}`}
+                    actions={fileActions(file)}
+                    options={
+                      mode === 'manage'
+                        ? {
+                            variant: 'file',
+                            placement: 'right-start',
+                            heading: t.openResource,
+                            footnote: t.doubleClickHint,
+                          }
+                        : { variant: 'file' }
+                    }
+                  />
                 )}
               </div>
             </li>
