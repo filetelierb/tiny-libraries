@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, LoaderCircle } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, LoaderCircle } from 'lucide-react';
 import type { Attempt, PublicLearning, Source, Segment } from '../../shared/domain';
 import { reviewSummary } from '../../shared/domain';
 import { chapterRuns, type StudyChapter } from '../../shared/chapters';
 import { api } from '../api';
-import { Badge, Button, Modal } from '../design/components';
+import { Button, Modal } from '../design/components';
 import type { T } from '../i18n';
 import {
   newQuizDraft,
@@ -127,7 +127,10 @@ export function ChapterQuiz({
   return (
     <Modal title={t.quiz} close={() => close(false)} closeLabel={t.closeQuiz}>
       <div className="chapter-quiz-heading">
-        <Badge>{source.name}</Badge>
+        <p>
+          {t.quiz} · {t.chapter} {learning.synthesis.chapters.indexOf(chapter) + 1} ·{' '}
+          {source.name}
+        </p>
         <h3>{chapter.title}</h3>
       </div>
       {error && (
@@ -137,10 +140,10 @@ export function ChapterQuiz({
       )}
       {complete ? (
         <div className="chapter-quiz-results">
-          <h3>
+          <p className="chapter-quiz-score">
             {summary.percent == null ? t.needsReview : `${summary.percent}% · ${t.quizAccuracy}`}
-          </h3>
-          <p>
+          </p>
+          <p className="muted">
             {summary.correct} / {summary.count} {t.gradedAnswers}
             {ungraded ? ` · ${ungraded} ${t.needsReview}` : ''}
           </p>
@@ -152,21 +155,15 @@ export function ChapterQuiz({
                   {i + 1}. {q.prompt}
                 </h4>
                 <p>
-                  <strong>{t.yourAnswer}:</strong>{' '}
+                  {t.yourAnswer}:{' '}
                   {q.kind === 'short' ? result.answer : q.choices[result.selected]}
                 </p>
-                <div
-                  className={`quiz-result ${result.pendingReview ? 'pending' : result.correct ? 'correct' : 'incorrect'}`}
+                <p
+                  className={`quiz-verdict ${result.pendingReview ? 'pending' : result.correct ? 'correct' : 'incorrect'}`}
                 >
-                  <strong>
-                    {result.pendingReview
-                      ? t.needsReview
-                      : result.correct
-                        ? t.correct
-                        : t.incorrect}
-                  </strong>
-                  <p>{result.explanation}</p>
-                </div>
+                  {result.pendingReview ? t.needsReview : result.correct ? t.correct : t.incorrect}{' '}
+                  · {result.explanation}
+                </p>
                 <div className="citations" aria-label={t.sources}>
                   {q.segmentIds.map((id) => {
                     const s = learning.segments.find((s) => s.id === id);
@@ -186,11 +183,12 @@ export function ChapterQuiz({
               </section>
             );
           })}
-          <div className="modal-actions">
+          <div className="chapter-quiz-finish">
             <Button variant="primary" onClick={() => close(true)}>
               {t.continueStudying}
             </Button>
             <Button
+              variant="ghost"
               onClick={() => {
                 const value = newQuizDraft(chapter);
                 update(value);
@@ -204,10 +202,18 @@ export function ChapterQuiz({
         </div>
       ) : question ? (
         <>
-          <p className="muted">
+          <p className="chapter-quiz-count">
             {t.quizQuestion} {index + 1} {t.of} {questions.length}
           </p>
-          <progress className="quiz-progress" value={index + 1} max={questions.length} />
+          <div
+            className="quiz-progress"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={questions.length}
+            aria-valuenow={index + 1}
+          >
+            <span style={{ width: `${((index + 1) / questions.length) * 100}%` }} />
+          </div>
           <fieldset className="chapter-question" disabled={draft.locked || pending}>
             <legend>{question.prompt}</legend>
             {question.kind === 'short' ? (
@@ -227,6 +233,7 @@ export function ChapterQuiz({
                 {question.choices.map((choice, i) => (
                   <label className={draft.answers[question.id] === i ? 'chosen' : ''} key={i}>
                     <input
+                      className="sr-only"
                       type="radio"
                       name={`quiz-${draft.id}-${question.id}`}
                       checked={draft.answers[question.id] === i}
@@ -237,9 +244,8 @@ export function ChapterQuiz({
                         })
                       }
                     />
-                    <span>
-                      {String.fromCharCode(65 + i)}. {choice}
-                    </span>
+                    <span>{String.fromCharCode(65 + i)}</span>
+                    <span>{choice}</span>
                   </label>
                 ))}
               </div>
@@ -251,16 +257,17 @@ export function ChapterQuiz({
               disabled={!index || pending}
               onClick={() => update({ ...draftRef.current, index: index - 1 })}
             >
-              <ChevronLeft size={14} />
+              <ChevronLeft size={16} />
               {t.quizPrevious}
             </Button>
             {index < questions.length - 1 ? (
               <Button
+                variant="primary"
                 disabled={pending}
                 onClick={() => update({ ...draftRef.current, index: index + 1 })}
               >
                 {t.quizNext}
-                <ChevronRight size={14} />
+                <ChevronRight size={16} />
               </Button>
             ) : (
               <Button
@@ -268,7 +275,7 @@ export function ChapterQuiz({
                 disabled={pending || !allAnswered}
                 onClick={() => void finish()}
               >
-                {pending && <LoaderCircle size={14} className="spin" />}
+                {pending ? <LoaderCircle size={16} className="spin" /> : <Check size={16} />}
                 {pending
                   ? `${t.checkingAnswers} ${checking}/${questions.length}`
                   : draft.locked
@@ -278,9 +285,6 @@ export function ChapterQuiz({
             )}
           </div>
           {draft.locked && !pending && <p className="muted">{t.quizRetryNotice}</p>}
-          <Button variant="ghost" disabled={pending} onClick={() => close(true)}>
-            {t.skipQuiz}
-          </Button>
         </>
       ) : (
         <p>{t.noQuestions}</p>
