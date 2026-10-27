@@ -97,6 +97,25 @@ export function chapterRuns(attempts: Attempt[], learning: PublicLearning, chapt
     }))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
+/** Chapters whose end the reader just moved past while reading forward. */
+export function crossedChapterEnds(
+  ranges: ChapterRange[],
+  previous: number,
+  event: ReadingProgress,
+) {
+  if (
+    event.cause !== 'read' ||
+    !Number.isFinite(previous) ||
+    !Number.isFinite(event.value) ||
+    event.value <= previous
+  )
+    return [];
+  return ranges.filter((range) =>
+    range.kind === 'page'
+      ? previous <= range.end && event.value > range.end
+      : range.kind === 'time' && previous < range.end && event.value >= range.end,
+  );
+}
 export function crossedChapter(
   ranges: ChapterRange[],
   previous: number,

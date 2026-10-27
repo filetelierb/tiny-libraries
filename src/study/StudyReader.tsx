@@ -4,12 +4,14 @@ import {
   chapterLocations,
   completedChapter,
   crossedChapter,
+  crossedChapterEnds,
   type ReadingProgress,
   type StudyChapter,
 } from '../../shared/chapters';
 import { Viewer } from '../Viewer';
 import { ChapterIndex } from './ChapterIndex';
 import { useFlashcards } from './useFlashcards';
+import { cardDue } from '../../shared/flashcards';
 
 export function StudyReader({
   attempts,
@@ -37,6 +39,7 @@ export function StudyReader({
   const [location, setLocation] = useState(position);
   const previous = useRef(position),
     prompted = useRef(new Set<string>()),
+    promptedCards = useRef(new Set<string>()),
     playing = useRef(false);
   const material = learning?.sourceVersion === source.version ? learning : null;
   const cards = useFlashcards(material, cardTick);
@@ -50,16 +53,27 @@ export function StudyReader({
         .filter((c) => completedChapter(attempts, material, c))
         .map((c) => c.id),
     );
-    const next = crossedChapter(
-      chapterLocations(material, source.kind),
-      before,
-      event,
-      prompted.current,
-      complete,
-    );
+    const ranges = chapterLocations(material, source.kind);
+    const next = crossedChapter(ranges, before, event, prompted.current, complete);
     if (next) {
       prompted.current.add(next.chapter.id);
       quiz(next.chapter, event.playing ?? playing.current);
+      return;
+    }
+    // Without a quiz to take, a finished chapter with due cards opens its review deck once.
+    const due = crossedChapterEnds(ranges, before, event).find(
+      (range) =>
+        !promptedCards.current.has(range.chapter.id) &&
+        cards.decks.some(
+          (deck) =>
+            deck.chapterId === range.chapter.id &&
+            deck.status === 'ready' &&
+            deck.cards.some((card) => cardDue(card)),
+        ),
+    );
+    if (due) {
+      promptedCards.current.add(due.chapter.id);
+      openCards(due.chapter.id, true);
     }
   };
   return (

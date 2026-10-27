@@ -66,6 +66,7 @@ import { FlashcardDeck, type DeckRequest } from './study/FlashcardDeck';
 import { ReviewPanel } from './study/ReviewPanel';
 import { reinforcementLearning } from '../shared/review';
 import { GeneratedArtifact } from './GeneratedArtifact';
+import { cardDue, type DeckView } from '../shared/flashcards';
 import { SignalExplorer } from './SignalExplorer';
 import { PanelResizer, useDrawerFocus, usePanels } from './workspace/Panels';
 import {
@@ -1940,8 +1941,29 @@ export function App() {
           close={(resume) => {
             const request = quizRequest;
             setQuizRequest(null);
-            if (resume && request.wasPlaying)
-              setResumePlayback({ sourceId: request.source.id, nonce: Date.now() });
+            if (!resume) return;
+            // After a finished quiz, the chapter's due cards come next when its deck is ready.
+            void api<DeckView[]>(`/flashcards/${request.source.id}`)
+              .then((decks) =>
+                decks.some(
+                  (deck) =>
+                    deck.chapterId === request.chapter.id &&
+                    deck.status === 'ready' &&
+                    deck.cards.some((card) => cardDue(card)),
+                ),
+              )
+              .catch(() => false)
+              .then((due) => {
+                if (due)
+                  setDeckRequest({
+                    source: request.source,
+                    learning: request.learning,
+                    chapterId: request.chapter.id,
+                    dueOnly: true,
+                  });
+                else if (request.wasPlaying)
+                  setResumePlayback({ sourceId: request.source.id, nonce: Date.now() });
+              });
           }}
           cite={(segment) => {
             setQuizRequest(null);

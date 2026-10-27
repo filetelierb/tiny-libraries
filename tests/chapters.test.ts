@@ -6,6 +6,7 @@ import {
   chapterLocations,
   completedChapter,
   crossedChapter,
+  crossedChapterEnds,
   currentChapter,
   chapterRuns,
 } from '../shared/chapters';
@@ -154,6 +155,19 @@ test('checkpoints ignore restoration, explicit seeks, reverse travel, completed 
     crossedChapter(chapterLocations(material, 'pdf'), 1, { value: 2, cause: 'read' }, empty, empty)
       ?.chapter.id,
     'interval',
+  );
+});
+test('chapter ends crossed while reading forward include completed and last chapters', () => {
+  const ranges = chapterLocations(material, 'audio');
+  assert.deepEqual(
+    crossedChapterEnds(ranges, 4, { value: 5, cause: 'read' }).map((r) => r.chapter.id),
+    ['interval'],
+  );
+  assert.deepEqual(crossedChapterEnds(ranges, 4, { value: 5, cause: 'seek' }), []);
+  assert.deepEqual(crossedChapterEnds(ranges, 5, { value: 4, cause: 'read' }), []);
+  assert.equal(
+    crossedChapterEnds(ranges, 0, { value: ranges.at(-1)!.end, cause: 'read' }).length,
+    ranges.length,
   );
 });
 test('chapter completion uses one complete run of the same source and learning version', async () => {
