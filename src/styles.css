@@ -5734,3 +5734,41 @@ body:has(.panel-resizer.resizing) {
     min-width: 44px;
   }
 }
+.assessment-saved-evidence {
+  border-block: 1px solid var(--border);
+  padding-block: 1rem;
+  margin-block: 1rem;
+}
+.assessment-evidence-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 16px;
+}
+.assessment-evidence-thumbnail {
+  display: block;
+  max-width: 220px;
+  max-height: 140px;
+  object-fit: contain;
+  margin-block: 8px;
+}
+.assessment-saved-evidence .question-attachment {
+  margin-block: 8px;
+}
+.assessment-saved-evidence .question-attachment > .button:first-child {
+  flex: 1;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+.assessment-saved-evidence small {
+  display: block;
+}
+@media (max-width: 640px), (max-height: 480px) {
+  .assessment-modal .button,
+  .assessment-modal .icon-button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}

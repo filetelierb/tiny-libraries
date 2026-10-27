@@ -82,9 +82,9 @@ export function attachmentSourceIds(value: QuestionAttachment) {
 export function questionImageBudget(values: QuestionAttachment[]) {
   const images = values.flatMap(attachmentImages);
   if (images.length > MAX_QUESTION_IMAGES)
-    return 'Question images exceed 48. Choose fewer capture images before sending.';
+    return 'Selected images exceed 48. Choose fewer capture images before continuing.';
   if (images.reduce((sum, image) => sum + image.size, 0) > MAX_QUESTION_IMAGE_BYTES)
-    return 'Question images exceed 12 MB. Choose fewer capture images before sending.';
+    return 'Selected images exceed 12 MB. Choose fewer capture images before continuing.';
   return null;
 }
 export const attachmentMentionSchema = questionAttachmentSchema.pick({
@@ -102,6 +102,11 @@ export function attachmentMention(value: QuestionAttachment): AttachmentMention 
 }
 export type AttachmentSegment = Segment & { originalId?: string };
 export type AttachmentContent = { attachment: QuestionAttachment; segments: AttachmentSegment[] };
+export function imageEvidenceSegments(image: AttachmentImage, segments: AttachmentSegment[]) {
+  return image.capture
+    ? segments.filter((part) => part.originalId === `capture-${image.capture!.id}`)
+    : segments;
+}
 export const attachmentEvidenceId = (id: string, index: number) =>
   `attachment.${id}.part-${index + 1}`;
 

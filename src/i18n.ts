@@ -29,7 +29,7 @@ const en = {
   attachmentDisclosure:
     'Attachments are used for this question. Review each saved snapshot before sending; its selected text and images will be sent to Meta along with your persistent references.',
   attachmentLimits:
-    'Up to 6 attachments: 1 MB of text each, 3 MB per image, up to 48 images and 12 MB of images per question. PDFs and recordings use prepared text or transcripts; page images and video frames need a capture. Preparation is a separate action.',
+    'Up to 6 attachments: 1 MB of text each, 3 MB per image, up to 48 images and 12 MB of images per request. PDFs and recordings use prepared text or transcripts; page images and video frames need a capture. Preparation is a separate action.',
   attachmentSnapshotNotice:
     'This saved copy stays unchanged when the original is edited. Only snapshots selected in the current draft are sent; viewing this copy stays local.',
   attachmentPassages: 'passages',
@@ -37,7 +37,7 @@ const en = {
   attachmentTextOnly: 'Text only',
   attachmentSelectImages: 'Choose capture images',
   attachmentSelectImagesHelp:
-    'The note text and source locations are included. Choose the images to send for this question; clear all for text only. Only flattened images and visible numbered comments are included.',
+    'The note text and source locations are included. Choose the images to include; clear all for text only. Only flattened images and visible numbered comments are included.',
   attachmentSelectedImages: 'Selected images',
   attachmentAllImages: 'Select all images',
   attachmentNoImages: 'Clear image selection',
@@ -90,6 +90,15 @@ const en = {
   noSourceArtifacts:
     'No prepared artifact for this resource yet. Open Chapters to prepare its study material.',
   assessments: 'Assessments and reports',
+  assessmentSavedEvidence: 'Saved evidence',
+  assessmentAddEvidence: 'Add saved evidence',
+  assessmentEvidenceDisclosure:
+    'Choose saved text and capture images to send to Meta for this assessment and its report. The exact selected snapshots are retained for retries and follow-up. These can be used on their own or alongside studied source passages; no other files or historical images are included automatically.',
+  assessmentEvidenceLimits:
+    'Up to 6 snapshots, 48 images and 12 MB of image bytes. Complete selected text and images are included; oversized context is rejected without dropping images. Total text context is limited to 600,000 characters.',
+  assessmentSavedEvidenceNotice:
+    'This assessment keeps the exact saved text, image selection and drawing revisions. Editing or deleting the original note does not change this evidence. Viewing a snapshot stays local.',
+  assessmentDownloadImages: 'Download review with images (HTML)',
   assessmentTitle: 'Review what you learned',
   assessmentReadOnly:
     'This assessment is cancelled. Saved responses are available for reading; changes are disabled.',
@@ -100,7 +109,7 @@ const en = {
   assessmentClose: 'Close assessment',
   assessmentSetup: 'Assessment setup',
   assessmentSetupHint:
-    'Choose files and the kind of review you want. Questions use the saved study range, personal notes and clearly linked conversation for those files.',
+    'Choose studied files, saved evidence, or both, then the kind of review you want. Questions use only this captured selection.',
   assessmentGuidance: 'How would you like to review? (optional)',
   assessmentGuidanceHint:
     'Topics, difficulty or question types. Leave blank for a mix of the four question types.',
@@ -112,7 +121,7 @@ const en = {
   assessmentPrepareFirst: 'Prepare first',
   assessmentStudyMore: 'Study further',
   assessmentFileLimit:
-    'Select up to 40 prepared files. A recording needs a complete studied passage; you can also mark a source reviewed. Unselected files and their notes are excluded.',
+    'Select up to 40 prepared files. A recording needs a complete studied passage; you can also mark a source reviewed. Only selected files contribute studied passages. Saved evidence is chosen separately below.',
   assessmentUnpreparedFiles: 'Files that need preparation',
   assessmentOpenToPrepare: 'Open to prepare',
   assessmentQuestionCount: 'Number of questions',
@@ -123,7 +132,7 @@ const en = {
   assessmentDifficulty_hard: 'Hard',
   assessmentUseReports: 'Focus on uncertainty from earlier reports',
   assessmentDisclosure:
-    'The selected source excerpts, notes, linked conversation and chosen earlier results will be sent to Meta. Scores are calculated by the app.',
+    'The selected source excerpts, saved text and images, linked conversation and chosen earlier results will be sent to Meta. Scores are calculated by the app.',
   assessmentPrepare: 'Prepare assessment',
   assessmentPreparing: 'Preparing assessment…',
   assessmentQuestions: 'questions',
@@ -1017,7 +1026,7 @@ const es: Dictionary = {
   attachmentDisclosure:
     'Los adjuntos se usan en esta pregunta. Revisa cada copia guardada antes de enviar; su texto e imágenes se enviarán a Meta junto con tus referencias permanentes.',
   attachmentLimits:
-    'Hasta 6 adjuntos: 1 MB de texto cada uno, 3 MB por imagen, hasta 48 imágenes y 12 MB de imágenes por pregunta. Los PDF y grabaciones usan texto o transcripciones preparados; las páginas y fotogramas necesitan una captura. La preparación es una acción aparte.',
+    'Hasta 6 adjuntos: 1 MB de texto cada uno, 3 MB por imagen, hasta 48 imágenes y 12 MB de imágenes por solicitud. Los PDF y grabaciones usan texto o transcripciones preparados; las páginas y fotogramas necesitan una captura. La preparación es una acción aparte.',
   attachmentSnapshotNotice:
     'Esta copia guardada no cambia al editar el original. Solo se envían las copias seleccionadas en el borrador actual; consultar esta copia es local.',
   attachmentPassages: 'fragmentos',
@@ -1025,7 +1034,7 @@ const es: Dictionary = {
   attachmentTextOnly: 'Solo texto',
   attachmentSelectImages: 'Elegir imágenes de captura',
   attachmentSelectImagesHelp:
-    'Se incluyen el texto y las ubicaciones de la nota. Elige las imágenes que enviarás en esta pregunta; desmarca todas para adjuntar solo texto. Solo se incluyen imágenes aplanadas y comentarios numerados visibles.',
+    'Se incluyen el texto y las ubicaciones de la nota. Elige las imágenes que incluirás; desmarca todas para adjuntar solo texto. Solo se incluyen imágenes aplanadas y comentarios numerados visibles.',
   attachmentSelectedImages: 'Imágenes seleccionadas',
   attachmentAllImages: 'Seleccionar todas las imágenes',
   attachmentNoImages: 'Desmarcar todas las imágenes',
@@ -1078,6 +1087,15 @@ const es: Dictionary = {
   noSourceArtifacts:
     'Este recurso todavía no tiene un artefacto preparado. Abre Capítulos para preparar su material de estudio.',
   assessments: 'Repasos e informes',
+  assessmentSavedEvidence: 'Evidencia guardada',
+  assessmentAddEvidence: 'Añadir evidencia guardada',
+  assessmentEvidenceDisclosure:
+    'Elige texto e imágenes de captura para enviar a Meta en esta evaluación y su informe. Las copias seleccionadas se conservan para reintentos y seguimiento. Pueden usarse solas o junto a los pasajes estudiados; otros archivos o imágenes históricas no se incluyen automáticamente.',
+  assessmentEvidenceLimits:
+    'Hasta 6 copias, 48 imágenes y 12 MB de imágenes. Se incluyen el texto y las imágenes seleccionados completos; el contexto excesivo se rechaza sin omitir imágenes. El contexto de texto total tiene un límite de 600.000 caracteres.',
+  assessmentSavedEvidenceNotice:
+    'Esta evaluación conserva el texto, las imágenes seleccionadas y las revisiones del dibujo exactos. Editar o eliminar la nota original no cambia esta evidencia. Consultar una copia es local.',
+  assessmentDownloadImages: 'Descargar repaso con imágenes (HTML)',
   assessmentTitle: 'Repasar lo aprendido',
   assessmentReadOnly:
     'Esta evaluación está cancelada. Puedes consultar las respuestas guardadas; no se pueden modificar.',
@@ -1088,7 +1106,7 @@ const es: Dictionary = {
   assessmentClose: 'Cerrar repaso',
   assessmentSetup: 'Configurar repaso',
   assessmentSetupHint:
-    'Elige archivos y el tipo de repaso. Las preguntas usan el rango de estudio guardado, las notas personales y la conversación claramente vinculada a esos archivos.',
+    'Elige archivos estudiados, evidencia guardada o ambos, y después el tipo de repaso. Las preguntas usan solo esta selección.',
   assessmentGuidance: '¿Cómo quieres repasar? (opcional)',
   assessmentGuidanceHint:
     'Temas, dificultad o tipos de preguntas. Deja el campo vacío para combinar los cuatro tipos.',
@@ -1100,7 +1118,7 @@ const es: Dictionary = {
   assessmentPrepareFirst: 'Preparar primero',
   assessmentStudyMore: 'Seguir estudiando',
   assessmentFileLimit:
-    'Selecciona hasta 40 archivos preparados. Las grabaciones necesitan un fragmento estudiado completo; también puedes marcar la fuente como revisada. Se excluyen los archivos desmarcados y sus notas.',
+    'Selecciona hasta 40 archivos preparados. Las grabaciones necesitan un fragmento estudiado completo; también puedes marcar la fuente como revisada. Solo los archivos seleccionados aportan pasajes estudiados. La evidencia guardada se elige por separado más abajo.',
   assessmentUnpreparedFiles: 'Archivos que necesitan preparación',
   assessmentOpenToPrepare: 'Abrir para preparar',
   assessmentQuestionCount: 'Número de preguntas',
@@ -1111,7 +1129,7 @@ const es: Dictionary = {
   assessmentDifficulty_hard: 'Difícil',
   assessmentUseReports: 'Reforzar las dudas de informes anteriores',
   assessmentDisclosure:
-    'Los extractos, las notas, la conversación vinculada y los resultados anteriores seleccionados se enviarán a Meta. La aplicación calcula las puntuaciones.',
+    'Los extractos, el texto y las imágenes guardados, la conversación vinculada y los resultados anteriores seleccionados se enviarán a Meta. La aplicación calcula las puntuaciones.',
   assessmentPrepare: 'Preparar repaso',
   assessmentPreparing: 'Preparando repaso…',
   assessmentQuestions: 'preguntas',

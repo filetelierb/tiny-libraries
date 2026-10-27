@@ -32,6 +32,7 @@ export function AttachmentPicker({
   changed,
   prepareSource,
   createAttachment,
+  purpose = 'question',
 }: {
   sessionId: string;
   source: Source | null;
@@ -43,7 +44,8 @@ export function AttachmentPicker({
   close: () => void;
   changed: () => Promise<unknown>;
   prepareSource: (source: Source) => void;
-  createAttachment: () => Promise<AnnotationRequest | null>;
+  createAttachment?: () => Promise<AnnotationRequest | null>;
+  purpose?: 'question' | 'assessment';
 }) {
   const [query, setQuery] = useState(''),
     [mode, setMode] = useState<'files' | 'notes'>('files'),
@@ -184,12 +186,12 @@ export function AttachmentPicker({
   return (
     <>
       <Modal
-        title={t.attachForQuestion}
+        title={purpose === 'assessment' ? t.assessmentAddEvidence : t.attachForQuestion}
         close={close}
         closeLabel={t.close}
         className="attachment-picker"
       >
-        <p>{t.attachmentDisclosure}</p>
+        <p>{purpose === 'assessment' ? t.assessmentEvidenceDisclosure : t.attachmentDisclosure}</p>
         <p className="muted">{t.attachmentLimits}</p>
         {busy && <p role="status">{t.preparingAttachment}</p>}
         {error && (
@@ -215,7 +217,7 @@ export function AttachmentPicker({
                 {t.attachCurrentResource}
               </Button>
             )}
-            {source && (
+            {source && createAttachment && (
               <Button
                 onClick={() => {
                   setBusy(true);

@@ -7,9 +7,10 @@ import {
   type AssessmentAnswer,
   type Confidence,
 } from '../../shared/assessments';
-import type { Segment } from '../../shared/domain';
+import type { Catalog, Segment } from '../../shared/domain';
 import { api, ApiResponseError } from '../api';
 import { Button } from '../design/components';
+import { AttachmentInspector } from '../tutor/AttachmentInspector';
 import type { T } from '../i18n';
 import { AssessmentQuestionInput } from './AssessmentQuestionInput';
 import { AssessmentCitations, AssessmentScope } from './AssessmentScope';
@@ -24,6 +25,7 @@ export function AssessmentRun({
   id,
   sessionId,
   t,
+  catalog,
   navigate,
   bookmark,
   changed,
@@ -33,6 +35,7 @@ export function AssessmentRun({
   id: string;
   sessionId: string;
   t: T;
+  catalog: Catalog;
   navigate: (sourceId: string, segment: Segment) => void;
   bookmark: (id: string) => void;
   changed: () => void;
@@ -52,7 +55,11 @@ export function AssessmentRun({
     ),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
-    [confirmCancel, setConfirmCancel] = useState(false);
+    [confirmCancel, setConfirmCancel] = useState(false),
+    [inspectedEvidence, setInspectedEvidence] = useState<{ id: string; imageId?: string } | null>(
+      null,
+    );
+  const inspectEvidence = (id: string, imageId?: string) => setInspectedEvidence({ id, imageId });
   const local = useRef(draft),
     alive = useRef(true),
     pending = useRef(false),
@@ -263,7 +270,7 @@ export function AssessmentRun({
           {error}
         </p>
       )}
-      <AssessmentScope context={detail.context} t={t} />
+      <AssessmentScope context={detail.context} t={t} inspect={inspectEvidence} />
       {detail.status === 'preparing' || detail.status === 'grading' ? (
         <div className="assessment-working" role="status">
           <LoaderCircle className="spin" />
@@ -311,6 +318,7 @@ export function AssessmentRun({
                   context={detail.context}
                   t={t}
                   navigate={navigate}
+                  inspect={inspectEvidence}
                 />
               </section>
             ))}
@@ -355,6 +363,7 @@ export function AssessmentRun({
             context={detail.context}
             t={t}
             navigate={navigate}
+            inspect={inspectEvidence}
           />
           {readOnly ? (
             <p className="muted">{t.assessmentReadOnly}</p>
@@ -477,6 +486,10 @@ export function AssessmentRun({
               <Download size={15} />
               {t.assessmentDownload}
             </a>
+            <a className="button" href={`/api/assessments/${id}/export-html`} download>
+              <Download size={15} />
+              {t.assessmentDownloadImages}
+            </a>
           </div>
           <p>{report.analysis}</p>
           <div className="assessment-topic-grid">
@@ -504,6 +517,7 @@ export function AssessmentRun({
                 context={detail.context}
                 t={t}
                 navigate={navigate}
+                inspect={inspectEvidence}
               />
               {rec.bookmarkId && (
                 <Button onClick={() => bookmark(rec.bookmarkId!)}>
@@ -551,6 +565,7 @@ export function AssessmentRun({
                     context={detail.context}
                     t={t}
                     navigate={navigate}
+                    inspect={inspectEvidence}
                   />
                 </section>
               ))}
@@ -559,10 +574,22 @@ export function AssessmentRun({
                 context={detail.context}
                 t={t}
                 navigate={navigate}
+                inspect={inspectEvidence}
               />
             </details>
           ))}
         </div>
+      )}
+      {inspectedEvidence && (
+        <AttachmentInspector
+          id={inspectedEvidence.id}
+          initialImageId={inspectedEvidence.imageId}
+          t={t}
+          catalog={catalog}
+          close={() => setInspectedEvidence(null)}
+          cite={navigate}
+          notice={t.assessmentSavedEvidenceNotice}
+        />
       )}
       {!['completed', 'cancelled'].includes(detail.status) && (
         <div className="assessment-cancel">

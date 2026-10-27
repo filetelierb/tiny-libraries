@@ -10,6 +10,8 @@ import type {
   AssessmentSummary,
 } from '../shared/assessments';
 import { sourceState } from '../shared/directories';
+import { validateAssessmentCitation } from '../shared/assessments';
+import { readQuestionAttachments } from './tutor-attachments';
 import type { GlossaryStore } from './glossary';
 
 export class AssessmentError extends Error {
@@ -95,9 +97,9 @@ async function sourceEvidence(
   const notes = visibleNotes.slice(0, 10).map((n) => {
     if (n.text.length > 1200 || (n.location.quote?.length || 0) > 1200)
       gaps.push(`${source.name}: note ${n.id} is an excerpt.`);
-    if (n.capture || n.strokeCount)
+    if (n.capture || n.strokeCount || n.captures?.length)
       gaps.push(
-        `${source.name}: saved note text is included; capture pixels and freehand drawings are not interpreted in this assessment.`,
+        `${source.name}: note ${n.id} includes images/drawings. Pixels are included only when explicitly selected as saved evidence; note text alone does not include them.`,
       );
     return {
       id: n.id,
@@ -206,6 +208,10 @@ export async function captureAssessmentContext(
       );
     sources.push(sampleSegments(value, Math.floor(240000 / config.sourceIds.length), gaps));
   }
+  const attachments =
+    config.attachmentIds === undefined
+      ? undefined
+      : await readQuestionAttachments(tx, sessionId, config.attachmentIds);
   const selected = new Set(config.sourceIds),
     conversation: AssessmentContext['conversation'] = [];
   for (const chat of linkedConversations ??
@@ -243,8 +249,16 @@ export async function captureAssessmentContext(
     ];
     for (const grade of grades) {
       if (
-        grade.citations.some(
-          (c) =>
+        grade.citations.some((c) => {
+          if ('attachmentId' in c) {
+            try {
+              validateAssessmentCitation(c, { sources, attachments });
+              return false;
+            } catch {
+              return true;
+            }
+          }
+          return (
             !selected.has(c.sourceId) ||
             !sources.some(
               (s) =>
@@ -253,8 +267,9 @@ export async function captureAssessmentContext(
                 s.segments.some(
                   (segment) => segment.id === c.segmentId && segment.text.includes(c.quote),
                 ),
-            ),
-        )
+            )
+          );
+        })
       ) {
         gaps.push(
           'Some prior report results are outside the currently selected source versions or evidence excerpts and were excluded.',
@@ -276,6 +291,7 @@ export async function captureAssessmentContext(
   }
   const context = {
     sources,
+    ...(attachments !== undefined ? { attachments } : {}),
     conversation: conversation.slice(-20),
     gaps: [...new Set(gaps)],
     prior: prior.slice(0, 60),

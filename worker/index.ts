@@ -1,3 +1,5 @@
+import { readAssessmentImages } from './assessment-vision';
+import { assessmentHTML, assessmentExportPolicy } from './assessment-export';
 import { DurableObject } from 'cloudflare:workers';
 import { z } from 'zod';
 import {
@@ -394,6 +396,7 @@ export class Library extends DurableObject<Env> {
               batch,
               locale,
               bridgedFetch(this.env),
+              await readAssessmentImages(this.env.FILES, context),
             );
           },
           analyze: async (
@@ -413,6 +416,7 @@ export class Library extends DurableObject<Env> {
               grades,
               locale,
               bridgedFetch(this.env),
+              await readAssessmentImages(this.env.FILES, context),
             );
           },
         };
@@ -443,7 +447,9 @@ export class Library extends DurableObject<Env> {
             202,
           );
         }
-        const match = path.match(/^\/api\/assessments\/([a-f0-9-]+)(?:\/(answers|export))?$/);
+        const match = path.match(
+          /^\/api\/assessments\/([a-f0-9-]+)(?:\/(answers|export|export-html))?$/,
+        );
         if (match) {
           if (match[2] === 'answers' && request.method === 'POST')
             return json(
@@ -454,16 +460,33 @@ export class Library extends DurableObject<Env> {
             if (!match[2] && url.searchParams.get('view') === 'summary')
               return json(await assessmentSummary(this.ctx.storage, match[1], this.executionId));
             const detail = await assessmentDetail(this.ctx.storage, match[1], this.executionId);
-            if (match[2] === 'export') {
+            if (match[2] === 'export' || match[2] === 'export-html') {
               if (!detail.report)
                 throw new ApiError('Complete the assessment before exporting its report.', 409);
-              return new Response(assessmentMarkdown(detail), {
-                headers: {
-                  'Content-Type': 'text/markdown; charset=utf-8',
-                  'Content-Disposition': `attachment; filename="assessment-${match[1]}.md"`,
-                  'Cache-Control': 'no-store',
+              const html = match[2] === 'export-html';
+              return new Response(
+                html
+                  ? assessmentHTML(
+                      detail,
+                      await readAssessmentImages(this.env.FILES, detail.context),
+                    )
+                  : assessmentMarkdown(detail),
+                {
+                  headers: {
+                    'Content-Type': html
+                      ? 'text/html; charset=utf-8'
+                      : 'text/markdown; charset=utf-8',
+                    'Content-Disposition': `attachment; filename="assessment-${match[1]}.${html ? 'html' : 'md'}"`,
+                    'Cache-Control': 'no-store',
+                    ...(html
+                      ? {
+                          'Content-Security-Policy': assessmentExportPolicy,
+                          'X-Content-Type-Options': 'nosniff',
+                        }
+                      : {}),
+                  },
                 },
-              });
+              );
             }
             return json(detail);
           }

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   assessmentConfigSchema,
+  validateAssessmentCitation,
   assessmentAnswerSchema,
   publicAssessmentPlan,
   validAssessmentResponse,
@@ -20,6 +21,11 @@ import {
   type AssessmentSource,
   type AssessmentAnalysis,
 } from '../shared/assessments';
+import {
+  questionAttachmentSchema,
+  type AttachmentContent,
+  type AttachmentSegment,
+} from '../shared/tutor-attachments';
 import type { Segment, Settings, Source, Directory } from '../shared/domain';
 import {
   annotationSummary,
@@ -83,7 +89,19 @@ async function storeContext(tx: GlossaryStore, id: string, context: AssessmentCo
   await boundedPut(tx, `assessment-context:${id}`, {
     gaps: context.gaps,
     capturedAt: context.capturedAt,
+    ...(context.attachments !== undefined
+      ? { attachmentIds: context.attachments.map((item) => item.attachment.id) }
+      : {}),
   });
+  for (const { attachment, segments } of context.attachments || []) {
+    await boundedPut(tx, `assessment-attachment:${id}:${attachment.id}`, attachment);
+    for (const [index, segment] of segments.entries())
+      await boundedPut(
+        tx,
+        `assessment-attachment-part:${id}:${attachment.id}:${pad(index)}`,
+        segment,
+      );
+  }
   for (const source of context.sources) {
     const { segments, ...metadata } = source;
     await boundedPut(tx, `assessment-source:${id}:${source.id}`, {
@@ -99,10 +117,28 @@ async function storeContext(tx: GlossaryStore, id: string, context: AssessmentCo
     await boundedPut(tx, `assessment-prior:${id}:${pad(i)}`, prior);
 }
 async function loadContext(tx: GlossaryStore, record: Stored): Promise<AssessmentContext> {
-  const base = await tx.get<Pick<AssessmentContext, 'gaps' | 'capturedAt'>>(
-    `assessment-context:${record.id}`,
-  );
+  const base = await tx.get<
+    Pick<AssessmentContext, 'gaps' | 'capturedAt'> & { attachmentIds?: string[] }
+  >(`assessment-context:${record.id}`);
   if (!base) throw new AssessmentError('Saved assessment context is unavailable.', 409);
+  const attachments: AttachmentContent[] = [];
+  for (const id of base.attachmentIds || []) {
+    const metadata = await tx.get(`assessment-attachment:${record.id}:${id}`);
+    if (!metadata) throw new AssessmentError('Saved assessment attachment is unavailable.', 409);
+    const attachment = questionAttachmentSchema.parse(metadata),
+      segments: AttachmentSegment[] = [];
+    if (attachment.id !== id || attachment.sessionId !== record.sessionId)
+      throw new AssessmentError('Saved assessment attachment context changed.', 409);
+    for (let index = 0; index < attachment.segmentCount; index++) {
+      const segment = await tx.get<AttachmentSegment>(
+        `assessment-attachment-part:${record.id}:${id}:${pad(index)}`,
+      );
+      if (!segment)
+        throw new AssessmentError('Saved assessment attachment evidence is incomplete.', 409);
+      segments.push(segment);
+    }
+    attachments.push({ attachment, segments });
+  }
   const sources: AssessmentSource[] = [];
   for (const id of record.config.sourceIds) {
     const metadata = await tx.get<SourceRecord>(`assessment-source:${record.id}:${id}`);
@@ -115,7 +151,9 @@ async function loadContext(tx: GlossaryStore, record: Stored): Promise<Assessmen
     sources.push({ ...source, segments: segmentIds.map((id) => byId.get(id)!) });
   }
   return {
-    ...base,
+    gaps: base.gaps,
+    capturedAt: base.capturedAt,
+    ...(base.attachmentIds !== undefined ? { attachments } : {}),
     sources,
     conversation: [
       ...(
@@ -251,13 +289,53 @@ async function saveBookmarks(
   const directories = [...(await tx.list<Directory>({ prefix: 'directory:' })).values()];
   for (const [i, recommendation] of report.recommendations.entries()) {
     const citation = recommendation.citations[0],
-      source = context.sources.find((s) => s.id === citation.sourceId)!,
-      segment = source.segments.find((s) => s.id === citation.segmentId)!,
-      current = await tx.get<Source>(`file:${source.id}`);
+      resolved = validateAssessmentCitation(citation, context);
+    let origin: { id: string; version: number; location: Annotation['location'] } | undefined;
+    if (resolved.kind === 'source')
+      origin = {
+        id: resolved.source.id,
+        version: resolved.source.version,
+        location: {
+          quote: citation.quote,
+          ...(resolved.segment.page ? { page: resolved.segment.page } : {}),
+          ...(resolved.segment.start != null ? { seconds: resolved.segment.start } : {}),
+        },
+      };
+    else {
+      const { attachment } = resolved.content,
+        capture = resolved.image?.capture;
+      if (capture?.stamp)
+        origin = {
+          id: capture.stamp.sourceId,
+          version: capture.stamp.sourceVersion,
+          location: capture.stamp.location,
+        };
+      else if (capture?.originSource)
+        origin = {
+          id: capture.originSource.id,
+          version: capture.originSource.version,
+          location: {},
+        };
+      else if (!capture && attachment.sourceId && attachment.sourceVersion)
+        origin = {
+          id: attachment.sourceId,
+          version: attachment.sourceVersion,
+          location: resolved.image
+            ? attachment.location
+            : {
+                ...attachment.location,
+                quote: citation.quote,
+                ...(resolved.segment.page ? { page: resolved.segment.page } : {}),
+                ...(resolved.segment.start != null ? { seconds: resolved.segment.start } : {}),
+              },
+        };
+    }
+    if (!origin) continue;
+    const source = await tx.get<Source>(`file:${origin.id}`);
     if (
-      !current ||
-      current.version !== source.version ||
-      sourceState(current, directories) === 'trash'
+      !source ||
+      source.version !== origin.version ||
+      sourceState(source, directories) === 'trash'
     )
       continue;
     const id = await stableAnnotationId(`assessment:${record.id}:recommendation:${i}`);
@@ -273,11 +351,7 @@ async function saveBookmarks(
         title: recommendation.title.slice(0, 240),
         document: plainDocument(text),
         text,
-        location: {
-          quote: citation.quote,
-          ...(segment.page ? { page: segment.page } : {}),
-          ...(segment.start != null ? { seconds: segment.start } : {}),
-        },
+        location: origin.location,
         strokes: [],
         origin: 'tutor',
         references: [source.id],

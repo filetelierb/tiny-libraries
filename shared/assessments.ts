@@ -1,12 +1,18 @@
 import { z } from 'zod';
 import type { Kind, Locale, Segment } from './domain';
+import {
+  attachmentIdsSchema,
+  attachmentImages,
+  imageEvidenceSegments,
+  type AttachmentContent,
+  type AttachmentImage,
+} from './tutor-attachments';
 
 export const assessmentCounts = [12, 24, 36, 48, 60] as const;
 export const difficulties = ['mixed', 'easy', 'medium', 'hard'] as const;
-export const assessmentConfigSchema = z.object({
+export const assessmentSetupSchema = z.object({
   sourceIds: z
     .array(z.string().uuid())
-    .min(1)
     .max(40)
     .refine((v) => new Set(v).size === v.length),
   count: z.number().refine((v) => assessmentCounts.includes(v as 12)),
@@ -16,16 +22,36 @@ export const assessmentConfigSchema = z.object({
     .array(z.string().uuid())
     .max(10)
     .refine((v) => new Set(v).size === v.length),
+  attachmentIds: attachmentIdsSchema.optional(),
 });
+export const assessmentConfigSchema = assessmentSetupSchema.refine(
+  (value) => value.sourceIds.length > 0 || !!value.attachmentIds?.length,
+  'Choose studied sources or saved evidence for this assessment',
+);
 export type AssessmentConfig = z.infer<typeof assessmentConfigSchema>;
 const id = z.string().regex(/^[a-zA-Z0-9:_-]{1,80}$/),
   savedId = z.string().regex(/^[a-zA-Z0-9:_-]{1,120}$/),
   text = z.string().trim().min(1).max(1800);
-export const assessmentCitationSchema = z.object({
-  sourceId: z.string().uuid(),
-  segmentId: z.string().min(1).max(240),
-  quote: z.string().trim().min(1).max(1200),
-});
+const sourceAssessmentCitationSchema = z
+  .object({
+    sourceId: z.string().uuid(),
+    segmentId: z.string().min(1).max(240),
+    quote: z.string().trim().min(1).max(1200),
+  })
+  .strict();
+export const assessmentCitationSchema = z.union([
+  z
+    .object({
+      kind: z.literal('attachment'),
+      attachmentId: z.string().uuid(),
+      segmentId: z.string().min(1).max(240),
+      imageId: z.string().uuid().nullable(),
+      quote: z.string().trim().max(1200),
+    })
+    .strict()
+    .refine((value) => !!value.imageId || !!value.quote, 'Text evidence requires a literal quote'),
+  sourceAssessmentCitationSchema,
+]);
 export type AssessmentCitation = z.infer<typeof assessmentCitationSchema>;
 export const assessmentQuestionSchema = z.object({
   id,
@@ -97,6 +123,7 @@ export type AssessmentSource = {
 };
 export type AssessmentContext = {
   sources: AssessmentSource[];
+  attachments?: AttachmentContent[];
   conversation: Array<{ role: 'user' | 'assistant'; content: string }>;
   gaps: string[];
   capturedAt: string;
@@ -111,6 +138,7 @@ export type AssessmentContext = {
     citations: AssessmentCitation[];
   }>;
 };
+export type AssessmentImageData = { attachmentId: string; image: AttachmentImage; data: string };
 export const assessmentAnswerSchema = z.object({
   response: z.string().max(10000),
   confidence: z.enum(['sure', 'unsure', 'unknown']),
@@ -213,12 +241,39 @@ export const normalizeAssessmentText = (s: string) =>
     .toLowerCase()
     .trim()
     .replace(/\s+/g, ' ');
-export function validateAssessmentCitation(c: AssessmentCitation, context: AssessmentContext) {
+export function validateAssessmentCitation(
+  c: AssessmentCitation,
+  context: Pick<AssessmentContext, 'sources' | 'attachments'>,
+) {
+  if ('attachmentId' in c) {
+    const content = context.attachments?.find((item) => item.attachment.id === c.attachmentId),
+      segment = content?.segments.find((part) => part.id === c.segmentId),
+      image =
+        content && c.imageId
+          ? attachmentImages(content.attachment).find((item) => item.id === c.imageId)
+          : undefined;
+    if (
+      !content ||
+      !segment ||
+      (!c.imageId && !c.quote) ||
+      (c.quote && !segment.text.includes(c.quote)) ||
+      (c.imageId &&
+        (!image ||
+          !imageEvidenceSegments(image, content.segments).some((part) => part.id === c.segmentId)))
+    )
+      throw new Error('Assessment citation is outside the selected saved evidence.');
+    return { kind: 'attachment' as const, content, segment, image };
+  }
   const source = context.sources.find((s) => s.id === c.sourceId),
     segment = source?.segments.find((s) => s.id === c.segmentId);
   if (!segment || !segment.text.includes(c.quote))
     throw new Error('Assessment citation is outside the selected source evidence.');
-  return { source: source!, segment };
+  return { kind: 'source' as const, source: source!, segment };
+}
+export function assessmentCitationIdentity(c: AssessmentCitation) {
+  return 'attachmentId' in c
+    ? `attachment:${c.attachmentId}:${c.imageId || ''}:${c.segmentId}`
+    : `source:${c.sourceId}:${c.segmentId}`;
 }
 export function validateAssessmentBatch(
   raw: unknown,
@@ -273,7 +328,11 @@ export function validateAssessmentBatch(
       q.prompts.forEach((p) =>
         p.citations.forEach((c) => {
           validateAssessmentCitation(c, context);
-          if (!q.citations.some((e) => e.sourceId === c.sourceId && e.segmentId === c.segmentId))
+          if (
+            !q.citations.some(
+              (e) => assessmentCitationIdentity(e) === assessmentCitationIdentity(c),
+            )
+          )
             throw new Error('Matching evidence must be included in the question.');
         }),
       );
@@ -487,7 +546,12 @@ export function compileAssessmentReport(
 export function assessmentMarkdown(detail: AssessmentDetail) {
   if (!detail.report) return '';
   const cite = (c: AssessmentCitation) => {
-    const { source, segment } = validateAssessmentCitation(c, detail.context);
+    const resolved = validateAssessmentCitation(c, detail.context);
+    if (resolved.kind === 'attachment') {
+      const { content, image } = resolved;
+      return `- Saved evidence: ${content.attachment.name} · note revision ${content.attachment.annotationRevision || '—'}${image ? ` · image ${image.capture?.label || image.id} · SHA-256 ${image.digest}` : ''}\n  ${c.quote ? `> ${c.quote.replace(/\n/g, '\n  > ')}` : 'Visual observation of the selected flattened image; no literal source quote.'}`;
+    }
+    const { source, segment } = resolved;
     return `- ${source.name} (v${source.version}) · ${segment.page ? `page ${segment.page}` : segment.start != null ? `${segment.start}s` : segment.id}\n  > ${c.quote.replace(/\n/g, '\n  > ')}`;
   };
   return [
@@ -499,6 +563,13 @@ export function assessmentMarkdown(detail: AssessmentDetail) {
       (s) =>
         `- ${s.name} (v${s.version}, preparation ${s.learningVersion}): ${s.segments.length}/${s.studiedCount} studied evidence segments used.`,
     ),
+    ...(detail.context.attachments || []).flatMap(({ attachment }) => [
+      `- Saved evidence: ${attachment.name} · snapshot ${attachment.id} · note revision ${attachment.annotationRevision || '—'} · ${attachment.segmentCount} passages · ${attachmentImages(attachment).length} selected images.`,
+      ...attachmentImages(attachment).map(
+        (image) =>
+          `  - ${image.capture?.label || image.id} · image ${image.id} · SHA-256 ${image.digest}${image.capture ? ` · drawing ${image.capture.drawingDigest}` : ''}`,
+      ),
+    ]),
     ...detail.context.gaps.map((g) => `- ${g}`),
     '## Topic results',
     ...detail.report.topics.map(

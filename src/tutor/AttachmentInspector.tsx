@@ -18,11 +18,15 @@ export function AttachmentInspector({
   catalog,
   close,
   cite,
+  notice,
+  initialImageId,
 }: {
   id: string;
   t: T;
   catalog: Catalog;
   close: () => void;
+  notice?: string;
+  initialImageId?: string;
   cite: (sourceId: string, segment: Segment) => void;
 }) {
   const [attachment, setAttachment] = useState<QuestionAttachment | null>(null),
@@ -55,6 +59,13 @@ export function AttachmentInspector({
       active = false;
     };
   }, [id]);
+  useEffect(() => {
+    if (attachment && initialImageId) {
+      const target = document.getElementById(`attachment-image-${initialImageId}`);
+      target?.focus({ preventScroll: true });
+      target?.scrollIntoView({ block: 'start' });
+    }
+  }, [attachment, initialImageId]);
   const file = catalog.files.find((file) => file.id === attachment?.sourceId),
     available =
       file &&
@@ -70,7 +81,7 @@ export function AttachmentInspector({
       {loading && <p role="status">{t.loading}</p>}
       {attachment && (
         <>
-          <p className="muted">{t.attachmentSnapshotNotice}</p>
+          <p className="muted">{notice || t.attachmentSnapshotNotice}</p>
           <p>
             {t[`attachmentKind_${attachment.kind}`]} · {t.attachmentPassages}:{' '}
             {attachment.segmentCount}
@@ -94,9 +105,23 @@ export function AttachmentInspector({
             </p>
           )}
           {attachmentImages(attachment).map((image, index) => (
-            <figure key={image.id} className="attachment-image-snapshot">
+            <figure
+              key={image.id}
+              id={`attachment-image-${image.id}`}
+              tabIndex={-1}
+              className="attachment-image-snapshot"
+            >
               <img
                 className="attachment-preview-image"
+                width={image.capture?.width}
+                height={image.capture?.height}
+                onLoad={() => {
+                  if (
+                    initialImageId === image.id &&
+                    document.activeElement?.id === `attachment-image-${image.id}`
+                  )
+                    document.activeElement.scrollIntoView({ block: 'start' });
+                }}
                 src={`/api/tutor-attachments/${id}/image?id=${image.id}`}
                 alt={`${t.attachmentSavedImage} ${index + 1}`}
               />

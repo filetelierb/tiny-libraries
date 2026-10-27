@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { z } from 'zod';
 import { ArrowLeft, Plus, RefreshCw, Search } from 'lucide-react';
 import {
-  assessmentConfigSchema,
+  assessmentSetupSchema,
   assessmentCounts,
   difficulties,
   type AssessmentConfig,
@@ -16,6 +16,13 @@ import { Button, Modal } from '../design/components';
 import { DirectoryTree, type TreeActions } from '../workspace/DirectoryTree';
 import type { T } from '../i18n';
 import { AssessmentRun } from './AssessmentRun';
+import { AttachmentPicker } from '../tutor/AttachmentPicker';
+import { AttachmentInspector } from '../tutor/AttachmentInspector';
+import {
+  attachmentImages,
+  questionImageBudget,
+  type QuestionAttachment,
+} from '../../shared/tutor-attachments';
 
 const defaultConfig: AssessmentConfig = {
   sourceIds: [],
@@ -24,12 +31,7 @@ const defaultConfig: AssessmentConfig = {
   guidance: '',
   priorReportIds: [],
 };
-const localConfigSchema = assessmentConfigSchema.extend({
-  sourceIds: z
-    .array(z.string().uuid())
-    .max(40)
-    .refine((ids) => new Set(ids).size === ids.length),
-});
+const localConfigSchema = assessmentSetupSchema;
 export function AssessmentWorkspace({
   sessionId,
   catalog,
@@ -72,7 +74,11 @@ export function AssessmentWorkspace({
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
     [loading, setLoading] = useState(true),
-    [query, setQuery] = useState('');
+    [query, setQuery] = useState(''),
+    [evidence, setEvidence] = useState<QuestionAttachment[]>([]),
+    [evidenceLoading, setEvidenceLoading] = useState(false),
+    [evidencePicker, setEvidencePicker] = useState(false),
+    [inspectedEvidence, setInspectedEvidence] = useState<string | null>(null);
   const alive = useRef(true),
     initial = useRef(true),
     creation = useRef<{ fingerprint: string; id: string } | null>(null);
@@ -95,6 +101,30 @@ export function AssessmentWorkspace({
     try {
       localStorage.setItem(configKey, JSON.stringify(value));
     } catch {}
+  }
+  const evidenceIds = config.attachmentIds || [],
+    evidenceKey = evidenceIds.join(',');
+  useEffect(() => {
+    let active = true;
+    setEvidenceLoading(true);
+    void Promise.allSettled(
+      evidenceIds.map((id) => api<QuestionAttachment>(`/tutor-attachments/${id}`)),
+    ).then((results) => {
+      if (!active) return;
+      setEvidence(
+        results.flatMap((result) => (result.status === 'fulfilled' ? [result.value] : [])),
+      );
+      const failed = results.find((result) => result.status === 'rejected');
+      if (failed?.status === 'rejected') setError((failed.reason as Error).message);
+      setEvidenceLoading(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, [evidenceKey]);
+  function changeEvidence(items: QuestionAttachment[]) {
+    setEvidence(items);
+    update({ ...configRef.current, attachmentIds: items.map((item) => item.id) });
   }
   async function loadOptions() {
     await beforeCreate();
@@ -194,6 +224,12 @@ export function AssessmentWorkspace({
     if (busy) return;
     setBusy(true);
     setError('');
+    const budgetError = questionImageBudget(evidence);
+    if (budgetError) {
+      setError(budgetError);
+      setBusy(false);
+      return;
+    }
     const fingerprint = JSON.stringify(config);
     if (creation.current?.fingerprint !== fingerprint)
       creation.current = { id: crypto.randomUUID(), fingerprint };
@@ -243,6 +279,7 @@ export function AssessmentWorkspace({
                 id={selected}
                 sessionId={sessionId}
                 t={t}
+                catalog={catalog}
                 navigate={navigate}
                 bookmark={bookmark}
                 changed={changed}
@@ -256,6 +293,7 @@ export function AssessmentWorkspace({
                     difficulty: 'mixed',
                     guidance: t.assessmentFollowupGuidance,
                     priorReportIds: [detail.id],
+                    attachmentIds: detail.config.attachmentIds,
                   });
                   creation.current = null;
                   choose(null);
@@ -378,6 +416,63 @@ export function AssessmentWorkspace({
                         ))}
                     </details>
                   )}
+                  <section
+                    className="assessment-saved-evidence"
+                    aria-label={t.assessmentSavedEvidence}
+                  >
+                    <h4>
+                      {t.assessmentSavedEvidence} · {evidenceIds.length} / 6
+                    </h4>
+                    <p>
+                      {t.attachmentSelectedImages}: {evidence.flatMap(attachmentImages).length} / 48
+                      ·{' '}
+                      {(
+                        evidence
+                          .flatMap(attachmentImages)
+                          .reduce((sum, image) => sum + image.size, 0) /
+                        1024 /
+                        1024
+                      ).toFixed(2)}{' '}
+                      / 12 MB
+                    </p>
+                    <p className="muted">{t.assessmentEvidenceDisclosure}</p>
+                    {evidenceLoading && <p role="status">{t.loading}</p>}
+                    {evidenceIds.map((id) => {
+                      const item = evidence.find((item) => item.id === id);
+                      return (
+                        <div className="question-attachment" key={id}>
+                          <Button disabled={!item} onClick={() => setInspectedEvidence(id)}>
+                            {item?.name || t.evidenceUnavailable}
+                            {item && (
+                              <small>
+                                {t.attachmentSelectedImages}: {attachmentImages(item).length}
+                                {item.annotationRevision
+                                  ? ` · ${t.revision} ${item.annotationRevision}`
+                                  : ''}
+                              </small>
+                            )}
+                          </Button>
+                          <Button
+                            aria-label={`${t.remove}: ${item?.name || t.evidenceUnavailable}`}
+                            onClick={() => {
+                              const ids = evidenceIds.filter((value) => value !== id);
+                              update({ ...configRef.current, attachmentIds: ids });
+                              setEvidence((old) => old.filter((value) => value.id !== id));
+                            }}
+                          >
+                            {t.remove}
+                          </Button>
+                        </div>
+                      );
+                    })}
+                    <Button
+                      disabled={busy || evidenceLoading || evidenceIds.length >= 6}
+                      onClick={() => setEvidencePicker(true)}
+                    >
+                      {t.assessmentAddEvidence}
+                    </Button>
+                    <p className="muted">{t.assessmentEvidenceLimits}</p>
+                  </section>
                   <div className="assessment-config-grid">
                     <label>
                       {t.assessmentQuestionCount}
@@ -451,7 +546,9 @@ export function AssessmentWorkspace({
                     disabled={
                       busy ||
                       !!unfinished ||
-                      !config.sourceIds.length ||
+                      (!config.sourceIds.length && !evidenceIds.length) ||
+                      evidenceLoading ||
+                      evidenceIds.some((id) => !evidence.some((item) => item.id === id)) ||
                       !catalog.settings.configured
                     }
                     onClick={() => void create()}
@@ -463,6 +560,34 @@ export function AssessmentWorkspace({
             </>
           )}
         </main>
+        {evidencePicker && (
+          <AttachmentPicker
+            purpose="assessment"
+            sessionId={sessionId}
+            source={null}
+            catalog={catalog}
+            t={t}
+            treeActions={actions}
+            chosen={evidence}
+            choose={(item) => changeEvidence([...evidence, item])}
+            close={() => setEvidencePicker(false)}
+            changed={async () => {
+              changed();
+              await loadOptions();
+            }}
+            prepareSource={(source) => prepareFile(source.id)}
+          />
+        )}
+        {inspectedEvidence && (
+          <AttachmentInspector
+            id={inspectedEvidence}
+            t={t}
+            catalog={catalog}
+            close={() => setInspectedEvidence(null)}
+            cite={navigate}
+            notice={t.assessmentSavedEvidenceNotice}
+          />
+        )}
         <aside className="assessment-history">
           <div className="assessment-picker-heading">
             <h3>{t.assessmentSavedReviews}</h3>
