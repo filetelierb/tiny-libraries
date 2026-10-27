@@ -26,9 +26,9 @@ import {
   type ChatMessage,
 } from '../../shared/conversations';
 import type { Catalog, Source, Segment, PublicLearning } from '../../shared/domain';
-import { fold } from '../../shared/domain';
+import { fold, kindFor } from '../../shared/domain';
 import { sourceState } from '../../shared/directories';
-import { api, ApiResponseError } from '../api';
+import { api, ApiResponseError, uploadFile } from '../api';
 import {
   turnInputFingerprint,
   type ConversationDetail,
@@ -50,7 +50,7 @@ import {
 import { TurnProgress, TurnOutbox } from '../tutor/TurnProgress';
 import { Badge, Button, IconButton, Modal } from '../design/components';
 import type { T } from '../i18n';
-import { DirectoryTree, type TreeActions } from './DirectoryTree';
+import { DirectoryTree, RESOURCE_DRAG_TYPE, type TreeActions } from './DirectoryTree';
 import {
   conceptMentionsSchema,
   conceptMention,
@@ -880,6 +880,42 @@ function ConversationThread({
       if (alive.current) setMentionPending(false);
     }
   };
+  const [dropActive, setDropActive] = useState(false);
+  const accepts = (event: React.DragEvent) =>
+    event.dataTransfer.types.includes(RESOURCE_DRAG_TYPE) ||
+    event.dataTransfer.types.includes('Files');
+  /** Tree files become references; files from the computer become attachments. */
+  const dropOnComposer = async (event: React.DragEvent) => {
+    const resource = event.dataTransfer.getData(RESOURCE_DRAG_TYPE);
+    if (resource) {
+      const file = catalog.files.find((entry) => entry.id === JSON.parse(resource).id);
+      if (!file || conversation.sourceIds.includes(file.id)) return;
+      if (conversation.sourceIds.length >= 20) return onError(t.referenceLimit);
+      await patch({ sourceIds: [...conversation.sourceIds, file.id] });
+      return;
+    }
+    for (const file of [...event.dataTransfer.files]) {
+      if (attachmentRef.current.length >= MAX_QUESTION_ATTACHMENTS)
+        return onError(t.attachmentLimit);
+      if (!kindFor(file.name)) return onError(`${t.unsupported}: ${file.name}`);
+      if (file.size > 20 * 1024 * 1024) return onError(t.attachmentUploadLimit);
+      try {
+        const saved = await uploadFile(file, 'Attachments', () => {});
+        await changed();
+        const item = await api<QuestionAttachment>('/tutor-attachments', 'POST', {
+          kind: 'file',
+          sourceId: saved.id,
+          sourceVersion: saved.version,
+          id: crypto.randomUUID(),
+          sessionId: conversation.sessionId,
+        });
+        if (alive.current) changeAttachments([...attachmentRef.current, item]);
+      } catch (error) {
+        onError(error instanceof Error ? error.message : t.error);
+        return;
+      }
+    }
+  };
   const mentionConcept = (entry: GlossaryEntry) => {
     const current = conceptDraftRef.current.items;
     if (!current.some((c) => c.id === entry.id) && current.length >= MAX_QUESTION_CONCEPTS) {
@@ -1251,7 +1287,23 @@ function ConversationThread({
         conversationId={conversation.id}
       />
       <form
-        className="tutor-composer"
+        className={`tutor-composer ${dropActive ? 'drop-active' : ''}`}
+        onDragOver={(event) => {
+          if (!accepts(event)) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'copy';
+          setDropActive(true);
+        }}
+        onDragLeave={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null))
+            setDropActive(false);
+        }}
+        onDrop={(event) => {
+          if (!accepts(event)) return;
+          event.preventDefault();
+          setDropActive(false);
+          void dropOnComposer(event);
+        }}
         onSubmit={(event) => {
           event.preventDefault();
           void send();
