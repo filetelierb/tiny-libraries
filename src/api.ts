@@ -25,9 +25,13 @@ export function uploadFile(
   folder: string,
   progress: (percent: number) => void,
   directoryId?: string,
+  signal?: AbortSignal,
 ): Promise<import('../shared/domain').Source> {
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest();
+    if (signal?.aborted) return reject(new DOMException('Upload cancelled', 'AbortError'));
+    signal?.addEventListener('abort', () => request.abort(), { once: true });
+    request.onabort = () => reject(new DOMException('Upload cancelled', 'AbortError'));
     request.open('POST', '/api/files');
     request.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
     request.setRequestHeader('X-File-Name', encodeURIComponent(file.name));

@@ -7901,3 +7901,25 @@ body:has(.panel-resizer.resizing) {
   color: var(--muted-text);
   text-decoration: line-through;
 }
+.upload-file.done {
+  color: var(--muted-text);
+}
+.upload-file.done > svg {
+  color: var(--primary);
+}
+.upload-current {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  font-size: 12px;
+  color: var(--muted-text);
+}
+.upload-current > span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.upload-current > progress {
+  flex: 1 0 100%;
+}

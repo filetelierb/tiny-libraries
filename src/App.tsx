@@ -210,7 +210,11 @@ export function App() {
     [rename, setRename] = useState<Source | null>(null),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
-    [uploadProgress, setUploadProgress] = useState<number | null>(null);
+    [uploadProgress, setUploadProgress] = useState<number | null>(null),
+    [uploading, setUploading] = useState<{ name: string; index: number; total: number } | null>(
+      null,
+    );
+  const uploadAbort = useRef<AbortController | null>(null);
   const [learningState, setLearning] = useState<PublicLearning | null>(null),
     [jobState, setJob] = useState<(Job & { segments?: Segment[] }) | null>(null),
     [seek, setSeek] = useState<{
@@ -511,14 +515,35 @@ export function App() {
       c ? { ...c, files: c.files.map((f) => (f.id === file.id ? result : f)) } : c,
     );
   }
-  async function addFiles(files: File[], folder: string, directoryId?: string) {
+  async function addFiles(
+    files: File[],
+    folder: string,
+    directoryId?: string,
+    uploaded?: (file: File) => void,
+  ) {
     setBusy(true);
+    const controller = new AbortController();
+    uploadAbort.current = controller;
     try {
-      for (const file of files) {
+      for (const [index, file] of files.entries()) {
         if (!kindFor(file.name)) throw new Error(`${t.unsupported}: ${file.name}`);
         if (file.size > MAX_FILE_BYTES) throw new Error(t.maxSize);
         setUploadProgress(0);
-        const source = await uploadFile(file, folder, setUploadProgress, directoryId);
+        setUploading({ name: file.name, index, total: files.length });
+        let source: Source;
+        try {
+          source = await uploadFile(
+            file,
+            folder,
+            setUploadProgress,
+            directoryId,
+            controller.signal,
+          );
+        } catch (error) {
+          if (controller.signal.aborted) throw new Error(t.uploadCancelled);
+          throw new Error(`${file.name}: ${error instanceof Error ? error.message : t.error}`);
+        }
+        uploaded?.(file);
         setCatalog((c) => (c ? { ...c, files: [...c.files, source] } : c));
         openFile(source, 'retain');
       }
@@ -527,8 +552,10 @@ export function App() {
       setModal(returnToSplit ? 'split' : null);
       setReturnToSplit(false);
     } finally {
+      uploadAbort.current = null;
       setBusy(false);
       setUploadProgress(null);
+      setUploading(null);
     }
   }
   async function example() {
@@ -2061,11 +2088,14 @@ export function App() {
             t={t}
             busy={busy}
             progress={uploadProgress}
+            current={uploading}
+            error={error}
+            cancel={() => uploadAbort.current?.abort()}
             catalog={catalog}
             initialDirectoryId={uploadDirectoryId}
             actions={treeActions}
-            submit={(files, folder, directoryId) =>
-              void run(() => addFiles(files, folder, directoryId))
+            submit={(files, folder, directoryId, uploaded) =>
+              void run(() => addFiles(files, folder, directoryId, uploaded))
             }
           />
           <div className="sample-material">
