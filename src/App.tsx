@@ -171,6 +171,29 @@ export function App() {
   const [selection, setSelection] = useState<{ sourceId: string; location: SourceLocation } | null>(
     null,
   );
+  // Floating actions anchored above the current text selection.
+  const [selectionMenu, setSelectionMenu] = useState<{
+    sourceId: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  useEffect(() => {
+    if (!selectionMenu) return;
+    const dismiss = (event: Event) => {
+      if (event instanceof KeyboardEvent && event.key !== 'Escape') return;
+      if (event.target instanceof Element && event.target.closest('.selection-menu')) return;
+      setSelectionMenu(null);
+    };
+    const scrolled = () => setSelectionMenu(null);
+    document.addEventListener('keydown', dismiss);
+    document.addEventListener('pointerdown', dismiss);
+    document.addEventListener('scroll', scrolled, true);
+    return () => {
+      document.removeEventListener('keydown', dismiss);
+      document.removeEventListener('pointerdown', dismiss);
+      document.removeEventListener('scroll', scrolled, true);
+    };
+  }, [selectionMenu]);
   const panels = usePanels();
   const left = panels.effective.left.open,
     right = panels.effective.right.open;
@@ -1398,9 +1421,18 @@ export function App() {
                           learning={material || null}
                           sessionId={session.id}
                           annotationTick={annotationTick}
-                          onSelection={(location) =>
-                            setSelection({ sourceId: source.id, location })
-                          }
+                          onSelection={(location) => {
+                            setSelection({ sourceId: source.id, location });
+                            const range = location.quote
+                              ? window.getSelection()?.getRangeAt(0)
+                              : undefined;
+                            const box = range?.getBoundingClientRect();
+                            setSelectionMenu(
+                              box && box.width + box.height > 0
+                                ? { sourceId: source.id, x: box.left + box.width / 2, y: box.top }
+                                : null,
+                            );
+                          }}
                           position={session.positions[source.id] || 0}
                           onPosition={(value) => {
                             if (source.kind === 'pdf')
@@ -1971,6 +2003,60 @@ export function App() {
           }}
         />
       )}
+      {selectionMenu &&
+        (() => {
+          const source = catalog.files.find((file) => file.id === selectionMenu.sourceId);
+          if (!source) return null;
+          const done = () => setSelectionMenu(null);
+          return (
+            <div
+              className="selection-menu"
+              role="toolbar"
+              aria-label={t.selectionActions}
+              style={{
+                left: Math.min(Math.max(selectionMenu.x, 120), window.innerWidth - 120),
+                top: Math.max(selectionMenu.y - 8, 56),
+              }}
+            >
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  done();
+                  void run(() => beginAnnotation(source.id, resourceLocation(source)));
+                }}
+              >
+                <PenLine size={14} />
+                {t.annotateShort}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  done();
+                  setBookmarkIntent({ source, location: resourceLocation(source) });
+                }}
+              >
+                <Bookmark size={14} />
+                {t.bookmarkShort}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  done();
+                  askAbout(source);
+                }}
+              >
+                <MessageCircleQuestion size={14} />
+                {t.askShort}
+              </Button>
+              <IconButton label={t.close} onClick={done}>
+                <X />
+              </IconButton>
+            </div>
+          );
+        })()}
       {bookmarkIntent && !bookmarkInline && bookmarkEditor(false)}
       {assessmentOpen && (
         <ContentBoundary t={t} close={() => setAssessmentOpen(false)}>

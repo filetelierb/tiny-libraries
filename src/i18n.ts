@@ -587,6 +587,8 @@ const en = {
   annotateResource: 'Annotate resource',
   annotateShort: 'Annotate',
   askShort: 'Ask',
+  bookmarkShort: 'Bookmark',
+  selectionActions: 'Selection actions',
   splitShort: 'Split',
   selectedText: 'Selected text',
   captureNotReady: 'Wait for the page or frame to finish rendering, then try again.',
@@ -1633,6 +1635,8 @@ const es: Dictionary = {
   annotateResource: 'Anotar recurso',
   annotateShort: 'Anotar',
   askShort: 'Preguntar',
+  bookmarkShort: 'Marcador',
+  selectionActions: 'Acciones de la selección',
   splitShort: 'Dividir',
   selectedText: 'Texto seleccionado',
   captureNotReady:

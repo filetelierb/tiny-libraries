@@ -7923,3 +7923,21 @@ body:has(.panel-resizer.resizing) {
 .upload-current > progress {
   flex: 1 0 100%;
 }
+.selection-menu {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--popover);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 14%);
+  transform: translate(-50%, -100%);
+}
+.selection-menu .icon-button {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+}
