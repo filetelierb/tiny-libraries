@@ -138,7 +138,7 @@ export function ActionMenuSurface({
 export function ActionMenu({
   label,
   actions,
-  icon = <MoreHorizontal size={17} />,
+  icon = <MoreHorizontal size={16} />,
 }: {
   label: string;
   actions: MenuAction[];

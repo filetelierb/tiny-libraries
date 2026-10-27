@@ -957,7 +957,7 @@ export function App() {
                   if (!catalog.files.length) showUpload();
                 }}
               >
-                <Folder size={18} />
+                <Folder size={16} />
                 {t.exploreFiles}
               </Button>
               <Button
@@ -967,7 +967,7 @@ export function App() {
                   setRight(true);
                 }}
               >
-                <MessageSquare size={18} />
+                <MessageSquare size={16} />
                 {t.startConversation}
               </Button>
             </div>
@@ -1669,7 +1669,7 @@ export function App() {
                   )}
                   <button className="artifact-link" onClick={() => setArtifact(active.id)}>
                     <span>
-                      <Activity size={17} />
+                      <Activity size={16} />
                       <strong>{t.artifact}</strong>
                     </span>
                     <p>{t.artifactBody}</p>
@@ -2482,7 +2482,7 @@ function TrashModal({
             }
           }}
         >
-          <Trash2 size={17} />
+          <Trash2 size={16} />
           {t.moveToTrash}
         </Button>
         <Button disabled={pending} onClick={close}>

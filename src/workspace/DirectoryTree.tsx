@@ -154,7 +154,7 @@ export function DirectoryTree({
         ? [
             {
               label: t.restore,
-              icon: <RotateCcw size={17} />,
+              icon: <RotateCcw size={16} />,
               disabled: parentState === 'trash',
               run: () => actions.restoreDirectory(directory),
             },
@@ -165,33 +165,33 @@ export function DirectoryTree({
         ? [
             {
               label: t.createSubfolder,
-              icon: <FolderPlus size={17} />,
+              icon: <FolderPlus size={16} />,
               run: () => actions.create(directory.path),
             },
-            { label: t.upload, icon: <Upload size={17} />, run: () => actions.upload(directory) },
+            { label: t.upload, icon: <Upload size={16} />, run: () => actions.upload(directory) },
           ]
         : []),
       {
         label: t.rename,
-        icon: <PenLine size={17} />,
+        icon: <PenLine size={16} />,
         separator: state === 'files',
         run: () => actions.renameDirectory(directory),
       },
       state === 'archived'
         ? {
             label: t.restore,
-            icon: <RotateCcw size={17} />,
+            icon: <RotateCcw size={16} />,
             disabled: !directory.archived || parentState !== 'files',
             run: () => actions.archiveDirectory(directory, true),
           }
         : {
             label: t.archive,
-            icon: <Archive size={17} />,
+            icon: <Archive size={16} />,
             run: () => actions.archiveDirectory(directory, false),
           },
       {
         label: t.deleteDirectory,
-        icon: <Trash2 size={17} />,
+        icon: <Trash2 size={16} />,
         danger: true,
         separator: true,
         run: () => actions.trashDirectory(directory),
@@ -203,7 +203,7 @@ export function DirectoryTree({
       return [
         {
           label: t.chooseFile,
-          icon: <FileText size={17} />,
+          icon: <FileText size={16} />,
           run: () => chooseFile?.(file, 'preview'),
         },
       ];
@@ -213,7 +213,7 @@ export function DirectoryTree({
         ? [
             {
               label: t.restore,
-              icon: <RotateCcw size={17} />,
+              icon: <RotateCcw size={16} />,
               disabled: parentState === 'trash',
               run: () => actions.restoreFile(file),
             },
@@ -224,37 +224,37 @@ export function DirectoryTree({
         ? [
             {
               label: t.openCurrent,
-              icon: <FileText size={17} />,
+              icon: <FileText size={16} />,
               run: () => chooseFile?.(file, 'preview'),
             },
             {
               label: t.openSeparate,
-              icon: <Plus size={17} />,
+              icon: <Plus size={16} />,
               run: () => chooseFile?.(file, 'retain'),
             },
           ]
         : []),
       {
         label: t.rename,
-        icon: <PenLine size={17} />,
+        icon: <PenLine size={16} />,
         separator: mode === 'manage',
         run: () => actions.renameFile(file),
       },
       view === 'archived'
         ? {
             label: t.restore,
-            icon: <RotateCcw size={17} />,
+            icon: <RotateCcw size={16} />,
             disabled: !file.archived || parentState !== 'files',
             run: () => actions.archiveFile(file, true),
           }
         : {
             label: t.archive,
-            icon: <Archive size={17} />,
+            icon: <Archive size={16} />,
             run: () => actions.archiveFile(file, false),
           },
       {
         label: t.deleteFile,
-        icon: <Trash2 size={17} />,
+        icon: <Trash2 size={16} />,
         danger: true,
         separator: true,
         run: () => actions.trashFile(file),
@@ -305,13 +305,13 @@ export function DirectoryTree({
                       : toggle(directory)
                   }
                 >
-                  <Icon size={19} />
+                  <Icon size={16} />
                   <span>{directoryName(directory.path)}</span>
                 </button>
                 {!contextOnly && mode !== 'filter' && (
                   <ActionMenu
                     label={`${t.directoryOptions}: ${directory.path}`}
-                    icon={<Plus size={17} />}
+                    icon={<Plus size={16} />}
                     actions={directoryActions(directory)}
                   />
                 )}
@@ -347,7 +347,7 @@ export function DirectoryTree({
                       disabled={disabledFileIds?.has(file.id)}
                       onChange={(event) => toggleFile?.(file, event.target.checked)}
                     />
-                    <Icon size={18} />
+                    <Icon size={16} />
                     <span title={file.name}>{file.name}</span>
                     {fileStatuses?.has(file.id) && <small>{fileStatuses.get(file.id)}</small>}
                     <small
@@ -365,10 +365,10 @@ export function DirectoryTree({
                     onClick={() => chooseFile?.(file, 'preview')}
                     onDoubleClick={() => chooseFile?.(file, 'retain')}
                   >
-                    <Icon size={18} />
+                    <Icon size={16} />
                     <span>{file.name}</span>
                     {file.reviewed && (
-                      <CircleCheck className="reviewed-marker" size={17} aria-label={t.reviewed}>
+                      <CircleCheck className="reviewed-marker" size={16} aria-label={t.reviewed}>
                         <title>{t.reviewed}</title>
                       </CircleCheck>
                     )}
@@ -403,14 +403,14 @@ export function DirectoryTree({
           className={`directory-root ${!selectedFolderId ? 'selected' : ''}`}
           onClick={() => chooseFolder?.(null)}
         >
-          <Folder size={18} />
+          <Folder size={16} />
           {t.libraryRoot}
         </button>
       )}
       {mode !== 'manage' && mode !== 'filter' && (
         <div className="tree-picker-actions">
           <Button onClick={() => actions.create('')}>
-            <FolderPlus size={17} />
+            <FolderPlus size={16} />
             {t.newFolder}
           </Button>
         </div>

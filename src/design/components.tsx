@@ -4,12 +4,20 @@ import { createPortal } from 'react-dom';
 
 export function Button({
   variant = 'default',
+  size = 'default',
   className = '',
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: 'default' | 'primary' | 'ghost' | 'danger';
+  variant?: 'default' | 'primary' | 'secondary' | 'ghost' | 'danger';
+  size?: 'default' | 'sm';
 }) {
-  return <button type="button" className={`button button-${variant} ${className}`} {...props} />;
+  return (
+    <button
+      type="button"
+      className={`button button-${variant} ${size === 'sm' ? 'button-sm' : ''} ${className}`}
+      {...props}
+    />
+  );
 }
 export function IconButton({
   label,
@@ -27,7 +35,7 @@ export function Badge({
   tone = 'neutral',
 }: {
   children: ReactNode;
-  tone?: 'neutral' | 'success' | 'warning';
+  tone?: 'neutral' | 'success' | 'warning' | 'outline' | 'primary';
 }) {
   return <span className={`badge badge-${tone}`}>{children}</span>;
 }
