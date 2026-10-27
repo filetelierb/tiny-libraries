@@ -82,6 +82,8 @@ export function MediaPlayer({
     keyboard = useRef(false),
     revealTouch = useRef(false),
     lastReported = useRef(0),
+    pendingSeek = useRef(false),
+    restoring = useRef(false),
     positionCallback = useRef(onPosition);
   positionCallback.current = onPosition;
   const readingCallback = useRef(onReadingProgress),
@@ -159,7 +161,9 @@ export function MediaPlayer({
     ignoredTime.current = true;
     readingCallback.current?.({ value: next, cause: 'seek' });
     setTime(next);
-    positionCallback.current(next);
+    // A seek while paused is only checkpointed once playback resumes from there.
+    if (player.paused) pendingSeek.current = true;
+    else positionCallback.current(next);
     wake();
   };
   useEffect(() => {
@@ -406,6 +410,7 @@ export function MediaPlayer({
           const player = media.current!;
           setDuration(player.duration);
           const initial = boundedTime(seek?.value ?? position, player.duration);
+          restoring.current = initial !== player.currentTime;
           player.currentTime = initial;
           readingCallback.current?.({ value: initial, cause: 'restore' });
           setTime(initial);
@@ -417,6 +422,11 @@ export function MediaPlayer({
         onPlay={() => {
           setPlaying(true);
           playingCallback.current?.(true);
+          if (pendingSeek.current && media.current) {
+            pendingSeek.current = false;
+            positionCallback.current(media.current.currentTime);
+          }
+          lastReported.current = Date.now();
         }}
         onPause={() => {
           setPlaying(false);
@@ -437,7 +447,10 @@ export function MediaPlayer({
         onSeeked={() => {
           if (media.current) {
             setTime(media.current.currentTime);
-            positionCallback.current(media.current.currentTime);
+            // The restore seek on load is not a reader's seek.
+            if (restoring.current) restoring.current = false;
+            else if (media.current.paused) pendingSeek.current = true;
+            else positionCallback.current(media.current.currentTime);
             readingCallback.current?.({ value: media.current.currentTime, cause: 'seek' });
           }
         }}
@@ -455,7 +468,8 @@ export function MediaPlayer({
               playing: !media.current.paused,
             });
             ignoredTime.current = false;
-            if (Date.now() - lastReported.current > 5000) {
+            // Continuous playback checkpoints every 15 seconds.
+            if (Date.now() - lastReported.current >= 15000) {
               positionCallback.current(media.current.currentTime);
               lastReported.current = Date.now();
             }

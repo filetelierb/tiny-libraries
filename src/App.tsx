@@ -66,6 +66,7 @@ import { FlashcardDeck, type DeckRequest } from './study/FlashcardDeck';
 import { ReviewPanel } from './study/ReviewPanel';
 import { reinforcementLearning } from '../shared/review';
 import { GeneratedArtifact } from './GeneratedArtifact';
+import { recordDraft, recoverPositions, settleDrafts } from './workspace/positionDrafts';
 import { cardDue, type DeckView } from '../shared/flashcards';
 import { SignalExplorer } from './SignalExplorer';
 import { PanelResizer, useDrawerFocus, usePanels } from './workspace/Panels';
@@ -340,9 +341,38 @@ export function App() {
       setSession(selected);
       sessionRef.current = selected;
       localStorage.setItem('tl:session', selected.id);
+      restoreDrafts(selected);
       if (!data.settings.configured && !localStorage.getItem('tl:explored')) setModal('settings');
     });
   }, []);
+  // Media positions reach the server at most every 10 seconds per source; the latest
+  // value waits in a browser draft so a reload can recover it.
+  const positionWrites = useRef(
+    new Map<string, { sent: number; timer?: ReturnType<typeof setTimeout> }>(),
+  );
+  function savePosition(source: Source, value: number) {
+    const current = sessionRef.current;
+    if (!current) return;
+    recordDraft(current.id, source.id, value);
+    const write = () =>
+      sessionRef.current?.id === current.id &&
+      updateSession({ positions: { ...sessionRef.current.positions, [source.id]: value } });
+    if (source.kind !== 'audio' && source.kind !== 'video') return void write();
+    const key = `${current.id}:${source.id}`,
+      state = positionWrites.current.get(key) || { sent: 0 };
+    if (state.timer) clearTimeout(state.timer);
+    const delay = Math.max(0, state.sent + 10_000 - Date.now());
+    const flush = () => {
+      positionWrites.current.set(key, { sent: Date.now() });
+      write();
+    };
+    if (!delay) flush();
+    else positionWrites.current.set(key, { ...state, timer: setTimeout(flush, delay) });
+  }
+  function restoreDrafts(value: StudySession) {
+    const positions = recoverPositions(value.id, value.positions);
+    if (positions) updateSession({ positions });
+  }
   function updateSession(update: Partial<StudySession>) {
     if (!sessionRef.current) return;
     const value = { ...sessionRef.current, ...update };
@@ -355,6 +385,7 @@ export function App() {
       .catch(() => {})
       .then(async () => {
         await api(`/sessions/${value.id}`, 'PUT', value);
+        settleDrafts(value.id, value.positions);
       })
       .catch((e) => setError(e.message));
   }
@@ -378,6 +409,7 @@ export function App() {
     sessionRef.current = value;
     setSession(value);
     localStorage.setItem('tl:session', value.id);
+    restoreDrafts(value);
     setArtifact(false);
     setLearning(null);
     setSeek(null);
@@ -1441,10 +1473,7 @@ export function App() {
                                   ? null
                                   : current,
                               );
-                            if (sessionRef.current?.id === session.id)
-                              updateSession({
-                                positions: { ...sessionRef.current.positions, [source.id]: value },
-                              });
+                            if (sessionRef.current?.id === session.id) savePosition(source, value);
                           }}
                           seek={seek?.sourceId === source.id ? seek : null}
                         />
