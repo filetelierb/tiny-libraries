@@ -611,6 +611,12 @@ const en = {
   selectedText: 'Selected text',
   captureNotReady: 'Wait for the page or frame to finish rendering, then try again.',
   saveAsAnnotation: 'Save as annotation',
+  suggestedByTutor: 'Suggested by the tutor',
+  noteCategory_concept: 'Concept',
+  noteCategory_comparison: 'Comparison',
+  noteCategory_procedure: 'Procedure',
+  noteCategory_example: 'Example',
+  noteCategory_summary: 'Summary',
   questionContext: 'For this question',
   removeQuestionContext: 'Remove question context',
   questionContextNotice:
@@ -1695,6 +1701,12 @@ const es: Dictionary = {
   captureNotReady:
     'Espera a que la página o el fotograma termine de cargarse e inténtalo de nuevo.',
   saveAsAnnotation: 'Guardar como anotación',
+  suggestedByTutor: 'Sugerida por el tutor',
+  noteCategory_concept: 'Concepto',
+  noteCategory_comparison: 'Comparación',
+  noteCategory_procedure: 'Procedimiento',
+  noteCategory_example: 'Ejemplo',
+  noteCategory_summary: 'Resumen',
   questionContext: 'Para esta pregunta',
   removeQuestionContext: 'Quitar contexto de la pregunta',
   questionContextNotice:

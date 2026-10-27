@@ -1194,23 +1194,33 @@ function ConversationThread({
                   />
                 </div>
                 {message.role === 'assistant' && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="message-action"
-                    onClick={() =>
-                      annotate(
-                        message.status
-                          ? `${t.partialReplyNotice}\n\n${message.content}`
-                          : message.content,
-                        message.sourceIds || conversation.sourceIds,
-                        contextFor(message),
-                      )
-                    }
-                  >
-                    <StickyNote />
-                    {t.saveAsAnnotation}
-                  </Button>
+                  <div className="message-note">
+                    {message.noteSuggestion?.recommended && (
+                      <p>
+                        {t.suggestedByTutor} ·{' '}
+                        {t[`noteCategory_${message.noteSuggestion.category}`]}
+                      </p>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="message-action"
+                      onClick={() =>
+                        annotate(
+                          message.noteSuggestion?.recommended
+                            ? message.noteSuggestion.body
+                            : message.status
+                              ? `${t.partialReplyNotice}\n\n${message.content}`
+                              : message.content,
+                          message.sourceIds || conversation.sourceIds,
+                          contextFor(message),
+                        )
+                      }
+                    >
+                      <StickyNote />
+                      {t.saveAsAnnotation}
+                    </Button>
+                  </div>
                 )}
                 {message.tools?.length ? (
                   <small>

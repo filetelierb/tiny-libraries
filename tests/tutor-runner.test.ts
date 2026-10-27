@@ -379,3 +379,22 @@ test('compatible steering cancels a live model, checkpoints its instruction and 
     1,
   );
 });
+
+test('a completed reply stores its study note suggestion apart from the visible answer', async () => {
+  const f = await fixture();
+  await f.accept();
+  const running = await f.model();
+  f.complete(running, {
+    content:
+      'Sampling needs twice the frequency.\n<study_note>{"recommended":true,"category":"concept","body":"Sample above twice the highest frequency."}</study_note>',
+  });
+  await f.step();
+  await f.step();
+  const last = (await f.journal.history()).messages.at(-1)!;
+  assert.equal(last.content, 'Sampling needs twice the frequency.');
+  assert.deepEqual(last.noteSuggestion, {
+    recommended: true,
+    category: 'concept',
+    body: 'Sample above twice the highest frequency.',
+  });
+});

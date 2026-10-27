@@ -4,6 +4,7 @@ import { locationSchema } from './annotations';
 import { conceptMentionsSchema, tutorCitationSchema, type ConceptMention } from './tutor-context';
 import { attachmentMentionsSchema, type AttachmentMention } from './tutor-attachments';
 import { tutorGenerationSchema } from './tutor-generation';
+import { studyNoteSuggestionSchema } from './study-note';
 
 export const questionContextSchema = z.object({
   sourceId: z.string().uuid(),
@@ -45,6 +46,7 @@ export const chatMessageSchema = z.object({
   webSearch: z.literal(true).optional(),
   webSearched: z.boolean().optional(),
   citations: z.array(tutorCitationSchema).max(40).optional(),
+  noteSuggestion: studyNoteSuggestionSchema.optional(),
   requestId: z.string().uuid().optional(),
   requestFingerprint: z
     .string()

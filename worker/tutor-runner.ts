@@ -12,6 +12,7 @@ import {
   type BookmarkWriter,
 } from './tutor-agent';
 import { TutorJournal } from './tutor-journal';
+import { parseTutorAnswer, visibleTutorText } from '../shared/study-note';
 
 export type FrozenTutorContext = Omit<TutorAgentInput, 'prompt' | 'history'>;
 export type TutorRunnerServices = {
@@ -32,11 +33,13 @@ export class TutorRunner {
     private readonly journal: TutorJournal,
     private readonly services: TutorRunnerServices,
   ) {}
-  private async message(record: TurnRecord, content: string): Promise<ChatMessage> {
-    const intent = await this.journal.intent(record);
+  private async message(record: TurnRecord, text: string): Promise<ChatMessage> {
+    const intent = await this.journal.intent(record),
+      { answer, suggestion } = parseTutorAnswer(text);
     return {
       role: 'assistant',
-      content,
+      content: answer,
+      ...(suggestion ? { noteSuggestion: suggestion } : {}),
       requestId: record.id,
       generation: record.generation,
       sourceIds: intent.userMessage.sourceIds,
@@ -71,7 +74,7 @@ export class TutorRunner {
           const saved = await this.services.cancel(record.providerId);
           record =
             (await this.journal.progress(record, {
-              partial: saved.text,
+              partial: visibleTutorText(saved.text),
               providerSequence: saved.sequence,
             })) || record;
         }
@@ -182,7 +185,7 @@ export class TutorRunner {
         const next = await this.journal.progress(record, {
           providerStart: 'accepted',
           providerSequence: snapshot.sequence,
-          partial: snapshot.text,
+          partial: visibleTutorText(snapshot.text),
           toolNames: [...agent.snapshot().used, ...snapshot.toolNames],
         });
         if (!next) return;
