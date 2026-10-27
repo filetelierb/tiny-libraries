@@ -106,6 +106,8 @@ export function ConversationPanel({
   annotate,
   questionRequest,
   consumeQuestion,
+  incomingAttachment,
+  consumeAttachment,
   openConcept,
   prepareSource,
   createAttachment,
@@ -118,6 +120,8 @@ export function ConversationPanel({
   annotate: (content: string, sourceIds: string[], context?: QuestionContext) => void;
   questionRequest: { id: string; context: QuestionContext; prompt?: string } | null;
   consumeQuestion: () => void;
+  incomingAttachment: { id: string; item: QuestionAttachment } | null;
+  consumeAttachment: () => void;
   openConcept: (id: string) => void;
   prepareSource: (source: Source) => void;
   createAttachment: () => Promise<AnnotationRequest | null>;
@@ -302,6 +306,8 @@ export function ConversationPanel({
           annotate={annotate}
           questionRequest={questionRequest}
           consumeQuestion={consumeQuestion}
+          incomingAttachment={incomingAttachment}
+          consumeAttachment={consumeAttachment}
           openConcept={openConcept}
           source={source}
           changed={changed}
@@ -331,6 +337,8 @@ function ConversationThread({
   annotate,
   questionRequest,
   consumeQuestion,
+  incomingAttachment,
+  consumeAttachment,
   openConcept,
   source,
   changed,
@@ -345,6 +353,8 @@ function ConversationThread({
   annotate: (content: string, sourceIds: string[], context?: QuestionContext) => void;
   questionRequest: { id: string; context: QuestionContext; prompt?: string } | null;
   consumeQuestion: () => void;
+  incomingAttachment: { id: string; item: QuestionAttachment } | null;
+  consumeAttachment: () => void;
   openConcept: (id: string) => void;
   source: Source | null;
   changed: () => Promise<unknown>;
@@ -544,6 +554,16 @@ function ConversationThread({
     consumeQuestion();
     composer.current?.focus();
   }, [questionRequest?.id]);
+  useEffect(() => {
+    if (!incomingAttachment) return;
+    consumeAttachment();
+    const current = attachmentRef.current,
+      item = incomingAttachment.item;
+    if (current.some((value) => value.id === item.id)) return;
+    if (current.length >= MAX_QUESTION_ATTACHMENTS) onError(t.attachmentLimit);
+    else changeAttachments([...current, item]);
+    composer.current?.focus();
+  }, [incomingAttachment?.id]);
   const [draft, setDraft] = useState(() => draftState.current.text),
     [pending, setPending] = useState(false),
     [submission, setSubmission] = useState(() => readTutorSubmission(stored(retryKey))),

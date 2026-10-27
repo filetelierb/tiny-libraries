@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { Plus, Pencil, Trash2, RotateCcw, ExternalLink } from 'lucide-react';
+import {
+  FileText,
+  Paperclip,
+  Pencil,
+  Play,
+  Plus,
+  RotateCcw,
+  StickyNote,
+  Trash2,
+} from 'lucide-react';
 import type { Annotation, AnnotationSummary, SourceLocation } from '../../shared/annotations';
 import type { Catalog, Source } from '../../shared/domain';
 import { sourceState } from '../../shared/directories';
@@ -24,6 +33,7 @@ export function AnnotationsPanel({
   create,
   edit,
   navigate,
+  attach,
   onError,
 }: {
   sessionId: string;
@@ -36,6 +46,7 @@ export function AnnotationsPanel({
   create: () => void;
   edit: (value: Annotation) => void;
   navigate: (sourceId: string, location: SourceLocation) => void;
+  attach: (item: AnnotationSummary) => void;
   onError: (message: string) => void;
 }) {
   const [items, setItems] = useState<AnnotationSummary[]>([]),
@@ -46,7 +57,8 @@ export function AnnotationsPanel({
     [loading, setLoading] = useState(true),
     [refresh, setRefresh] = useState(0),
     [query, setQuery] = useState(''),
-    [opened, setOpened] = useState<Annotation | null>(null);
+    [opened, setOpened] = useState<Annotation | null>(null),
+    [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const resourceKey = [...new Set(openSourceIds)].sort().join(',');
   const openIds = new Set(openSourceIds);
   const openFiles = catalog.files.filter(
@@ -127,172 +139,232 @@ export function AnnotationsPanel({
   return (
     <>
       <div className="annotation-panel-head">
-        <strong>{t.notes}</strong>
-        <IconButton label={t.newAnnotation} onClick={create}>
-          <Plus />
-        </IconButton>
-      </div>
-      <div className="annotation-scope" role="group" aria-label={t.annotationScope}>
-        <Button
-          aria-pressed={!all}
-          disabled={!source}
-          onClick={() => {
-            setAll(false);
-          }}
-        >
-          {t.currentResource}
-        </Button>
-        <Button aria-pressed={all} onClick={() => setAll(true)}>
-          {t.allResources}
-        </Button>
-      </div>
-      {all && (
-        <details className="annotation-resource-filter">
-          <summary>
-            {t.filterResources} · {selectedIds.size} / {openFiles.length}
-          </summary>
-          <div className="annotation-resource-filter-body">
-            <p className="muted">{t.openSessionResources}</p>
-            <div className="resource-filter-actions">
-              <Button
-                onClick={() => {
-                  setExcluded(new Set());
-                  setIncludeSession(true);
-                }}
-              >
-                {t.selectAll}
-              </Button>
-              <Button
-                onClick={() => {
-                  setExcluded(new Set(openSourceIds));
-                  setIncludeSession(false);
-                }}
-              >
-                {t.selectNone}
-              </Button>
-              <span role="status">
-                {selectedIds.size} / {openFiles.length} {t.resourcesSelected}
-              </span>
-            </div>
-            <input
-              type="search"
-              aria-label={t.search}
-              placeholder={t.search}
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-            <DirectoryTree
-              directories={catalog.directories}
-              files={openFiles}
-              t={t}
-              mode="filter"
-              query={query}
-              actions={actions}
-              storageKey="tl:tree:annotation-filter"
-              selectedFileIds={selectedIds}
-              fileCounts={counts}
-              toggleFile={(file, checked) =>
-                setExcluded((previous) => {
-                  const next = new Set(previous);
-                  if (checked) next.delete(file.id);
-                  else next.add(file.id);
-                  return next;
-                })
-              }
-            />
-            {items.some((item) => !item.sourceId && item.sessionId === sessionId) && (
-              <label className="annotation-session-filter">
-                <input
-                  type="checkbox"
-                  checked={includeSession}
-                  onChange={(event) => setIncludeSession(event.target.checked)}
-                />
-                {t.includeSessionAnnotations}
-              </label>
-            )}
+        <div className="panel-title-row">
+          <span className="panel-tile panel-tile-amber">
+            <StickyNote />
+          </span>
+          <div>
+            <p>{t.notes}</p>
+            <small>{all ? t.openSessionResources : source?.name || t.selectMaterial}</small>
           </div>
-        </details>
-      )}
-      <label className="annotation-trash">
-        <input
-          type="checkbox"
-          checked={trash}
-          onChange={(event) => setTrash(event.target.checked)}
-        />
-        {t.showDeletedAnnotations}
-      </label>
-      {loading && <p role="status">{t.loadingAnnotations}</p>}
-      <p className="annotation-result-count" role="status">
-        {!loading
-          ? `${visible.length} ${visible.length === 1 ? t.annotationSingular : t.annotationCount}`
-          : ''}
-      </p>
-      {!loading && !visible.length && (
-        <p className="small-empty">
-          {all && !openFiles.length && !items.some((item) => !item.sourceId)
-            ? t.openResourcesForNotes
-            : all && !selectedIds.size && !includeSession
-              ? t.selectResourcesForNotes
-              : t.noNotes}
-        </p>
-      )}
-      {visible.map((item) => {
-        const file = catalog.files.find((file) => file.id === item.sourceId),
-          unavailable =
-            !!item.sourceId && (!file || sourceState(file, catalog.directories) === 'trash');
-        return (
-          <article className="annotation-card" key={item.id}>
-            <header>
-              <button className="annotation-card-title" onClick={() => void open(item)}>
-                {item.title || t.untitledAnnotation}
-              </button>
-              <small>{new Date(item.updatedAt).toLocaleDateString()}</small>
-            </header>
-            <p className="annotation-card-source">
-              {file?.name || (item.sourceId ? t.sourceUnavailable : t.sessionAnnotation)}
-              {item.location.page
-                ? ` · ${t.page} ${item.location.page}`
-                : item.location.seconds != null
-                  ? ` · ${Math.floor(item.location.seconds / 60)}:${String(Math.floor(item.location.seconds % 60)).padStart(2, '0')}`
-                  : ''}
-            </p>
-            {item.location.quote && <blockquote>{item.location.quote}</blockquote>}
-            <AnnotationPreview
-              key={`${item.id}:${item.revision}`}
-              item={item}
-              t={t}
-              open={() => void open(item)}
-            />
-            <div className="annotation-card-actions">
-              <Button onClick={() => void open(item)}>{t.readAnnotation}</Button>
-              {!trash && (
-                <IconButton
-                  label={`${t.editAnnotation}: ${item.title || t.untitledAnnotation}`}
-                  disabled={unavailable}
-                  onClick={() => void open(item, true)}
+          <IconButton
+            label={t.showDeletedAnnotations}
+            aria-pressed={trash}
+            onClick={() => setTrash(!trash)}
+          >
+            <Trash2 />
+          </IconButton>
+          <IconButton label={t.newAnnotation} onClick={create}>
+            <Plus />
+          </IconButton>
+        </div>
+        <div className="segmented" role="tablist" aria-label={t.annotationScope}>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={!all}
+            disabled={!source}
+            onClick={() => setAll(false)}
+          >
+            {t.currentResource}
+          </button>
+          <button type="button" role="tab" aria-selected={all} onClick={() => setAll(true)}>
+            {t.allResources}
+          </button>
+        </div>
+        {all && (
+          <details className="annotation-resource-filter">
+            <summary>
+              {t.filterResources} · {selectedIds.size} / {openFiles.length}
+            </summary>
+            <div className="annotation-resource-filter-body">
+              <p className="muted">{t.openSessionResources}</p>
+              <div className="resource-filter-actions">
+                <Button
+                  onClick={() => {
+                    setExcluded(new Set());
+                    setIncludeSession(true);
+                  }}
                 >
-                  <Pencil />
-                </IconButton>
-              )}
-              {item.sourceId && (
-                <IconButton
-                  label={t.openAnnotationSource}
-                  disabled={unavailable}
-                  onClick={() => navigate(item.sourceId!, item.location)}
+                  {t.selectAll}
+                </Button>
+                <Button
+                  onClick={() => {
+                    setExcluded(new Set(openSourceIds));
+                    setIncludeSession(false);
+                  }}
                 >
-                  <ExternalLink />
-                </IconButton>
+                  {t.selectNone}
+                </Button>
+                <span role="status">
+                  {selectedIds.size} / {openFiles.length} {t.resourcesSelected}
+                </span>
+              </div>
+              <input
+                type="search"
+                aria-label={t.search}
+                placeholder={t.search}
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+              <DirectoryTree
+                directories={catalog.directories}
+                files={openFiles}
+                t={t}
+                mode="filter"
+                query={query}
+                actions={actions}
+                storageKey="tl:tree:annotation-filter"
+                selectedFileIds={selectedIds}
+                fileCounts={counts}
+                toggleFile={(file, checked) =>
+                  setExcluded((previous) => {
+                    const next = new Set(previous);
+                    if (checked) next.delete(file.id);
+                    else next.add(file.id);
+                    return next;
+                  })
+                }
+              />
+              {items.some((item) => !item.sourceId && item.sessionId === sessionId) && (
+                <label className="annotation-session-filter">
+                  <input
+                    type="checkbox"
+                    checked={includeSession}
+                    onChange={(event) => setIncludeSession(event.target.checked)}
+                  />
+                  {t.includeSessionAnnotations}
+                </label>
               )}
-              <IconButton
-                label={trash ? t.restoreAnnotation : t.deleteAnnotation}
-                onClick={() => void remove(item)}
-              >
-                {trash ? <RotateCcw /> : <Trash2 />}
-              </IconButton>
             </div>
-          </article>
-        );
-      })}
+          </details>
+        )}
+      </div>
+      <div className="annotation-list">
+        {loading && <p role="status">{t.loadingAnnotations}</p>}
+        <p className="sr-only" role="status">
+          {!loading
+            ? `${visible.length} ${visible.length === 1 ? t.annotationSingular : t.annotationCount}`
+            : ''}
+        </p>
+        {!loading && !visible.length && (
+          <div className="panel-empty">
+            <StickyNote />
+            <strong>{trash ? t.noDeletedNotes : t.noNotesTitle}</strong>
+            <p>
+              {all && !openFiles.length && !items.some((item) => !item.sourceId)
+                ? t.openResourcesForNotes
+                : all && !selectedIds.size && !includeSession
+                  ? t.selectResourcesForNotes
+                  : t.noNotes}
+            </p>
+          </div>
+        )}
+        {visible.map((item) => {
+          const file = catalog.files.find((file) => file.id === item.sourceId),
+            unavailable =
+              !!item.sourceId && (!file || sourceState(file, catalog.directories) === 'trash');
+          return (
+            <article className="annotation-card" key={item.id}>
+              {(all || unavailable) && (
+                <p className="annotation-card-source" title={file?.name}>
+                  <FileText />
+                  <span>
+                    {file?.name || (item.sourceId ? t.sourceUnavailable : t.sessionAnnotation)}
+                    {item.location.page
+                      ? ` · ${t.page} ${item.location.page}`
+                      : item.location.seconds != null
+                        ? ` · ${Math.floor(item.location.seconds / 60)}:${String(Math.floor(item.location.seconds % 60)).padStart(2, '0')}`
+                        : ''}
+                  </span>
+                </p>
+              )}
+              <header>
+                <button
+                  type="button"
+                  className="annotation-card-title"
+                  title={t.readAnnotation}
+                  onClick={() => void open(item)}
+                >
+                  {item.title || t.untitledAnnotation}
+                </button>
+                {!trash && (
+                  <IconButton
+                    label={`${t.editAnnotation}: ${item.title || t.untitledAnnotation}`}
+                    disabled={unavailable}
+                    onClick={() => void open(item, true)}
+                  >
+                    <Pencil />
+                  </IconButton>
+                )}
+                <IconButton
+                  label={trash ? t.restoreAnnotation : t.deleteAnnotation}
+                  className="icon-button annotation-delete"
+                  onClick={() => (trash ? void remove(item) : setDeleteTarget(item.id))}
+                >
+                  {trash ? <RotateCcw /> : <Trash2 />}
+                </IconButton>
+              </header>
+              <AnnotationPreview
+                key={`${item.id}:${item.revision}`}
+                item={item}
+                t={t}
+                open={() => void open(item)}
+              />
+              <p className="annotation-card-date">
+                {new Date(item.updatedAt).toLocaleDateString(undefined, {
+                  day: 'numeric',
+                  month: 'short',
+                })}
+              </p>
+              {item.location.quote && <blockquote>{item.location.quote}</blockquote>}
+              {deleteTarget === item.id ? (
+                <div className="annotation-delete-confirm" role="group">
+                  <p>{t.deleteAnnotationConfirm}</p>
+                  <div>
+                    <Button size="sm" variant="ghost" onClick={() => setDeleteTarget(null)}>
+                      {t.cancel}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      onClick={() => {
+                        setDeleteTarget(null);
+                        void remove(item);
+                      }}
+                    >
+                      <Trash2 />
+                      {t.delete}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                !trash && (
+                  <div className="annotation-card-actions">
+                    <Button
+                      size="sm"
+                      disabled={!item.sourceId || unavailable}
+                      onClick={() => item.sourceId && navigate(item.sourceId, item.location)}
+                    >
+                      <Play />
+                      {t.reviewNote}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      disabled={unavailable}
+                      onClick={() => attach(item)}
+                    >
+                      <Paperclip />
+                      {t.attachNote}
+                    </Button>
+                  </div>
+                )
+              )}
+            </article>
+          );
+        })}
+      </div>
       {opened && (
         <Modal
           title={opened.title || t.untitledAnnotation}

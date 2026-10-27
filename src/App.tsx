@@ -57,6 +57,7 @@ import {
   fold,
 } from '../shared/domain';
 import { api, uploadFile } from './api';
+import type { QuestionAttachment } from '../shared/tutor-attachments';
 import { dictionaries, type T } from './i18n';
 import { Badge, Button, Empty, IconButton, Modal, ToolbarButton } from './design/components';
 import { StudyReader } from './study/StudyReader';
@@ -157,6 +158,10 @@ export function App() {
     const value = localGet('tl:bookmark-filter', 'all');
     return value === 'manual' || value === 'tutor' ? value : 'all';
   });
+  const [incomingAttachment, setIncomingAttachment] = useState<{
+    id: string;
+    item: QuestionAttachment;
+  } | null>(null);
   const [questionRequest, setQuestionRequest] = useState<{
     id: string;
     context: QuestionContext;
@@ -1459,6 +1464,8 @@ export function App() {
               }}
               questionRequest={questionRequest}
               consumeQuestion={() => setQuestionRequest(null)}
+              incomingAttachment={incomingAttachment}
+              consumeAttachment={() => setIncomingAttachment(null)}
               openConcept={(id) => {
                 setGlossaryFocus({ id, nonce: crypto.randomUUID() });
                 setRight(true);
@@ -1508,6 +1515,23 @@ export function App() {
                 })
               }
               navigate={navigateAnnotation}
+              attach={(item) =>
+                void run(async () => {
+                  const prepared = await api<QuestionAttachment>('/tutor-attachments', 'POST', {
+                    kind: 'annotation',
+                    annotationId: item.id,
+                    revision: item.revision,
+                    ...(item.captures?.length
+                      ? { captureIds: item.captures.map((capture) => capture.id) }
+                      : {}),
+                    id: crypto.randomUUID(),
+                    sessionId: session.id,
+                  });
+                  setIncomingAttachment({ id: crypto.randomUUID(), item: prepared });
+                  setTab('assistant');
+                  setRight(true);
+                })
+              }
               onError={setError}
             />
           ) : tab === 'review' ? (

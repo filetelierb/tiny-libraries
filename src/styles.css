@@ -1927,14 +1927,12 @@ body:has(.panel-resizer.resizing) {
   gap: 6px;
   margin: 12px 0;
 }
-.annotation-source,
-.annotation-card-source {
+.annotation-source {
   font-size: var(--font-size-small);
   color: var(--muted-text);
   overflow-wrap: anywhere;
 }
-.selected-quote,
-.annotation-card blockquote {
+.selected-quote {
   margin: 10px 0;
   padding: 8px 12px;
   border-left: 3px solid var(--primary);
@@ -1946,9 +1944,7 @@ body:has(.panel-resizer.resizing) {
 .rich-toolbar,
 .sketch-tools,
 .table-tools,
-.annotation-scope,
-.annotation-filter,
-.annotation-card-actions {
+.annotation-filter {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -1970,8 +1966,7 @@ body:has(.panel-resizer.resizing) {
   font-size: var(--font-size-control);
 }
 .rich-toolbar [aria-pressed='true'],
-.sketch-tools [aria-pressed='true'],
-.annotation-scope [aria-pressed='true'] {
+.sketch-tools [aria-pressed='true'] {
   background: var(--secondary);
   color: var(--primary);
 }
@@ -2056,15 +2051,6 @@ body:has(.panel-resizer.resizing) {
 .rich-table-scroll {
   overflow: auto;
 }
-.annotation-panel-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-.annotation-scope {
-  margin-bottom: 12px;
-}
 .annotation-filter {
   margin: 10px 0;
 }
@@ -2073,43 +2059,6 @@ body:has(.panel-resizer.resizing) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.annotation-trash {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 6px;
-  font-size: var(--font-size-small);
-  margin: 12px 0;
-}
-.annotation-trash input {
-  width: auto;
-}
-.annotation-card {
-  border-bottom: 1px solid var(--border);
-  padding: 16px 0;
-}
-.annotation-card > header {
-  display: flex;
-  gap: 6px;
-  align-items: baseline;
-  justify-content: space-between;
-}
-.annotation-card > header small {
-  white-space: nowrap;
-  font-size: 11px;
-  color: var(--muted-text);
-}
-.annotation-card-title {
-  text-align: left;
-  font-weight: 600;
-  font-size: 17px;
-  overflow-wrap: anywhere;
-  min-width: 0;
-}
-.annotation-card p {
-  line-height: 1.65;
-  overflow-wrap: anywhere;
 }
 .annotation-thumbnail {
   display: block;
@@ -2125,9 +2074,6 @@ body:has(.panel-resizer.resizing) {
   width: 100%;
   max-height: 180px;
   object-fit: contain;
-}
-.annotation-card-actions {
-  margin-top: 10px;
 }
 .sketch-surface {
   position: relative;
@@ -3504,11 +3450,6 @@ body:has(.panel-resizer.resizing) {
 }
 .annotation-session-filter input {
   width: auto;
-}
-.annotation-result-count {
-  color: var(--muted-text);
-  font-size: var(--font-size-small);
-  margin: 6px 0;
 }
 
 .annotation-resource-filter {
@@ -6782,4 +6723,248 @@ body:has(.panel-resizer.resizing) {
   margin: 0;
   font-size: var(--font-size-small);
   color: var(--muted-text);
+}
+
+/* Study panel tool headers: icon tile, title and subtitle above a bordered edge. */
+.annotation-panel-head {
+  position: sticky;
+  top: -20px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: -20px -17px 0;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--card);
+}
+.panel-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.panel-title-row > div {
+  flex: 1;
+  min-width: 0;
+}
+.panel-title-row p {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+.panel-title-row small {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  color: var(--muted-text);
+}
+.panel-title-row > .icon-button {
+  width: 28px;
+  min-width: 28px;
+  min-height: 28px;
+}
+.panel-title-row > .icon-button[aria-pressed='true'] {
+  background: var(--muted);
+}
+.panel-tile {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  background: var(--secondary);
+  color: var(--primary);
+}
+.panel-tile svg {
+  width: 20px;
+  height: 20px;
+}
+.panel-tile-amber {
+  background: color-mix(in srgb, #f2a65a 20%, transparent);
+  color: #b26020;
+}
+.segmented {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  background: var(--muted);
+}
+.segmented > button {
+  padding: 8px;
+  border-radius: calc(var(--radius-sm) - 2px);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted-text);
+}
+.segmented > button[aria-selected='true'] {
+  background: var(--card);
+  color: var(--foreground);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 5%);
+}
+.segmented > button:disabled {
+  opacity: 0.5;
+}
+.annotation-panel-head .annotation-resource-filter {
+  margin: 0;
+  border-radius: 14px;
+  font-size: 12px;
+}
+.annotation-panel-head .annotation-resource-filter > summary {
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.annotation-panel-head .resource-filter-actions .button {
+  min-height: 28px;
+  font-size: 12px;
+}
+.annotation-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 12px;
+}
+.annotation-list > p[role='status']:not(.sr-only) {
+  font-size: 12px;
+  color: var(--muted-text);
+}
+.panel-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 48px 16px;
+  text-align: center;
+}
+.panel-empty > svg {
+  width: 40px;
+  height: 40px;
+  margin-bottom: 8px;
+  color: color-mix(in oklch, var(--primary) 50%, transparent);
+}
+.panel-empty > strong {
+  font-size: 16px;
+  font-weight: 500;
+}
+.panel-empty > p {
+  max-width: 260px;
+  margin: 0;
+  font-size: 14px;
+  color: var(--muted-text);
+}
+.annotation-card {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: color-mix(in oklch, var(--background) 70%, transparent);
+  font-size: 12px;
+  line-height: 1.625;
+}
+.annotation-card > header {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.annotation-card-title {
+  flex: 1;
+  min-width: 0;
+  align-self: center;
+  padding: 0;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.annotation-card > header > .icon-button {
+  width: 28px;
+  min-width: 28px;
+  min-height: 28px;
+}
+.annotation-card > header > .annotation-delete {
+  color: var(--muted-text);
+}
+.annotation-card > header > .annotation-delete:hover {
+  background: color-mix(in oklch, var(--danger) 10%, transparent);
+  color: var(--danger);
+}
+.annotation-card-source {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--primary);
+}
+.annotation-card-source svg {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+}
+.annotation-card-source span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.annotation-card p {
+  margin: 0;
+  line-height: 1.625;
+  overflow-wrap: anywhere;
+}
+.annotation-card .annotation-card-date {
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--muted-text);
+}
+.annotation-card blockquote {
+  max-height: 140px;
+  margin: 8px 0 0;
+  padding: 0 0 0 8px;
+  overflow: auto;
+  border-left: 2px solid var(--border);
+  white-space: pre-wrap;
+  font-size: 10px;
+  font-style: italic;
+  color: var(--muted-text);
+}
+.annotation-card-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+.annotation-card-actions > .button {
+  flex: 1;
+}
+.annotation-delete-confirm {
+  margin-top: 12px;
+  padding: 10px;
+  border: 1px solid color-mix(in oklch, var(--danger) 20%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklch, var(--danger) 5%, transparent);
+}
+.annotation-delete-confirm > p {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--danger);
+}
+.annotation-delete-confirm > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+.annotation-thumbnail {
+  margin: 8px 0 0;
+  border-radius: var(--radius-sm);
+}
+.annotation-card .annotation-rich-preview,
+.annotation-card .annotation-rich-preview .rich-content {
+  font-size: 12px;
+  line-height: 1.625;
 }
