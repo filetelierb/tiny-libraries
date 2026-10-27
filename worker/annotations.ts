@@ -25,7 +25,10 @@ export class AnnotationError extends Error {
     super(message);
   }
 }
-async function saveAnnotation(storage: Pick<DurableObjectStorage, 'put'>, annotation: Annotation) {
+export async function saveAnnotation(
+  storage: Pick<import('./glossary').GlossaryStore, 'put'>,
+  annotation: Annotation,
+) {
   await storage.put(`annotation:${annotation.id}`, annotation);
   await storage.put(
     `annotation-summary:${annotation.sessionId}:${annotation.id}`,
@@ -36,7 +39,7 @@ async function saveAnnotation(storage: Pick<DurableObjectStorage, 'put'>, annota
 const json = (data: unknown, status = 200) =>
   Response.json(data, { status, headers: { 'Cache-Control': 'no-store' } });
 async function requireContext(
-  storage: DurableObjectStorage,
+  storage: import('./glossary').GlossaryStorage,
   value: { sessionId: string; sourceId: string | null; sourceVersion: number | null },
 ) {
   if (!(await storage.get(`session:${value.sessionId}`)))
@@ -53,7 +56,7 @@ async function requireContext(
     throw new AnnotationError('Restore the source before editing its annotations', 409);
 }
 async function importNotes(
-  storage: DurableObjectStorage,
+  storage: import('./glossary').GlossaryStorage,
   sessionId: string,
   snapshot?: StudySession,
   sources?: Source[],
@@ -84,7 +87,7 @@ async function importNotes(
   await storage.put(migrationKey, fingerprint);
 }
 
-async function ensureSharedAnnotations(storage: DurableObjectStorage) {
+export async function ensureSharedAnnotations(storage: import('./glossary').GlossaryStorage) {
   const sessions = await storage.list<StudySession>({ prefix: 'session:' });
   const files = [...(await storage.list<Source>({ prefix: 'file:' })).values()];
   for (const session of sessions.values()) await importNotes(storage, session.id, session, files);

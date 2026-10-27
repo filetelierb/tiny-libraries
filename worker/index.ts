@@ -25,14 +25,27 @@ import {
   analyzeConcepts,
   generateCards,
   generateReinforcement,
+  generateAssessmentBatch,
+  analyzeAssessment,
   MetaError,
 } from './meta';
 import { cardSnapshot, startCardDecks, rateCard, CardError } from './flashcards';
 import { reinforcementSnapshot, startReinforcement, ReinforcementError } from './reinforcements';
+import {
+  createAssessment,
+  assessmentDetail,
+  assessmentSummary,
+  assessmentHistory,
+  assessmentAction,
+  saveAssessmentAnswer,
+  AssessmentError,
+} from './assessments';
+import { assessmentOptions, captureStudyProgress } from './assessment-context';
+import { assessmentMarkdown } from '../shared/assessments';
 import { conceptSuggestionsRoute } from './concept-suggestions';
 import { conversationRoute, conversationSnapshot } from './conversations';
 import { recordAttempt, PracticeError } from './practice';
-import { annotationRoute, AnnotationError } from './annotations';
+import { annotationRoute, AnnotationError, ensureSharedAnnotations } from './annotations';
 import { glossaryRoute, glossarySnapshot, GlossaryError } from './glossary';
 import {
   changeDirectory,
@@ -295,10 +308,122 @@ export class Library extends DurableObject<Env> {
       if (sessionMatch && request.method === 'PUT') {
         const value = sessionSchema.parse(await boundedJson(request));
         if (value.id !== sessionMatch[1]) throw new ApiError('Session identity mismatch');
-        if (!(await this.ctx.storage.get(`session:${value.id}`)))
-          throw new ApiError('Session not found', 404);
-        await this.ctx.storage.put(`session:${value.id}`, value);
+        await this.ctx.storage.transaction(async (tx) => {
+          const previous = await tx.get<StudySession>(`session:${value.id}`);
+          if (!previous) throw new ApiError('Session not found', 404);
+          await captureStudyProgress(tx, previous, value);
+          await tx.put(`session:${value.id}`, value);
+        });
         return json(value);
+      }
+      if (path.startsWith('/api/assessments')) {
+        const options = {
+          owner: this.executionId,
+          settings: await this.settings(),
+          start: (task: Promise<void>) => this.ctx.waitUntil(task),
+          generate: async (
+            context: import('../shared/assessments').AssessmentContext,
+            config: import('../shared/assessments').AssessmentConfig,
+            previous: string[],
+            batch: number,
+            locale: Settings['locale'],
+            model: string,
+          ) => {
+            const key = await this.ctx.storage.get<string>('apiKey');
+            if (!key) throw new ApiError('Add a Meta API key in Settings', 409);
+            return generateAssessmentBatch(
+              key,
+              model,
+              context,
+              config,
+              previous,
+              batch,
+              locale,
+              bridgedFetch(this.env),
+            );
+          },
+          analyze: async (
+            context: import('../shared/assessments').AssessmentContext,
+            plan: import('../shared/assessments').AssessmentPlan,
+            grades: import('../shared/assessments').AssessmentGrade[],
+            locale: Settings['locale'],
+            model: string,
+          ) => {
+            const key = await this.ctx.storage.get<string>('apiKey');
+            if (!key) throw new ApiError('Add a Meta API key in Settings', 409);
+            return analyzeAssessment(
+              key,
+              model,
+              context,
+              plan,
+              grades,
+              locale,
+              bridgedFetch(this.env),
+            );
+          },
+        };
+        if (path === '/api/assessments/options' && request.method === 'POST') {
+          const input = z
+            .object({ sessionId: z.string().uuid() })
+            .parse(await boundedJson(request));
+          await ensureSharedAnnotations(this.ctx.storage);
+          return json(
+            await this.ctx.storage.transaction((tx) => assessmentOptions(tx, input.sessionId)),
+          );
+        }
+        if (path === '/api/assessments' && request.method === 'GET') {
+          const sessionId = z.string().uuid().parse(url.searchParams.get('sessionId'));
+          return json(
+            await assessmentHistory(
+              this.ctx.storage,
+              sessionId,
+              this.executionId,
+              url.searchParams.get('after') || undefined,
+            ),
+          );
+        }
+        if (path === '/api/assessments' && request.method === 'POST') {
+          await ensureSharedAnnotations(this.ctx.storage);
+          return json(
+            await createAssessment(this.ctx.storage, await boundedJson(request), options),
+            202,
+          );
+        }
+        const match = path.match(/^\/api\/assessments\/([a-f0-9-]+)(?:\/(answers|export))?$/);
+        if (match) {
+          if (match[2] === 'answers' && request.method === 'POST')
+            return json(
+              await saveAssessmentAnswer(this.ctx.storage, match[1], await boundedJson(request)),
+              201,
+            );
+          if (request.method === 'GET') {
+            if (!match[2] && url.searchParams.get('view') === 'summary')
+              return json(await assessmentSummary(this.ctx.storage, match[1], this.executionId));
+            const detail = await assessmentDetail(this.ctx.storage, match[1], this.executionId);
+            if (match[2] === 'export') {
+              if (!detail.report)
+                throw new ApiError('Complete the assessment before exporting its report.', 409);
+              return new Response(assessmentMarkdown(detail), {
+                headers: {
+                  'Content-Type': 'text/markdown; charset=utf-8',
+                  'Content-Disposition': `attachment; filename="assessment-${match[1]}.md"`,
+                  'Cache-Control': 'no-store',
+                },
+              });
+            }
+            return json(detail);
+          }
+          if (!match[2] && request.method === 'POST')
+            return json(
+              await assessmentAction(
+                this.ctx.storage,
+                match[1],
+                await boundedJson(request),
+                options,
+              ),
+              202,
+            );
+        }
       }
       const learningMatch = path.match(/^\/(api|internal)\/learning\/([a-f0-9-]+)$/);
       if (learningMatch) {
@@ -455,6 +580,7 @@ export class Library extends DurableObject<Env> {
         error instanceof GlossaryError ||
         error instanceof CardError ||
         error instanceof ReinforcementError ||
+        error instanceof AssessmentError ||
         error instanceof PracticeError
       )
         return json({ error: error.message }, error.status);
