@@ -55,7 +55,7 @@ import {
   kindFor,
   fold,
 } from '../shared/domain';
-import { api, uploadFile } from './api';
+import { api, SessionExpiredError, uploadFile } from './api';
 import type { QuestionAttachment } from '../shared/tutor-attachments';
 import { dictionaries, type T } from './i18n';
 import { Badge, Button, Empty, IconButton, Modal, ToolbarButton } from './design/components';
@@ -235,6 +235,8 @@ export function App() {
     [rename, setRename] = useState<Source | null>(null),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
+    [sessionExpired, setSessionExpired] = useState(false),
+    [reviewing, setReviewing] = useState(false),
     [uploadProgress, setUploadProgress] = useState<number | null>(null),
     [uploading, setUploading] = useState<{ name: string; index: number; total: number } | null>(
       null,
@@ -295,10 +297,18 @@ export function App() {
   const job = jobState?.sourceId === active?.id ? jobState : null;
   const run = async (work: () => Promise<void>) => {
     setError('');
+    setSessionExpired(false);
     try {
       await work();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t.error);
+      if (e instanceof SessionExpiredError) setSessionExpired(true);
+      setError(
+        e instanceof SessionExpiredError
+          ? t.sessionExpired
+          : e instanceof Error
+            ? e.message
+            : t.error,
+      );
     }
   };
   async function refresh() {
@@ -1140,6 +1150,19 @@ export function App() {
           <div role="alert" className="error-bar">
             <CircleHelp size={16} />
             <span>{error}</span>
+            {sessionExpired ? (
+              <Button size="sm" onClick={() => location.reload()}>
+                {t.renewSession}
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => void run(async () => void (await refresh()))}
+              >
+                {t.retry}
+              </Button>
+            )}
             <IconButton label={t.close} onClick={() => setError('')}>
               <X />
             </IconButton>
@@ -1238,8 +1261,22 @@ export function App() {
                     label={active.reviewed ? t.reviewed : t.markReviewed}
                     variant={active.reviewed ? 'secondary' : 'ghost'}
                     aria-pressed={active.reviewed}
-                    icon={active.reviewed ? <Check /> : <Circle />}
-                    onClick={() => void run(() => editFile(active, { reviewed: !active.reviewed }))}
+                    disabled={active.reviewed || reviewing}
+                    icon={
+                      reviewing ? (
+                        <LoaderCircle className="spin" />
+                      ) : active.reviewed ? (
+                        <Check />
+                      ) : (
+                        <Circle />
+                      )
+                    }
+                    onClick={() => {
+                      setReviewing(true);
+                      void run(() => editFile(active, { reviewed: true })).finally(() =>
+                        setReviewing(false),
+                      );
+                    }}
                   />
                   <span className="toolbar-divider" aria-hidden="true" />
                   <IconButton

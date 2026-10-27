@@ -748,9 +748,15 @@ export default {
           reviewed: false,
           createdAt: new Date().toISOString(),
         };
-        await env.FILES.put(`original/${file.id}/1`, request.body, {
-          httpMetadata: { contentType: file.mime },
-        });
+        try {
+          await env.FILES.put(`original/${file.id}/1`, request.body, {
+            httpMetadata: { contentType: file.mime },
+          });
+        } catch (error) {
+          // A cancelled upload ends the body early; drop anything partially stored.
+          await env.FILES.delete(`original/${file.id}/1`).catch(() => {});
+          throw error;
+        }
         try {
           const stored = await internal<Source>(env, '/internal/file', { ...file, directoryId });
           return json(stored, 201);

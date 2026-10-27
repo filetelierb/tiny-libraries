@@ -137,6 +137,7 @@ export default function PdfViewer({
     [pageInput, setPageInput] = useState(String(Math.max(1, position || 1))),
     [size, setSize] = useState({ width: 800, height: 700 }),
     [error, setError] = useState(''),
+    [attempt, setAttempt] = useState(0),
     [zoom, setZoom] = useState<PdfZoom>(() => {
       try {
         return readPdfZoom(JSON.parse(localStorage.getItem(storageKey) || 'null'));
@@ -161,6 +162,7 @@ export default function PdfViewer({
   }, [storageKey, zoom]);
   useEffect(() => {
     let cancelled = false;
+    setError('');
     const task = getDocument({
       url: `/api/files/${source.id}/content`,
       cMapUrl: '/pdfjs/cmaps/',
@@ -194,7 +196,7 @@ export default function PdfViewer({
       documentRef.current = null;
       void task.destroy().catch(() => {});
     };
-  }, [source.id, source.version]);
+  }, [source.id, source.version, attempt]);
   const ignoreReading = useRef(false);
   const currentPage = useRef(Math.max(1, position || 1));
   const readingCallback = useRef(onReadingProgress);
@@ -270,9 +272,12 @@ export default function PdfViewer({
   return (
     <div className="pdf-stage continuous-pdf" aria-busy={!loaded && !error}>
       {error && (
-        <p role="alert" className="form-error">
-          {error}
-        </p>
+        <div role="alert" className="pdf-load-error">
+          <p className="form-error">{error}</p>
+          <Button size="sm" onClick={() => setAttempt((value) => value + 1)}>
+            {t.retryPdf}
+          </Button>
+        </div>
       )}
       <div
         ref={scroll}

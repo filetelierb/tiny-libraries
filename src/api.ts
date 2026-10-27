@@ -6,12 +6,16 @@ export class ApiResponseError extends Error {
     super(message);
   }
 }
+/** The sign-in behind the library expired; only a page reload renews it. */
+export class SessionExpiredError extends ApiResponseError {}
 export async function api<T>(path: string, method = 'GET', value?: unknown): Promise<T> {
   const response = await fetch(`/api${path}`, {
     method,
     headers: value === undefined ? {} : { 'Content-Type': 'application/json' },
     ...(value === undefined ? {} : { body: JSON.stringify(value) }),
   });
+  if (response.status === 401 || response.status === 419)
+    throw new SessionExpiredError('Session expired', response.status);
   const data = await response.json();
   if (!response.ok)
     throw new ApiResponseError(

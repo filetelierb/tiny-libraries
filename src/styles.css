@@ -8428,3 +8428,13 @@ body:has(.panel-resizer.resizing) {
   background: color-mix(in oklch, var(--primary) 10%, transparent);
   color: var(--primary);
 }
+.pdf-load-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 12px 16px;
+}
+.pdf-load-error .form-error {
+  margin: 0;
+}
