@@ -8603,3 +8603,7 @@ body:has(.panel-resizer.resizing) {
   font-size: 12px;
   color: var(--muted-text);
 }
+::highlight(tl-saved-highlight) {
+  background-color: color-mix(in oklch, var(--accent) 75%, transparent);
+  color: inherit;
+}

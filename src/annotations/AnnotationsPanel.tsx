@@ -36,6 +36,7 @@ export function AnnotationsPanel({
   navigate,
   attach,
   composer,
+  changed,
   onError,
 }: {
   sessionId: string;
@@ -50,6 +51,7 @@ export function AnnotationsPanel({
   navigate: (sourceId: string, location: SourceLocation) => void;
   attach: (item: AnnotationSummary) => void;
   composer?: ReactNode;
+  changed?: () => void;
   onError: (message: string) => void;
 }) {
   const [items, setItems] = useState<AnnotationSummary[]>([]),
@@ -134,6 +136,7 @@ export function AnnotationsPanel({
       });
       setOpened(null);
       setRefresh((value) => value + 1);
+      changed?.();
     } catch (error) {
       onError(error instanceof Error ? error.message : t.error);
       setRefresh((value) => value + 1);

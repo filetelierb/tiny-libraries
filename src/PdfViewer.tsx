@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import {
   getDocument,
   GlobalWorkerOptions,
@@ -13,6 +13,7 @@ import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, PenTool } from 'lucide-reac
 import type { Source } from '../shared/domain';
 import type { Annotation, SourceLocation, DrawingStroke } from '../shared/annotations';
 import { listAnnotations } from './annotations/api';
+import { paintHighlights, quoteRanges, useSavedQuotes } from './annotations/highlights';
 import { api } from './api';
 import { PinLayer, Sketch, StrokeLayer } from './annotations/Sketch';
 import { plainDocument } from '../shared/annotations';
@@ -59,6 +60,7 @@ export default function PdfViewer({
   const storageKey = `tl:pdf-zoom:${source.id}:v${source.version}`;
   const [markups, setMarkups] = useState<Annotation[]>([]),
     [markupTick, setMarkupTick] = useState(0),
+    savedQuotes = useSavedQuotes(sessionId, source, annotationTick + markupTick),
     [pageDrawing, setPageDrawing] = useState<{
       page: number;
       image: { url: string; width: number; height: number };
@@ -306,6 +308,9 @@ export default function PdfViewer({
               strokes={markups
                 .filter((markup) => markup.location.page === item.number)
                 .flatMap((markup) => markup.strokes)}
+              quotes={savedQuotes
+                .filter((quote) => quote.location.page === item.number)
+                .map((quote) => quote.location.quote!)}
             />
           ))}
       </div>
@@ -436,9 +441,11 @@ function PdfPage({
   scroll,
   t,
   strokes,
+  quotes,
 }: {
   document: PDFDocumentProxy;
   strokes: DrawingStroke[];
+  quotes: string[];
   page: Page;
   scale: number;
   scroll: HTMLDivElement | null;
@@ -449,7 +456,15 @@ function PdfPage({
     text = useRef<HTMLDivElement>(null);
   const [rendered, setRendered] = useState(false);
   const [visible, setVisible] = useState(false),
-    [error, setError] = useState(false);
+    [error, setError] = useState(false),
+    highlightKey = useId(),
+    quoteKey = quotes.join('\u0000');
+  // Saved quotes are drawn over the text layer once the page has rendered.
+  useEffect(() => {
+    if (!rendered || !visible || !text.current) return;
+    paintHighlights(highlightKey, quoteRanges(text.current, quotes));
+    return () => paintHighlights(highlightKey, []);
+  }, [rendered, visible, quoteKey, scale]);
   useEffect(() => {
     const observer = new IntersectionObserver(([entry]) => setVisible(entry.isIntersecting), {
       root: scroll,

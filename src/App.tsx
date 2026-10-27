@@ -38,6 +38,7 @@ import {
   Lightbulb,
   Circle,
   PenLine,
+  Highlighter,
   MessageCircleQuestion,
 } from 'lucide-react';
 import {
@@ -114,6 +115,7 @@ import { conversationHasWork } from './tutor/turnDrafts';
 import { AnnotationsPanel } from './annotations/AnnotationsPanel';
 import { captureSource } from './annotations/capture';
 import type { AnnotationRequest } from './annotations/AnnotationEditor';
+import { plainDocument } from '../shared/annotations';
 import type { Annotation, SourceLocation } from '../shared/annotations';
 import { useBookmarks } from './bookmarks/useBookmarks';
 import { BookmarkEditor, type BookmarkIntent } from './bookmarks/BookmarkEditor';
@@ -461,6 +463,28 @@ export function App() {
     setArtifact(sourceId);
     setArtifactSplit(null);
     setSeek(null);
+  }
+  /** Saves the selected passage as a highlight annotation and shows it in Notes. */
+  async function saveHighlight(source: Source, location: SourceLocation) {
+    const quote = location.quote?.trim();
+    if (!quote || !sessionRef.current) return;
+    const id = crypto.randomUUID();
+    await api(`/annotations/${id}`, 'PUT', {
+      kind: 'annotation',
+      id,
+      sessionId: sessionRef.current.id,
+      sourceId: source.id,
+      sourceVersion: source.version,
+      title: quote.slice(0, 80),
+      document: plainDocument(quote),
+      location: { ...location, quote },
+      strokes: [],
+      expectedRevision: 0,
+    });
+    window.getSelection()?.removeAllRanges();
+    setAnnotationTick((value) => value + 1);
+    setTab('notes');
+    setRight(true);
   }
   function openLibraryArtifact(item: LibraryArtifact, file: Source) {
     if (item.origin === 'source') showArtifact(file.id);
@@ -1815,6 +1839,7 @@ export function App() {
               catalog={catalog}
               t={t}
               tick={annotationTick}
+              changed={() => setAnnotationTick((value) => value + 1)}
               actions={treeActions}
               create={() =>
                 void run(() =>
@@ -2179,6 +2204,17 @@ export function App() {
                 top: Math.max(selectionMenu.y - 8, 56),
               }}
             >
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  done();
+                  void run(() => saveHighlight(source, resourceLocation(source)));
+                }}
+              >
+                <Highlighter size={14} />
+                {t.highlightShort}
+              </Button>
               <Button
                 size="sm"
                 variant="ghost"

@@ -7,6 +7,7 @@ import type { T } from './i18n';
 import { MediaPlayer } from './MediaPlayer';
 import { remarkSourceAnchors } from './study/sourceAnchors';
 import { ContentBoundary } from './design/ContentBoundary';
+import { paintHighlights, quoteRanges, useSavedQuotes } from './annotations/highlights';
 const PdfViewer = lazy(() => import('./PdfViewer'));
 
 export function Viewer({
@@ -46,6 +47,20 @@ export function Viewer({
   const textRanges = useRef<Array<{ index: number; range: Range }>>([]);
   const progress = useRef(onReadingProgress);
   progress.current = onReadingProgress;
+  const savedQuotes = useSavedQuotes(sessionId, source, annotationTick);
+  useEffect(() => {
+    const root = documentRoot.current,
+      key = `text:${source.id}`;
+    if (!root || !text || !['markdown', 'text'].includes(source.kind)) return;
+    paintHighlights(
+      key,
+      quoteRanges(
+        root,
+        savedQuotes.map((item) => item.location.quote!),
+      ),
+    );
+    return () => paintHighlights(key, []);
+  }, [text, savedQuotes, source.id, source.kind]);
   useEffect(() => {
     if (!documentRoot.current || !text || !learning || !['markdown', 'text'].includes(source.kind))
       return;
