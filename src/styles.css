@@ -694,6 +694,13 @@ hr {
   color: var(--foreground);
   box-shadow: 0 1px 3px rgb(21 45 52 / 8%);
 }
+.resource-tab.dragging {
+  opacity: 0.6;
+}
+.resource-tab.drop-target {
+  border-color: var(--primary);
+  box-shadow: inset 3px 0 var(--primary);
+}
 .resource-tab > button:first-child {
   display: flex;
   align-items: center;

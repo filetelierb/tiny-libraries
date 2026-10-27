@@ -14,6 +14,8 @@ import {
   swapSplit,
   replacePane,
   visibleWorkspace,
+  reorderResourceTabs,
+  splitWithResource,
 } from '../src/workspace/tabs';
 import { splitLimits } from '../src/workspace/SplitWorkspace';
 import {
@@ -218,4 +220,67 @@ test('split limits always leave visible panes and invalid focused source is reje
       ],
     }),
   );
+});
+
+test('tab ordering preserves active identity, split metadata and study history through serialization', () => {
+  const state = resizeSplit(focusSource(readWorkspace(saved), 'slides'), 0.65),
+    before = JSON.stringify(state),
+    pair = state.activeTabId!,
+    first = state.resourceTabs[0].id;
+  const moved = reorderResourceTabs(
+    reorderResourceTabs(state, first, pair),
+    pair,
+    state.resourceTabs[1].id,
+  );
+  assert.equal(moved.activeTabId, pair);
+  assert.deepEqual(
+    moved.resourceTabs.map((tab) => tab.id),
+    [pair, 'file:slides', 'file:notes', first],
+  );
+  for (const tab of moved.resourceTabs)
+    assert.equal(
+      tab,
+      state.resourceTabs.find((original) => original.id === tab.id),
+    );
+  assert.equal(JSON.stringify(state), before);
+  const restored = sessionSchema.parse(
+    JSON.parse(JSON.stringify({ ...saved, ...workspacePatch(moved) })),
+  );
+  assert.deepEqual(readWorkspace(restored), moved);
+  assert.deepEqual(restored.positions, saved.positions);
+  assert.deepEqual(restored.notes, saved.notes);
+  assert.deepEqual(restored.bookmarks, saved.bookmarks);
+});
+
+test('invalid ordering is a no-op and moving a preview keeps its replaceable slot', () => {
+  const state = openResource(readWorkspace(saved), 'preview-one', 'preview'),
+    preview = state.activeTabId!;
+  assert.equal(reorderResourceTabs(state, 'missing', preview), state);
+  assert.equal(reorderResourceTabs(state, preview, 'missing'), state);
+  assert.equal(reorderResourceTabs(state, preview, preview), state);
+  const moved = reorderResourceTabs(state, preview, state.resourceTabs[0].id);
+  assert.equal(moved.resourceTabs[0].id, preview);
+  assert.equal(moved.resourceTabs[0].preview, true);
+  const next = openResource(moved, 'preview-two', 'preview');
+  assert.equal(next.resourceTabs[0].id, preview);
+  assert.deepEqual(next.resourceTabs[0].sources, ['preview-two']);
+  assert.equal(next.resourceTabs.length, moved.resourceTabs.length);
+});
+
+test('tab split actions target the focused pane and reuse an existing pair without altering earlier panes', () => {
+  const state = resizeSplit(focusSource(readWorkspace(saved), 'slides'), 0.7),
+    original = state.resourceTabs.find((tab) => tab.id === state.activeTabId)!;
+  const next = splitWithResource(state, 'notes'),
+    pair = next.resourceTabs.find((tab) => tab.id === next.activeTabId)!;
+  assert.deepEqual(pair.sources, ['slides', 'notes']);
+  assert.deepEqual(
+    next.resourceTabs.find((tab) => tab.id === original.id),
+    original,
+  );
+  const reused = splitWithResource({ ...next, activeTabId: original.id }, 'notes');
+  assert.equal(reused.activeTabId, pair.id);
+  assert.equal(reused.resourceTabs.length, next.resourceTabs.length);
+  assert.equal(splitWithResource(state, 'slides'), state);
+  assert.equal(splitWithResource(state, 'missing'), state);
+  assert.equal(splitWithResource({ ...state, activeTabId: null }, 'notes').activeTabId, null);
 });

@@ -104,6 +104,30 @@ export function closeResourceTab(state: ResourceWorkspace, id: string): Resource
   };
 }
 
+export function reorderResourceTabs(
+  state: ResourceWorkspace,
+  sourceId: string,
+  targetId: string,
+): ResourceWorkspace {
+  const from = state.resourceTabs.findIndex((tab) => tab.id === sourceId),
+    to = state.resourceTabs.findIndex((tab) => tab.id === targetId);
+  if (from < 0 || to < 0 || from === to) return state;
+  const resourceTabs = [...state.resourceTabs];
+  const [tab] = resourceTabs.splice(from, 1);
+  resourceTabs.splice(to, 0, tab);
+  return { ...state, resourceTabs };
+}
+
+export function splitWithResource(state: ResourceWorkspace, sourceId: string): ResourceWorkspace {
+  const active = state.resourceTabs.find((tab) => tab.id === state.activeTabId);
+  if (!active || !state.resourceTabs.some((tab) => tab.sources.includes(sourceId))) return state;
+  const current =
+    active.focusedSource && active.sources.includes(active.focusedSource)
+      ? active.focusedSource
+      : active.sources[0];
+  return openSplit(state, current, sourceId);
+}
+
 export function openSplit(
   state: ResourceWorkspace,
   first: string,

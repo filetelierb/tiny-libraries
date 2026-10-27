@@ -68,6 +68,8 @@ import {
   workspacePatch,
   openResource,
   closeResourceTab,
+  reorderResourceTabs,
+  splitWithResource,
   retainTab,
   openSplit,
   unsplit,
@@ -341,6 +343,18 @@ export function App() {
   }
   function keepResourceTab(id: string) {
     if (sessionRef.current) commitWorkspace(retainTab(usable(sessionRef.current), id));
+  }
+  function reorderResourceTab(sourceId: string, targetId: string) {
+    if (sessionRef.current)
+      commitWorkspace(reorderResourceTabs(usable(sessionRef.current), sourceId, targetId));
+  }
+  function splitResourceTab(sourceId: string) {
+    if (!sessionRef.current || !catalog) return;
+    const source = catalog.files.find((file) => file.id === sourceId);
+    if (!source || sourceState(source, catalog.directories) === 'trash') return;
+    commitWorkspace(splitWithResource(usable(sessionRef.current), sourceId));
+    setArtifact(false);
+    setSeek(null);
   }
   function closeSplit() {
     if (sessionRef.current) commitWorkspace(unsplit(usable(sessionRef.current)));
@@ -804,6 +818,9 @@ export function App() {
             select={selectResourceTab}
             keep={keepResourceTab}
             close={closeFile}
+            reorder={reorderResourceTab}
+            rename={treeActions.renameFile}
+            splitWith={splitResourceTab}
           />
           <IconButton
             label={t.reviewLearning}
@@ -1873,12 +1890,10 @@ export function App() {
           initial={rename.name}
           t={t}
           close={() => setModal(null)}
-          submit={(value) =>
-            void run(async () => {
-              await editFile(rename, { name: value });
-              setModal(null);
-            })
-          }
+          submit={async (value) => {
+            await editFile(rename, { name: value });
+            setModal(null);
+          }}
         />
       )}
       {modal === 'split' && (

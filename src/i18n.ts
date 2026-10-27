@@ -1,5 +1,14 @@
 import type { Locale } from '../shared/domain';
 const en = {
+  tabActions: 'Tab actions',
+  closeTab: 'Close tab',
+  splitWithCurrent: 'Split with current resource',
+  moveTabLeft: 'Move tab left',
+  moveTabRight: 'Move tab right',
+  tabMoved: 'Tab moved',
+  tabPosition: 'position',
+  resourceTabHelp:
+    'Drag to reorder. Alt+Shift+Left or Right moves this tab. Shift+F10 opens tab actions.',
   artifacts: 'Artifacts',
   moreStudyTools: 'More study tools',
   backToTutor: 'Back to Tutor',
@@ -734,6 +743,15 @@ const en = {
 };
 type Dictionary = typeof en;
 const es: Dictionary = {
+  tabActions: 'Opciones de pestaña',
+  closeTab: 'Cerrar pestaña',
+  splitWithCurrent: 'Dividir con el recurso actual',
+  moveTabLeft: 'Mover pestaña a la izquierda',
+  moveTabRight: 'Mover pestaña a la derecha',
+  tabMoved: 'Pestaña movida',
+  tabPosition: 'posición',
+  resourceTabHelp:
+    'Arrastra para ordenar. Alt+Mayús+Izquierda o Derecha mueve esta pestaña. Mayús+F10 abre sus opciones.',
   artifacts: 'Artefactos',
   moreStudyTools: 'Más herramientas de estudio',
   backToTutor: 'Volver al tutor',
