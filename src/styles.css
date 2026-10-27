@@ -9447,3 +9447,86 @@ body:has(.panel-resizer.resizing) {
 .preview-unavailable-title {
   font-weight: 600;
 }
+
+.processing-panel {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 70;
+  display: grid;
+  gap: var(--space-2);
+  width: min(400px, calc(100vw - 32px));
+  max-height: 75dvh;
+  overflow: auto;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: var(--card);
+  box-shadow: 0 18px 48px rgb(21 45 52 / 18%);
+  font-size: var(--font-size-small);
+}
+.processing-panel header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.processing-panel h2 {
+  margin: 0;
+  font-size: 14px;
+}
+.processing-panel p {
+  margin: 0;
+}
+.processing-start,
+.processing-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.processing-start select {
+  flex: 1;
+  min-width: 0;
+}
+.processing-confirm p {
+  flex-basis: 100%;
+}
+.processing-jobs {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.processing-jobs li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.processing-jobs li.failed > svg {
+  color: var(--danger);
+}
+.processing-file {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.processing-file:hover {
+  background: var(--muted);
+}
+.processing-file span,
+.processing-file small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.processing-file small {
+  color: var(--muted-text);
+}

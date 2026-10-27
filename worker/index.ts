@@ -19,6 +19,7 @@ import {
   type StudySession,
   type Learning,
   type Attempt,
+  type Job,
 } from '../shared/domain';
 export { ProcessingJob } from './jobs';
 export { TutorConversation } from './tutor-conversation';
@@ -88,6 +89,7 @@ import {
   directoryState,
   DirectoryError,
   purgeTargets,
+  sourceState,
 } from '../shared/directories';
 
 const json = (value: unknown, status = 200) =>
@@ -117,6 +119,16 @@ export async function internal<T>(env: Env, path: string, body?: unknown): Promi
   );
   if (!response.ok) throw new ApiError('Library operation failed', response.status);
   return response.json<T>();
+}
+/** Queues a file's preparation in one language; an existing job is returned unchanged. */
+function startJob(env: Env, file: Source, locale: z.infer<typeof localeSchema>) {
+  const id = `${file.id}-v${file.version}-${locale}`;
+  return env.JOBS.get(env.JOBS.idFromName(id)).fetch(
+    new Request('http://internal/start', {
+      method: 'POST',
+      body: JSON.stringify({ id, file, locale }),
+    }),
+  );
 }
 async function boundedJson(request: Request) {
   const reader = request.body?.getReader();
@@ -178,6 +190,12 @@ export class Library extends DurableObject<Env> {
     const url = new URL(request.url),
       path = url.pathname;
     try {
+      if (path === '/internal/prepared')
+        return json(
+          [...(await this.ctx.storage.list({ prefix: 'learning:' })).keys()].map((key) =>
+            key.slice('learning:'.length),
+          ),
+        );
       if (path === '/internal/key')
         return json({ key: (await this.ctx.storage.get<string>('apiKey')) || null });
       if (path === '/internal/tutor-artifact' && request.method === 'POST') {
@@ -932,6 +950,50 @@ export default {
       if (jobMatch) {
         return env.JOBS.get(env.JOBS.idFromName(jobMatch[1])).fetch(request);
       }
+      // The preparation queue: every library file with its job in one language, if any.
+      if (
+        (url.pathname === '/api/jobs' && request.method === 'GET') ||
+        (url.pathname === '/api/jobs/batch' && request.method === 'POST')
+      ) {
+        const locale = localeSchema.parse(
+          request.method === 'GET'
+            ? url.searchParams.get('locale')
+            : (await boundedJson(request)).locale,
+        );
+        const catalog = await internal<{ files: Source[]; directories: Directory[] }>(
+          env,
+          '/api/catalog',
+        );
+        const files = catalog.files.filter(
+          (file) => sourceState(file, catalog.directories) === 'files',
+        );
+        const prepared = new Set(await internal<string[]>(env, '/internal/prepared'));
+        const items = await Promise.all(
+          files.map(async (file) => {
+            const id = `${file.id}-v${file.version}-${locale}`;
+            const response = await env.JOBS.get(env.JOBS.idFromName(id)).fetch(
+              `http://internal/status?summary`,
+            );
+            return {
+              file,
+              prepared: prepared.has(file.id),
+              job: await response.json<Job | null>(),
+            };
+          }),
+        );
+        if (request.method === 'GET')
+          return json(
+            items.map(({ file, prepared, job }) => ({ sourceId: file.id, prepared, job })),
+          );
+        // Pending files were never prepared, in any language, and have no job in this one.
+        const pending = items.filter(({ prepared, job }) => !prepared && !job);
+        if (pending.length) {
+          const { key } = await internal<{ key: string | null }>(env, '/internal/key');
+          if (!key) throw new ApiError('Add a Meta API key in Settings', 409);
+        }
+        for (const { file } of pending) await startJob(env, file, locale);
+        return json({ queued: pending.map(({ file }) => file.id) });
+      }
       if (url.pathname === '/api/jobs' && request.method === 'POST') {
         const data = z
           .object({ sourceId: z.string().uuid(), locale: localeSchema })
@@ -939,13 +1001,7 @@ export default {
         const file = await internal<Source>(env, `/api/files/${data.sourceId}`),
           { key } = await internal<{ key: string | null }>(env, '/internal/key');
         if (!key) throw new ApiError('Add a Meta API key in Settings', 409);
-        const id = `${file.id}-v${file.version}-${data.locale}`;
-        return env.JOBS.get(env.JOBS.idFromName(id)).fetch(
-          new Request('http://internal/start', {
-            method: 'POST',
-            body: JSON.stringify({ id, file, locale: data.locale }),
-          }),
-        );
+        return startJob(env, file, data.locale);
       }
       const visualMatch = url.pathname.match(/^\/api\/visuals\/([a-f0-9-]+)\/(\d+)\/([^/]+)$/);
       if (visualMatch && request.method === 'GET') {

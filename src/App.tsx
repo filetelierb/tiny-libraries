@@ -39,6 +39,7 @@ import {
   PenLine,
   Highlighter,
   MessageCircleQuestion,
+  Workflow,
 } from 'lucide-react';
 import {
   type Catalog,
@@ -71,6 +72,7 @@ import { recordDraft, recoverPositions, settleDrafts } from './workspace/positio
 import { cardDue, type DeckView } from '../shared/flashcards';
 import { SignalExplorer } from './SignalExplorer';
 import { PanelResizer, useDrawerFocus, usePanels } from './workspace/Panels';
+import { ProcessingPanel } from './workspace/ProcessingPanel';
 import {
   readWorkspace,
   workspacePatch,
@@ -237,6 +239,7 @@ export function App() {
   useDrawerFocus('right', !!catalog && !focus && panels.drawer === 'right', rightPanelRef, () =>
     setRight(false),
   );
+  const [processing, setProcessing] = useState(false);
   const [modal, setModal] = useState<'settings' | 'upload' | 'session' | 'rename' | 'split' | null>(
       null,
     ),
@@ -1002,6 +1005,13 @@ export function App() {
                 </Button>
                 <IconButton label={t.newFolder} onClick={() => treeActions.create('')}>
                   <FolderPlus />
+                </IconButton>
+                <IconButton
+                  label={t.preparationQueue}
+                  aria-pressed={processing}
+                  onClick={() => setProcessing((value) => !value)}
+                >
+                  <Workflow />
                 </IconButton>
                 <IconButton
                   label={
@@ -2378,6 +2388,16 @@ export function App() {
         </ContentBoundary>
       )}
       {annotationRequest && !annotationInline && annotationEditor(false)}
+      {processing && catalog && (
+        <ProcessingPanel
+          files={catalog.files.filter((f) => sourceState(f, catalog.directories) === 'files')}
+          locale={locale}
+          t={t}
+          open={(file) => openFile(file, 'retain')}
+          changed={() => void refresh()}
+          close={() => setProcessing(false)}
+        />
+      )}
       {modal === 'settings' && (
         <SettingsModal
           initial={catalog.settings}

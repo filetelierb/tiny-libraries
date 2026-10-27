@@ -51,6 +51,8 @@ export class ProcessingJob extends DurableObject<Env> {
       await this.ctx.storage.put('job', job);
       await this.ctx.storage.setAlarm(Date.now() + 100);
     }
+    if (new URL(request.url).searchParams.has('summary'))
+      return Response.json(job, { headers: { 'Cache-Control': 'no-store' } });
     const segments = await this.ctx.storage.get<Segment[]>('segments');
     return Response.json(
       { ...job, segments: segments || [] },
