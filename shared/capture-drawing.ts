@@ -32,13 +32,13 @@ export type CaptureSpace = z.infer<typeof captureSpaceSchema>;
 const color = z.string().regex(/^#[0-9a-fA-F]{6}$/);
 const id = z.string().uuid();
 const points = z.array(capturePointSchema).min(1).max(2000);
-const region = { shape: z.enum(['rect', 'stroke']), points, width: z.number().min(1).max(128) };
+const region = { shape: z.enum(['rect', 'stroke']), points, width: z.number().min(1).max(512) };
 export const captureObjectSchema = z.discriminatedUnion('kind', [
   z
-    .object({ id, kind: z.literal('pen'), points, color, width: z.number().min(1).max(24) })
+    .object({ id, kind: z.literal('pen'), points, color, width: z.number().min(1).max(128) })
     .strict(),
   z
-    .object({ id, kind: z.literal('highlight'), points, color, width: z.number().min(1).max(64) })
+    .object({ id, kind: z.literal('highlight'), points, color, width: z.number().min(1).max(256) })
     .strict(),
   z
     .object({
@@ -46,7 +46,7 @@ export const captureObjectSchema = z.discriminatedUnion('kind', [
       kind: z.literal('arrow'),
       points: z.tuple([capturePointSchema, capturePointSchema]),
       color,
-      width: z.number().min(1).max(24),
+      width: z.number().min(1).max(128),
     })
     .strict(),
   z
@@ -56,7 +56,7 @@ export const captureObjectSchema = z.discriminatedUnion('kind', [
       point: capturePointSchema,
       text: z.string().trim().min(1).max(2000),
       color,
-      fontSize: z.number().min(8).max(96),
+      fontSize: z.number().min(8).max(512),
       style: z.enum(['plain', 'sticky', 'bubble']),
       tail: capturePointSchema.optional(),
     })
@@ -67,6 +67,7 @@ export const captureObjectSchema = z.discriminatedUnion('kind', [
       id,
       kind: z.literal('comment'),
       point: capturePointSchema,
+      size: z.number().min(8).max(256).optional(),
       number: z.number().int().min(1).max(100),
       text: z.string().trim().min(1).max(2000),
       color,
@@ -78,7 +79,7 @@ export const captureObjectSchema = z.discriminatedUnion('kind', [
       id,
       kind: z.literal('mosaic'),
       ...region,
-      pixelSize: z.number().int().min(4).max(64),
+      pixelSize: z.number().int().min(4).max(256),
     })
     .strict(),
   z
@@ -88,6 +89,8 @@ export const captureObjectSchema = z.discriminatedUnion('kind', [
       ...region,
       color,
       caption: z.string().max(500).optional(),
+      captionFontSize: z.number().min(8).max(512).optional(),
+      borderWidth: z.number().min(1).max(64).optional(),
     })
     .strict(),
 ]);

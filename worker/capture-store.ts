@@ -8,6 +8,8 @@ import {
   type CaptureDescriptor,
   type CaptureSelection,
   type PublishedCapture,
+  captureRecordSchema as recordSchema,
+  type CaptureRecord,
 } from '../shared/captures';
 import {
   captureDrawingSchema,
@@ -35,24 +37,7 @@ export type CaptureRenderer = (
   base: Uint8Array,
   drawing: CaptureDrawing,
 ) => Promise<{ bytes: Uint8Array; width: number; height: number }>;
-const baseSchema = z.object({
-  digest: captureDigestSchema,
-  size: z
-    .number()
-    .int()
-    .positive()
-    .max(8 * 1024 * 1024),
-  space: captureSpaceSchema,
-  emptyDrawingDigest: captureDigestSchema,
-});
-const recordSchema = z.object({
-  format: z.literal(1),
-  descriptor: captureDescriptorSchema,
-  fingerprint: captureDigestSchema,
-  createdAt: z.string(),
-  base: baseSchema.optional(),
-});
-export type CaptureRecord = z.infer<typeof recordSchema>;
+export type { CaptureRecord } from '../shared/captures';
 const identity = z.string().uuid();
 export function captureBaseKey(owner: string, id: string, digest: string) {
   return `capture/${identity.parse(owner)}/${identity.parse(id)}/base/${captureDigestSchema.parse(digest)}`;

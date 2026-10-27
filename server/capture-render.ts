@@ -215,13 +215,14 @@ export async function renderCapture(bytes: Uint8Array, raw: CaptureDrawing) {
       ctx.fill();
     } else if (object.kind === 'text') textObject(ctx, object, drawing);
     else if (object.kind === 'comment') {
-      const p = point(object.point, drawing);
+      const p = point(object.point, drawing),
+        radius = object.size || 11;
       ctx.fillStyle = object.color;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, 11, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
       ctx.fill();
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 13px sans-serif';
+      ctx.font = `bold ${(radius * 13) / 11}px sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(String(object.number), p.x, p.y);
@@ -239,7 +240,7 @@ export async function renderCapture(bytes: Uint8Array, raw: CaptureDrawing) {
     } else if (object.kind === 'spotlight') {
       regionPath(ctx, object, drawing);
       ctx.strokeStyle = object.color;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = object.borderWidth || 2;
       ctx.stroke();
       if (object.caption)
         textObject(
@@ -250,7 +251,7 @@ export async function renderCapture(bytes: Uint8Array, raw: CaptureDrawing) {
             point: object.points[0],
             text: object.caption,
             color: object.color,
-            fontSize: 17,
+            fontSize: object.captionFontSize || 17,
             style: 'sticky',
           },
           drawing,

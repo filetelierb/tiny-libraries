@@ -5107,3 +5107,423 @@ body:has(.panel-resizer.resizing) {
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+
+.capture-collection {
+  margin-block: 24px;
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+.capture-collection > header,
+.capture-location-list > div,
+.capture-gallery-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.capture-collection h3,
+.capture-location-list h4 {
+  margin: 0;
+}
+.capture-collection h3 small {
+  color: var(--muted-text);
+  font-weight: normal;
+}
+.capture-collection .button > svg,
+.capture-tile-actions .button > svg {
+  width: 18px;
+  height: 18px;
+}
+.capture-collection-grid,
+.capture-view-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+  gap: 16px;
+  margin-block: 16px;
+}
+.capture-tile {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  background: var(--surface);
+}
+.capture-tile-preview {
+  width: 100%;
+  height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--muted);
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+.capture-tile-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.capture-tile > small {
+  display: block;
+  overflow-wrap: anywhere;
+  margin-block: 6px;
+  color: var(--muted-text);
+}
+.capture-tile-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.capture-tile-actions .button {
+  min-height: 44px;
+}
+.capture-tile-actions .button:first-child {
+  flex: 1;
+  white-space: nowrap;
+}
+.capture-location-list {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.capture-location-list > div {
+  flex-wrap: nowrap;
+}
+.capture-location-list span {
+  overflow-wrap: anywhere;
+}
+.capture-draft-status,
+.capture-studio-notice {
+  color: var(--muted-text);
+  font-size: 14px;
+}
+.capture-recovery-review,
+.capture-conflict {
+  background: var(--muted);
+  border: 1px solid var(--border);
+  padding: 16px;
+  margin-block: 16px;
+}
+.capture-conflict fieldset {
+  margin-block: 12px;
+  padding: 10px;
+  border: 1px solid var(--border);
+}
+.capture-conflict pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  max-height: 150px;
+  overflow: auto;
+}
+.capture-read-locations {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+.capture-view-grid button {
+  border: 1px solid var(--border);
+  padding: 8px;
+  text-align: left;
+}
+.capture-view-grid img {
+  display: block;
+  width: 100%;
+  max-height: 240px;
+  object-fit: contain;
+}
+.capture-view-grid span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.annotation-thumbnail > img {
+  display: block;
+  width: 100%;
+  max-height: 200px;
+  object-fit: contain;
+}
+.modal.capture-studio {
+  width: calc(100vw - 32px);
+  max-width: 1440px;
+  height: calc(100dvh - 32px);
+  max-height: none;
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.capture-studio .modal-title {
+  padding: 12px 20px;
+  margin: 0;
+  flex-shrink: 0;
+}
+.capture-studio-notice {
+  margin: 0;
+  padding: 0 20px 8px;
+}
+.capture-tool-controls {
+  border: 0;
+  margin: 0;
+  padding: 4px 16px 10px;
+  flex-shrink: 0;
+}
+.capture-tool-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.capture-tool-row .icon-button {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-sm);
+}
+.capture-tool-row [aria-pressed='true'],
+.capture-object-list [aria-pressed='true'] {
+  color: var(--primary);
+  background: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+.capture-tool-divider {
+  height: 28px;
+  border-left: 1px solid var(--border);
+  margin-inline: 8px;
+}
+.capture-properties {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+  min-height: 44px;
+}
+.capture-properties label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+.capture-properties input[type='color'] {
+  width: 44px;
+  height: 36px;
+  padding: 4px;
+}
+.capture-properties input[type='range'] {
+  width: 90px;
+}
+.capture-properties input[type='number'] {
+  width: 80px;
+  padding: 6px;
+}
+.capture-properties select,
+.capture-properties > input {
+  width: auto;
+  max-width: 100%;
+  padding: 6px;
+}
+.capture-work-area {
+  min-height: 120px;
+  flex: 1;
+  overflow: auto;
+  background: #233b3c;
+  overscroll-behavior: contain;
+}
+.capture-surface-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.capture-canvas {
+  display: block;
+  flex: none;
+  background: white;
+  touch-action: none;
+  user-select: none;
+  box-shadow: 0 2px 10px #0003;
+}
+.capture-canvas:focus-visible {
+  outline: 2px solid #b6ded8;
+  outline-offset: 3px;
+}
+.capture-studio-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.capture-studio-footer .modal-actions {
+  margin: 0;
+}
+.capture-studio-footer span {
+  font-size: 13px;
+  color: var(--muted-text);
+}
+.capture-object-list {
+  border-top: 1px solid var(--border);
+  padding: 8px 20px;
+  max-height: 160px;
+  overflow: auto;
+  flex-shrink: 0;
+}
+.capture-object-list > .button {
+  display: block;
+  text-align: left;
+  width: 100%;
+  overflow-wrap: anywhere;
+}
+.capture-studio > .form-error {
+  padding: 0 20px;
+  margin: 4px 0;
+}
+.capture-text-editor {
+  z-index: 5;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  background: var(--surface);
+  box-shadow: 0 6px 24px #0004;
+  overflow: auto;
+}
+.capture-text-editor label {
+  font-size: 14px;
+}
+.capture-text-editor textarea {
+  margin-top: 6px;
+  min-height: 72px;
+  max-height: 160px;
+  resize: none;
+  padding: 8px;
+}
+.capture-text-editor .modal-actions {
+  margin-top: 8px;
+  gap: 6px;
+}
+.capture-text-editor .button {
+  min-height: 44px;
+}
+.modal.capture-gallery {
+  width: min(1100px, calc(100vw - 32px));
+}
+.capture-gallery-tools {
+  margin-bottom: 12px;
+}
+.capture-gallery-tools > span {
+  flex: 1;
+  overflow-wrap: anywhere;
+  min-width: 100px;
+}
+.capture-gallery-tools .icon-button {
+  width: 44px;
+  height: 44px;
+}
+.capture-gallery-scroll {
+  overflow: auto;
+  max-height: 65dvh;
+  background: var(--muted);
+}
+.capture-gallery-scroll img {
+  display: block;
+  margin: auto;
+}
+@media (max-width: 600px) {
+  .modal.capture-studio {
+    width: 100vw;
+    height: 100dvh;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+  }
+  .capture-studio .modal-title {
+    padding: 8px 12px;
+  }
+  .capture-studio-notice {
+    padding: 0 12px 6px;
+    font-size: 12px;
+  }
+  .capture-tool-controls {
+    padding: 0 8px 8px;
+  }
+  .capture-tool-row {
+    gap: 0;
+  }
+  .capture-properties {
+    gap: 8px;
+  }
+  .capture-properties label {
+    font-size: 12px;
+  }
+  .capture-studio-footer {
+    padding: 6px 8px;
+    gap: 4px;
+  }
+  .capture-studio-footer .modal-actions {
+    width: 100%;
+  }
+  .capture-studio-footer .modal-actions > .button {
+    flex: 1;
+    min-height: 44px;
+  }
+  .capture-object-list {
+    padding: 6px 12px;
+  }
+  .capture-collection > header > .button {
+    min-height: 44px;
+  }
+}
+
+.annotation-edit-fields {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.annotation-edit-fields > label {
+  display: block;
+  margin-block: 16px;
+}
+@media (max-height: 500px) {
+  .capture-studio .modal-title {
+    padding: 6px 12px;
+    min-height: 44px;
+  }
+  .capture-studio-notice {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .capture-tool-controls {
+    padding: 0 8px 4px;
+  }
+  .capture-properties {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    max-width: 100%;
+  }
+  .capture-properties > * {
+    flex-shrink: 0;
+  }
+  .capture-work-area {
+    min-height: 64px;
+  }
+  .capture-object-list {
+    max-height: 65px;
+    padding-block: 4px;
+  }
+  .capture-studio-footer {
+    padding: 4px 8px;
+  }
+  .capture-studio-footer .button {
+    min-height: 44px;
+  }
+}

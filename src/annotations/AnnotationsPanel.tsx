@@ -9,6 +9,8 @@ import { DirectoryTree, type TreeActions } from '../workspace/DirectoryTree';
 import { queryAnnotations } from './api';
 import { RichContent } from './RichContent';
 import { StrokeLayer } from './Sketch';
+import { CaptureCollectionView, stampLabel } from './CaptureCollection';
+import { capturePreviewUrl } from './captureClient';
 import type { T } from '../i18n';
 
 export function AnnotationsPanel({
@@ -299,7 +301,25 @@ export function AnnotationsPanel({
         >
           {opened.location.quote && <blockquote>{opened.location.quote}</blockquote>}
           <RichContent document={opened.document} t={t} />
-          {opened.capture && (
+          {opened.captures !== undefined && (
+            <CaptureCollectionView owner={opened.id} items={opened.captures} t={t} />
+          )}
+          {!!opened.stamps?.length && (
+            <div className="capture-read-locations">
+              {opened.stamps.map((stamp) => (
+                <Button
+                  key={stamp.id}
+                  onClick={() => {
+                    navigate(stamp.sourceId, stamp.location);
+                    setOpened(null);
+                  }}
+                >
+                  {stampLabel(stamp, t)}
+                </Button>
+              ))}
+            </div>
+          )}
+          {opened.captures === undefined && opened.capture && (
             <div
               className="sketch-surface annotation-capture"
               style={{ aspectRatio: `${opened.capture.width}/${opened.capture.height}` }}
@@ -376,7 +396,23 @@ function AnnotationPreview({ item, t, open }: { item: AnnotationSummary; t: T; o
           {item.text.length > 240 ? '…' : ''}
         </p>
       )}
-      {item.capture && (
+      {!!item.captures?.length && (
+        <button
+          className="annotation-thumbnail"
+          onClick={open}
+          aria-label={`${t.captureGallery} · ${item.captures.length}`}
+        >
+          <img
+            loading="lazy"
+            src={capturePreviewUrl(item.id, item.captures[0])}
+            alt={item.captures[0].label || t.capturePreview}
+          />
+          <span>
+            {item.captures.length} {t.captureCollection}
+          </span>
+        </button>
+      )}
+      {item.captures === undefined && item.capture && (
         <button className="annotation-thumbnail" onClick={open} aria-label={t.openCapture}>
           <span
             className="sketch-surface"

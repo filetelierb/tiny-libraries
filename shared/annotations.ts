@@ -1,7 +1,12 @@
 import { z } from 'zod';
 import { locationSchema, type SourceLocation } from './locations';
 export { locationSchema, type SourceLocation } from './locations';
-import { captureSelectionsSchema, sourceStampsSchema, type PublishedCapture } from './captures';
+import {
+  captureSelectionsSchema,
+  sourceStampsSchema,
+  publishedCaptureSchema,
+  type PublishedCapture,
+} from './captures';
 import { MAX_RESOURCE_TABS, type StudySession, type Source } from './domain';
 
 export const annotationQuerySchema = z.object({
@@ -248,6 +253,38 @@ export type Annotation = Omit<
   };
 };
 export type AnnotationSummary = Omit<Annotation, 'document' | 'strokes'> & { strokeCount: number };
+const {
+  expectedRevision: _snapshotRevision,
+  mutationId: _snapshotMutation,
+  captures: _snapshotSelections,
+  ...snapshotFields
+} = annotationInputSchema.shape;
+export const annotationSnapshotSchema = z.object({
+  ...snapshotFields,
+  captures: z.array(publishedCaptureSchema).max(12).optional(),
+  revision: z.number().int().positive(),
+  text: z.string().max(120000),
+  deleted: z.boolean(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  capture: z
+    .object({
+      id: z.string().uuid(),
+      width: z.number().int().positive().max(4096),
+      height: z.number().int().positive().max(4096),
+      size: z
+        .number()
+        .int()
+        .positive()
+        .max(8 * 1024 * 1024),
+      operationId: z.string().uuid().optional(),
+      digest: z
+        .string()
+        .regex(/^[a-f0-9]{64}$/)
+        .optional(),
+    })
+    .optional(),
+});
 export function annotationSummary({
   document: _document,
   strokes,

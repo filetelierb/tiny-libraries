@@ -89,6 +89,25 @@ export const publishedCaptureSchema = captureSelectionSchema.extend({
   stamp: sourceStampSchema.optional(),
 });
 export type PublishedCapture = z.infer<typeof publishedCaptureSchema>;
+export const captureRecordSchema = z.object({
+  format: z.literal(1),
+  descriptor: captureDescriptorSchema,
+  fingerprint: captureDigestSchema,
+  createdAt: z.string(),
+  base: z
+    .object({
+      digest: captureDigestSchema,
+      size: z
+        .number()
+        .int()
+        .positive()
+        .max(8 * 1024 * 1024),
+      space: captureSpaceSchema,
+      emptyDrawingDigest: captureDigestSchema,
+    })
+    .optional(),
+});
+export type CaptureRecord = z.infer<typeof captureRecordSchema>;
 export async function captureDigest(value: Uint8Array | string) {
   const data = typeof value === 'string' ? new TextEncoder().encode(value) : Uint8Array.from(value);
   return [...new Uint8Array(await crypto.subtle.digest('SHA-256', data))]

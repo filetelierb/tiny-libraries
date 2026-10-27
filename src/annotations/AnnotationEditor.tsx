@@ -18,9 +18,9 @@ import {
 } from 'lucide-react';
 import {
   annotationInputSchema,
-  plainDocument,
   richDocumentSchema,
-  drawingSchema,
+  annotationSnapshotSchema,
+  richText,
   type Annotation,
   type DrawingStroke,
   type SourceLocation,
@@ -28,9 +28,21 @@ import {
 import type { Source } from '../../shared/domain';
 import { api } from '../api';
 import { Button, IconButton, Modal } from '../design/components';
-import { Sketch } from './Sketch';
+import { CaptureCollectionEditor } from './CaptureCollection';
+import { loadEditorSession, type EditorSession } from './editorSession';
+import {
+  DraftWriteQueue,
+  editorDrafts,
+  editableNote,
+  mergeNoteChanges,
+  type NoteDraft,
+  type NoteEdit,
+  type NoteEditField,
+} from './draftStore';
+import { ApiResponseError } from '../api';
 import type { T } from '../i18n';
 import { InlineMath, BlockMath } from './mathNodes';
+import { RichContent } from './RichContent';
 
 export type CaptureImage = { url: string; width: number; height: number; blob?: Blob };
 export type AnnotationRequest = {
@@ -43,76 +55,93 @@ export type AnnotationRequest = {
   references?: string[];
   origin?: 'manual' | 'tutor';
 };
-export default function AnnotationEditor({
-  request,
-  sessionId,
-  source,
-  t,
-  close,
-  saved,
-}: {
+type EditorProps = {
   request: AnnotationRequest;
   sessionId: string;
   source: Source | null;
   t: T;
   close: () => void;
   saved: (value: Annotation) => void;
-}) {
-  const draftKey = `tl:annotation-draft:${request.initial?.id || `${sessionId}:${request.sourceId}:${JSON.stringify(request.location)}`}`;
-  const previousDraftKey = `tl:note-draft:${sessionId}:${request.sourceId}`;
-  const [previousDraft] = useState(() => {
-    try {
-      return !request.initial && !request.markdown
-        ? localStorage.getItem(previousDraftKey) || ''
-        : '';
-    } catch {
-      return '';
-    }
-  });
-  const [draft] = useState(() => {
-    try {
-      const value = JSON.parse(localStorage.getItem(draftKey) || 'null') as {
-        title?: string;
-        document?: unknown;
-        markdown?: string;
-        sourceMode?: boolean;
-        strokes?: DrawingStroke[];
-      } | null;
-      if (!value) return null;
-      const document = richDocumentSchema.safeParse(value.document);
-      const drawing = drawingSchema.safeParse(value.strokes);
-      return {
-        title: typeof value.title === 'string' ? value.title.slice(0, 240) : '',
-        document: document.success ? document.data : undefined,
-        markdown: typeof value.markdown === 'string' ? value.markdown : '',
-        sourceMode: value.sourceMode === true,
-        strokes: drawing.success ? drawing.data : [],
-      };
-    } catch {
-      return null;
-    }
-  });
-  const [title, setTitle] = useState(draft?.title || request.initial?.title || ''),
+};
+export default function AnnotationEditor(props: EditorProps) {
+  const [session, setSession] = useState<EditorSession | null>(null),
+    [error, setError] = useState('');
+  useEffect(() => {
+    let alive = true;
+    void loadEditorSession(props.request, props.sessionId, props.source)
+      .then((value) => {
+        if (alive) setSession(value);
+      })
+      .catch((e) => {
+        if (alive) setError(e instanceof Error ? e.message : props.t.captureRecoveryError);
+      });
+    return () => {
+      alive = false;
+      if (props.request.capture?.blob) URL.revokeObjectURL(props.request.capture.url);
+    };
+  }, []);
+  return session ? (
+    <EditorForm {...props} session={session} />
+  ) : (
+    <Modal
+      title={props.request.initial ? props.t.editAnnotation : props.t.newAnnotation}
+      close={props.close}
+      closeLabel={props.t.close}
+    >
+      <p role={error ? 'alert' : 'status'}>{error || props.t.loadingAnnotations}</p>
+    </Modal>
+  );
+}
+function EditorForm({
+  request,
+  source,
+  t,
+  close,
+  saved,
+  session,
+}: { session: EditorSession } & EditorProps) {
+  const [draft, setDraft] = useState(session.note),
     [pending, setPending] = useState(false),
     [error, setError] = useState(''),
-    [sourceMode, setSourceMode] = useState(draft?.sourceMode || false),
-    [markdown, setMarkdown] = useState(draft?.markdown || request.markdown || ''),
-    [strokes, setStrokes] = useState<DrawingStroke[]>(
-      draft?.strokes || request.initial?.strokes || [],
+    [notice, setNotice] = useState(
+      session.recovered
+        ? `${t.captureRecovered} ${session.incomingAdded ? t.captureIncomingAdded : session.incomingSkipped ? t.captureLimit : ''}`
+        : '',
     ),
+    [localSaved, setLocalSaved] = useState(true),
     [link, setLink] = useState<string | null>(null);
-  const record = useRef(request.initial),
-    initialContent = useRef(
-      draft?.document ||
-        request.initial?.document ||
-        request.markdown ||
-        plainDocument(previousDraft),
-    );
-  const captureOperation = useRef(crypto.randomUUID());
-  const capturePending = useRef(false);
-  const draftRef = useRef({ title, sourceMode, markdown, strokes });
-  draftRef.current = { title, sourceMode, markdown, strokes };
-  const documentRef = useRef<unknown>(initialContent.current);
+  const [conflict, setConflict] = useState<{
+      remote: Annotation;
+      local: NoteEdit;
+      merged: NoteEdit;
+      fields: NoteEditField[];
+    } | null>(null),
+    [choices, setChoices] = useState<Partial<Record<NoteEditField, 'mine' | 'saved'>>>({});
+  const draftRef = useRef(draft),
+    writes = useRef(new DraftWriteQueue()),
+    alive = useRef(true);
+  const { title, sourceMode, markdown } = draft;
+  function changeNote(patch: Partial<NoteDraft>, semantic = true) {
+    const next = {
+      ...draftRef.current,
+      ...patch,
+      ...(semantic ? { stamp: crypto.randomUUID() } : {}),
+    };
+    draftRef.current = next;
+    setDraft(next);
+    setLocalSaved(false);
+    void writes.current
+      .enqueue([{ table: 'notes', key: session.key, value: next }], 'note')
+      .then(() => {
+        if (alive.current) setLocalSaved(true);
+      })
+      .catch((e) => {
+        if (alive.current) setError(e instanceof Error ? e.message : t.captureDraftError);
+      });
+    return next;
+  }
+  const setTitle = (title: string) => changeNote({ title }),
+    setMarkdown = (markdown: string) => changeNote({ markdown });
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -124,13 +153,32 @@ export default function AnnotationEditor({
       InlineMath,
       BlockMath,
     ],
-    content: initialContent.current,
-    contentType: typeof initialContent.current === 'string' ? 'markdown' : 'json',
+    content: session.note.document,
+    contentType: 'json',
     editorProps: {
       attributes: { role: 'textbox', 'aria-label': t.annotationBody, spellcheck: 'true' },
     },
-    onUpdate: ({ editor }) => persist(editor.getJSON()),
+    onUpdate: ({ editor }) => changeNote({ document: editor.getJSON() }),
   });
+  useEffect(() => {
+    editor?.setEditable(!pending && !conflict, false);
+  }, [editor, pending, conflict]);
+  useEffect(
+    () => () => {
+      alive.current = false;
+    },
+    [],
+  );
+  const leave = async () => {
+    if (pending) return;
+    try {
+      await writes.current.flush();
+      await session.workspace.flush();
+      close();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t.captureDraftError);
+    }
+  };
   const toolbar = useEditorState({
     editor,
     selector: ({ editor }) => ({
@@ -145,255 +193,455 @@ export default function AnnotationEditor({
         : 'paragraph',
     }),
   });
-  const image: CaptureImage | undefined =
-    request.capture ||
-    (record.current?.capture
-      ? {
-          url: `/api/annotations/${record.current.id}/capture?v=${record.current.capture.id}`,
-          width: record.current.capture.width,
-          height: record.current.capture.height,
-        }
-      : undefined);
-  function persist(document: unknown = documentRef.current) {
-    if (document !== undefined) documentRef.current = document;
-    try {
-      localStorage.setItem(
-        draftKey,
-        JSON.stringify({ ...draftRef.current, document: documentRef.current }),
-      );
-    } catch {}
-  }
-  useEffect(() => persist(editor?.getJSON()), [title, sourceMode, markdown, strokes]);
-  useEffect(() => {
-    editor?.setEditable(!pending);
-  }, [editor, pending]);
-  useEffect(
-    () => () => {
-      if (request.capture?.blob) URL.revokeObjectURL(request.capture.url);
-    },
-    [],
-  );
   const toggleSource = () => {
     if (!editor) return;
-    if (sourceMode) editor.commands.setContent(markdown, { contentType: 'markdown' });
-    else setMarkdown(editor.getMarkdown());
-    setSourceMode(!sourceMode);
+    if (sourceMode) {
+      editor.commands.setContent(markdown, { contentType: 'markdown' });
+      changeNote({ sourceMode: false, document: editor.getJSON() });
+    } else changeNote({ sourceMode: true, markdown: editor.getMarkdown() });
   };
-  async function saveCapture(): Promise<Annotation> {
-    const value = record.current!;
-    const response = await fetch(
-      `/api/annotations/${value.id}/capture?revision=${value.revision}&width=${request.capture!.width}&height=${request.capture!.height}&operationId=${captureOperation.current}`,
-      { method: 'POST', headers: { 'Content-Type': 'image/png' }, body: request.capture!.blob },
-    );
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || t.error);
-    record.current = data;
-    capturePending.current = false;
-    return data;
+  function localFields(note: NoteDraft): NoteEdit {
+    const collection = session.workspace.getSnapshot();
+    return {
+      title: note.title,
+      document: note.document,
+      strokes: note.strokes,
+      location: note.location || note.base?.location || request.location,
+      references:
+        note.references ||
+        note.base?.references ||
+        request.references ||
+        (source ? [source.id] : []),
+      ...(collection.managed
+        ? {
+            captures: collection.items.map((item) => {
+              if (!item.version) throw new Error(t.capturePreviewUpdating);
+              return {
+                id: item.version.id,
+                drawingDigest: item.localDrawingDigest || item.version.drawingDigest,
+                label: item.label,
+              };
+            }),
+          }
+        : {}),
+      ...(collection.stampsManaged ? { stamps: collection.stamps } : {}),
+    };
   }
-  const save = async () => {
-    if (!editor || pending) return;
+  async function reviewConflict() {
+    try {
+      const remote = annotationSnapshotSchema.parse(
+        await api(`/annotations/${draftRef.current.ownerId}`),
+      );
+      if (
+        remote.deleted ||
+        remote.sessionId !== session.note.context.sessionId ||
+        remote.sourceId !== session.note.context.sourceId ||
+        remote.sourceVersion !== session.note.context.sourceVersion
+      )
+        throw new Error(t.sourceUnavailable);
+      const local = localFields(draftRef.current),
+        result = mergeNoteChanges(
+          draftRef.current.base ? editableNote(draftRef.current.base) : undefined,
+          local,
+          editableNote(remote),
+        );
+      setChoices({});
+      setConflict({ remote, local, merged: result.merged, fields: result.conflicts });
+      setError('');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t.error);
+    }
+  }
+  async function applyMerge() {
+    if (!conflict || conflict.fields.some((field) => !choices[field])) return;
+    setPending(true);
+    try {
+      const merged = { ...conflict.merged };
+      for (const field of conflict.fields)
+        Object.assign(merged, {
+          [field]:
+            choices[field] === 'saved'
+              ? editableNote(conflict.remote)[field]
+              : conflict.local[field],
+        });
+      const collection = session.workspace.getSnapshot(),
+        known = new Map(
+          [
+            ...collection.items.flatMap((item) => (item.version ? [item.version] : [])),
+            ...(conflict.remote.captures || []),
+          ].map((item) => [`${item.id}:${item.drawingDigest}`, item]),
+        );
+      const versions = (merged.captures || []).map((item) => {
+        const version = known.get(`${item.id}:${item.drawingDigest}`);
+        if (!version) throw new Error(t.capturePreviewUpdating);
+        return { ...version, label: item.label };
+      });
+      await session.workspace.replace(
+        versions,
+        merged.captures !== undefined,
+        merged.stamps || [],
+        merged.stamps !== undefined,
+      );
+      const nextBase = annotationSnapshotSchema.parse(conflict.remote);
+      editor?.commands.setContent(merged.document, { emitUpdate: false });
+      changeNote({
+        title: merged.title,
+        document: merged.document,
+        strokes: merged.strokes,
+        location: merged.location,
+        references: merged.references,
+        sourceMode: false,
+        base: nextBase,
+        pending: undefined,
+        unverified: undefined,
+      });
+      await writes.current.flush();
+      setConflict(null);
+      setNotice(t.captureDraftSaved);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t.error);
+    } finally {
+      setPending(false);
+    }
+  }
+  async function save() {
+    if (!editor || pending || conflict || draftRef.current.unverified) return;
     setPending(true);
     setError('');
     try {
       if (request.sourceId && !source) throw new Error(t.sourceUnavailable);
-      // Complete an interrupted image upload before making another metadata revision.
-      if (capturePending.current) await saveCapture();
-      if (sourceMode) editor.commands.setContent(markdown, { contentType: 'markdown' });
-      const input = annotationInputSchema.parse({
-        id: request.id,
-        sessionId: request.initial?.sessionId || sessionId,
-        sourceId: request.sourceId,
-        sourceVersion: request.initial?.sourceVersion ?? source?.version ?? null,
-        title,
-        document: editor.getJSON(),
-        location: request.location,
-        strokes,
-        origin: request.origin || request.initial?.origin || 'manual',
-        references:
-          request.references || request.initial?.references || (source ? [source.id] : []),
-        expectedRevision: record.current?.revision || 0,
-      });
-      let value = await api<Annotation>(`/annotations/${request.id}`, 'PUT', input);
-      record.current = value;
-      if (request.capture?.blob && !value.capture) {
-        capturePending.current = true;
-        value = await saveCapture();
+      let current = draftRef.current;
+      if (!current.pending) {
+        if (current.sourceMode) {
+          editor.commands.setContent(current.markdown, { contentType: 'markdown' });
+          current = changeNote({ document: richDocumentSchema.parse(editor.getJSON()) });
+        }
+        const collection = await session.workspace.stageAll(),
+          fields = localFields(current);
+        const input = annotationInputSchema.parse({
+          id: current.ownerId,
+          ...current.context,
+          ...fields,
+          origin: request.origin || current.base?.origin || 'manual',
+          expectedRevision: current.base?.revision || 0,
+          mutationId: crypto.randomUUID(),
+        });
+        current = changeNote(
+          { pending: { input, noteStamp: current.stamp, collectionStamp: collection.stamp } },
+          false,
+        );
       }
-      localStorage.removeItem(draftKey);
-      if (previousDraft && localStorage.getItem(previousDraftKey) === previousDraft)
-        localStorage.removeItem(previousDraftKey);
-      saved(value);
-    } catch (error) {
-      setError(error instanceof Error ? error.message : t.error);
+      await writes.current.flush();
+      await session.workspace.flush();
+      const pendingSave = current.pending!,
+        value = annotationSnapshotSchema.parse(
+          await api(`/annotations/${current.ownerId}`, 'PUT', pendingSave.input),
+        );
+      await writes.current.flush();
+      await session.workspace.flush();
+      const cleared = await editorDrafts.acknowledge(
+        session.key,
+        current.ownerId,
+        pendingSave,
+        value,
+      );
+      if (!alive.current) return;
+      if (cleared) {
+        // Remove only the older text draft that was present when this editor opened.
+        try {
+          for (const previous of session.note.migratedDrafts || [])
+            if (localStorage.getItem(previous.key) === previous.value)
+              localStorage.removeItem(previous.key);
+        } catch {}
+        saved(value);
+      } else {
+        changeNote(
+          {
+            base: annotationSnapshotSchema.parse(value),
+            pending: undefined,
+            unverified: undefined,
+          },
+          false,
+        );
+        setNotice(t.captureNewerDraft);
+      }
+    } catch (e) {
+      if (alive.current) {
+        if (e instanceof ApiResponseError && e.status === 409) await reviewConflict();
+        else setError(e instanceof Error ? e.message : t.error);
+      }
     } finally {
-      setPending(false);
+      if (alive.current) setPending(false);
     }
+  }
+  const fieldLabels: Record<NoteEditField, string> = {
+    title: t.captureRenameField,
+    document: t.captureDocumentField,
+    location: t.captureLocationField,
+    strokes: t.captureStrokesField,
+    references: t.captureReferencesField,
+    captures: t.captureCapturesField,
+    stamps: t.captureStampsField,
   };
+  function fieldPreview(value: unknown) {
+    return (
+      value && typeof value === 'object' && 'type' in value
+        ? richText(value as Annotation['document'])
+        : typeof value === 'string'
+          ? value
+          : JSON.stringify(value) || '—'
+    ).slice(0, 600);
+  }
   return (
     <Modal
       title={request.initial ? t.editAnnotation : t.newAnnotation}
       close={() => {
-        if (!pending) close();
+        if (!pending) void leave();
       }}
       closeLabel={t.close}
     >
       <div className="annotation-editor" aria-busy={pending}>
-        <p className="annotation-source">
-          {source?.name || t.sessionAnnotation}
-          {request.location.page
-            ? ` · ${t.page} ${request.location.page}`
-            : request.location.seconds != null
-              ? ` · ${Math.floor(request.location.seconds / 60)}:${String(Math.floor(request.location.seconds % 60)).padStart(2, '0')}`
-              : ''}
-        </p>
-        {request.location.quote && (
-          <blockquote className="selected-quote">{request.location.quote}</blockquote>
-        )}
-        <label>
-          {t.annotationTitle}
-          <input
-            aria-label={t.annotationTitle}
-            maxLength={240}
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            disabled={pending}
-          />
-        </label>
-        <div className="rich-toolbar" role="toolbar" aria-label={t.annotationFormatting}>
-          <select
-            aria-label={t.textStyle}
-            disabled={sourceMode || pending}
-            value={toolbar?.heading || 'paragraph'}
-            onChange={(event) => {
-              if (event.target.value === 'paragraph') editor?.chain().focus().setParagraph().run();
-              else
-                editor
-                  ?.chain()
-                  .focus()
-                  .toggleHeading({ level: Number(event.target.value) as 1 | 2 | 3 })
-                  .run();
-            }}
-          >
-            <option value="paragraph">{t.paragraph}</option>
-            <option value="1">{t.headingOne}</option>
-            <option value="2">{t.headingTwo}</option>
-            <option value="3">{t.headingThree}</option>
-          </select>
-          <IconButton
-            label={t.bold}
-            disabled={sourceMode || pending}
-            aria-pressed={toolbar?.bold}
-            onClick={() => editor?.chain().focus().toggleBold().run()}
-          >
-            <Bold />
-          </IconButton>
-          <IconButton
-            label={t.italic}
-            disabled={sourceMode || pending}
-            aria-pressed={toolbar?.italic}
-            onClick={() => editor?.chain().focus().toggleItalic().run()}
-          >
-            <Italic />
-          </IconButton>
-          <IconButton
-            label={t.underline}
-            disabled={sourceMode || pending}
-            aria-pressed={toolbar?.underline}
-            onClick={() => editor?.chain().focus().toggleUnderline().run()}
-          >
-            <Underline />
-          </IconButton>
-          <IconButton
-            label={t.bulletList}
-            disabled={sourceMode || pending}
-            aria-pressed={toolbar?.list}
-            onClick={() => editor?.chain().focus().toggleBulletList().run()}
-          >
-            <List />
-          </IconButton>
-          <IconButton
-            label={t.numberedList}
-            disabled={sourceMode || pending}
-            aria-pressed={toolbar?.ordered}
-            onClick={() => editor?.chain().focus().toggleOrderedList().run()}
-          >
-            <ListOrdered />
-          </IconButton>
-          <IconButton
-            label={t.insertLink}
-            disabled={sourceMode || pending}
-            onClick={() => setLink(editor?.getAttributes('link').href || 'https://')}
-          >
-            <Link />
-          </IconButton>
-          <IconButton
-            label={t.blockQuote}
-            disabled={sourceMode || pending}
-            onClick={() => editor?.chain().focus().toggleBlockquote().run()}
-          >
-            <Quote />
-          </IconButton>
-          <IconButton
-            label={t.codeBlock}
-            disabled={sourceMode || pending}
-            onClick={() => editor?.chain().focus().toggleCodeBlock().run()}
-          >
-            <Code2 />
-          </IconButton>
-          <IconButton
-            label={t.insertTable}
-            disabled={sourceMode || pending}
-            onClick={() =>
-              editor?.chain().focus().insertTable({ rows: 3, cols: 2, withHeaderRow: true }).run()
-            }
-          >
-            <Table />
-          </IconButton>
-          <IconButton
-            label={t.undo}
-            disabled={sourceMode || pending}
-            onClick={() => editor?.chain().focus().undo().run()}
-          >
-            <Undo2 />
-          </IconButton>
-          <IconButton
-            label={t.redo}
-            disabled={sourceMode || pending}
-            onClick={() => editor?.chain().focus().redo().run()}
-          >
-            <Redo2 />
-          </IconButton>
-          <Button disabled={pending} onClick={toggleSource}>
-            {sourceMode ? t.visualEditor : t.markdownSource}
-          </Button>
-        </div>
-        {toolbar?.table && !sourceMode && (
-          <fieldset disabled={pending} className="table-tools">
-            <Button onClick={() => editor?.chain().focus().addRowAfter().run()}>{t.addRow}</Button>
-            <Button onClick={() => editor?.chain().focus().addColumnAfter().run()}>
-              {t.addColumn}
+        <fieldset className="annotation-edit-fields" disabled={pending || !!conflict}>
+          <p className="annotation-source">
+            {source?.name || t.sessionAnnotation}
+            {request.location.page
+              ? ` · ${t.page} ${request.location.page}`
+              : request.location.seconds != null
+                ? ` · ${Math.floor(request.location.seconds / 60)}:${String(Math.floor(request.location.seconds % 60)).padStart(2, '0')}`
+                : ''}
+          </p>
+          {request.location.quote && (
+            <blockquote className="selected-quote">{request.location.quote}</blockquote>
+          )}
+          <label>
+            {t.annotationTitle}
+            <input
+              aria-label={t.annotationTitle}
+              maxLength={240}
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              disabled={pending}
+            />
+          </label>
+          <div className="rich-toolbar" role="toolbar" aria-label={t.annotationFormatting}>
+            <select
+              aria-label={t.textStyle}
+              disabled={sourceMode || pending}
+              value={toolbar?.heading || 'paragraph'}
+              onChange={(event) => {
+                if (event.target.value === 'paragraph')
+                  editor?.chain().focus().setParagraph().run();
+                else
+                  editor
+                    ?.chain()
+                    .focus()
+                    .toggleHeading({ level: Number(event.target.value) as 1 | 2 | 3 })
+                    .run();
+              }}
+            >
+              <option value="paragraph">{t.paragraph}</option>
+              <option value="1">{t.headingOne}</option>
+              <option value="2">{t.headingTwo}</option>
+              <option value="3">{t.headingThree}</option>
+            </select>
+            <IconButton
+              label={t.bold}
+              disabled={sourceMode || pending}
+              aria-pressed={toolbar?.bold}
+              onClick={() => editor?.chain().focus().toggleBold().run()}
+            >
+              <Bold />
+            </IconButton>
+            <IconButton
+              label={t.italic}
+              disabled={sourceMode || pending}
+              aria-pressed={toolbar?.italic}
+              onClick={() => editor?.chain().focus().toggleItalic().run()}
+            >
+              <Italic />
+            </IconButton>
+            <IconButton
+              label={t.underline}
+              disabled={sourceMode || pending}
+              aria-pressed={toolbar?.underline}
+              onClick={() => editor?.chain().focus().toggleUnderline().run()}
+            >
+              <Underline />
+            </IconButton>
+            <IconButton
+              label={t.bulletList}
+              disabled={sourceMode || pending}
+              aria-pressed={toolbar?.list}
+              onClick={() => editor?.chain().focus().toggleBulletList().run()}
+            >
+              <List />
+            </IconButton>
+            <IconButton
+              label={t.numberedList}
+              disabled={sourceMode || pending}
+              aria-pressed={toolbar?.ordered}
+              onClick={() => editor?.chain().focus().toggleOrderedList().run()}
+            >
+              <ListOrdered />
+            </IconButton>
+            <IconButton
+              label={t.insertLink}
+              disabled={sourceMode || pending}
+              onClick={() => setLink(editor?.getAttributes('link').href || 'https://')}
+            >
+              <Link />
+            </IconButton>
+            <IconButton
+              label={t.blockQuote}
+              disabled={sourceMode || pending}
+              onClick={() => editor?.chain().focus().toggleBlockquote().run()}
+            >
+              <Quote />
+            </IconButton>
+            <IconButton
+              label={t.codeBlock}
+              disabled={sourceMode || pending}
+              onClick={() => editor?.chain().focus().toggleCodeBlock().run()}
+            >
+              <Code2 />
+            </IconButton>
+            <IconButton
+              label={t.insertTable}
+              disabled={sourceMode || pending}
+              onClick={() =>
+                editor?.chain().focus().insertTable({ rows: 3, cols: 2, withHeaderRow: true }).run()
+              }
+            >
+              <Table />
+            </IconButton>
+            <IconButton
+              label={t.undo}
+              disabled={sourceMode || pending}
+              onClick={() => editor?.chain().focus().undo().run()}
+            >
+              <Undo2 />
+            </IconButton>
+            <IconButton
+              label={t.redo}
+              disabled={sourceMode || pending}
+              onClick={() => editor?.chain().focus().redo().run()}
+            >
+              <Redo2 />
+            </IconButton>
+            <Button disabled={pending} onClick={toggleSource}>
+              {sourceMode ? t.visualEditor : t.markdownSource}
             </Button>
-            <Button onClick={() => editor?.chain().focus().deleteTable().run()}>
-              {t.removeTable}
-            </Button>
-          </fieldset>
-        )}
-        {sourceMode ? (
-          <textarea
-            disabled={pending}
-            className="annotation-markdown"
-            aria-label={t.annotationMarkdown}
-            value={markdown}
-            onChange={(event) => setMarkdown(event.target.value)}
-          />
-        ) : (
-          <EditorContent editor={editor} className="annotation-body" />
-        )}
-        {image && (
-          <div inert={pending}>
-            <Sketch image={image} strokes={strokes} change={setStrokes} t={t} />
           </div>
+          {toolbar?.table && !sourceMode && (
+            <fieldset disabled={pending} className="table-tools">
+              <Button onClick={() => editor?.chain().focus().addRowAfter().run()}>
+                {t.addRow}
+              </Button>
+              <Button onClick={() => editor?.chain().focus().addColumnAfter().run()}>
+                {t.addColumn}
+              </Button>
+              <Button onClick={() => editor?.chain().focus().deleteTable().run()}>
+                {t.removeTable}
+              </Button>
+            </fieldset>
+          )}
+          {sourceMode ? (
+            <textarea
+              disabled={pending}
+              className="annotation-markdown"
+              aria-label={t.annotationMarkdown}
+              value={markdown}
+              onChange={(event) => setMarkdown(event.target.value)}
+            />
+          ) : (
+            <EditorContent editor={editor} className="annotation-body" />
+          )}
+          <CaptureCollectionEditor
+            workspace={session.workspace}
+            t={t}
+            disabled={pending || !!conflict}
+          />
+        </fieldset>
+        <p role="status" className="capture-draft-status">
+          {notice} {localSaved ? t.captureDraftSaved : t.captureDraftSaving}
+        </p>
+        {draft.pending && !conflict && <p>{t.captureNetworkPending}</p>}
+        {draft.unverified && (
+          <div className="capture-recovery-review">
+            <p>{t.captureUnverified}</p>
+            {draft.base && (
+              <details>
+                <summary>{t.captureSavedVersion}</summary>
+                <h4>{draft.base.title}</h4>
+                <RichContent document={draft.base.document} t={t} />
+              </details>
+            )}
+            <Button
+              onClick={() => {
+                void (async () => {
+                  if (JSON.stringify(draft.strokes) !== JSON.stringify(draft.base?.strokes || [])) {
+                    const original = session.workspace
+                      .getSnapshot()
+                      .items.find((item) => item.original);
+                    if (original) {
+                      await session.workspace.stageOne(original.descriptor.id);
+                      const model = await session.workspace.loadDrawing(original.descriptor.id);
+                      await session.workspace.applyDrawing(original.descriptor.id, {
+                        ...model,
+                        objects: draft.strokes.map((stroke) => ({
+                          id: crypto.randomUUID(),
+                          kind: stroke.width >= 10 ? ('highlight' as const) : ('pen' as const),
+                          points: stroke.points,
+                          color: stroke.color,
+                          width: stroke.width,
+                        })),
+                      });
+                    }
+                  }
+                  changeNote({ unverified: undefined });
+                })().catch((e) => setError(e instanceof Error ? e.message : t.error));
+              }}
+            >
+              {t.captureReviewDraft}
+            </Button>
+          </div>
+        )}
+        {conflict && (
+          <section className="capture-conflict">
+            <p role="alert">{t.captureConflict}</p>
+            {conflict.fields.map((field) => (
+              <fieldset key={field}>
+                <legend>{fieldLabels[field]}</legend>
+                <label>
+                  <input
+                    type="radio"
+                    name={field}
+                    checked={choices[field] === 'mine'}
+                    onChange={() => setChoices({ ...choices, [field]: 'mine' })}
+                  />
+                  {t.captureKeepMine}
+                  <pre>{fieldPreview(conflict.local[field])}</pre>
+                </label>
+                <label>
+                  <input
+                    type="radio"
+                    name={field}
+                    checked={choices[field] === 'saved'}
+                    onChange={() => setChoices({ ...choices, [field]: 'saved' })}
+                  />
+                  {t.captureUseSaved}
+                  <pre>{fieldPreview(editableNote(conflict.remote)[field])}</pre>
+                </label>
+              </fieldset>
+            ))}
+            <Button
+              variant="primary"
+              disabled={pending || conflict.fields.some((field) => !choices[field])}
+              onClick={() => void applyMerge()}
+            >
+              {t.captureReviewMerge}
+            </Button>
+          </section>
         )}
         {error && (
           <p className="form-error" role="alert">
@@ -401,10 +649,14 @@ export default function AnnotationEditor({
           </p>
         )}
         <div className="modal-actions">
-          <Button variant="primary" disabled={pending || !editor} onClick={() => void save()}>
-            {pending ? t.working : t.saveAnnotation}
+          <Button
+            variant="primary"
+            disabled={pending || !editor || !!conflict || !!draft.unverified}
+            onClick={() => void save()}
+          >
+            {pending ? t.working : draft.pending ? t.captureRetrySave : t.saveAnnotation}
           </Button>
-          <Button disabled={pending} onClick={close}>
+          <Button disabled={pending} onClick={() => void leave()}>
             {t.cancel}
           </Button>
         </div>
