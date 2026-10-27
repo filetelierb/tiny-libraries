@@ -74,6 +74,7 @@ import {
   readWorkspace,
   workspacePatch,
   openResource,
+  openArtifact,
   closeResourceTab,
   reorderResourceTabs,
   splitWithResource,
@@ -272,6 +273,10 @@ export function App() {
   useEffect(() => {
     if (activeResourceTab?.sources.length === 2) panels.enterSplit();
   }, [session?.id, activeResourceTab?.id]);
+  // The artifact view follows the active tab.
+  useEffect(() => {
+    setArtifact(activeResourceTab?.view === 'artifact' ? activeResourceTab.sources[0] : false);
+  }, [activeResourceTab?.id]);
   const primary = catalog?.files.find((file) => file.id === activeResourceTab?.sources[0]) || null;
   const split = catalog?.files.find((file) => file.id === activeResourceTab?.sources[1]) || null;
   const targetId =
@@ -420,6 +425,12 @@ export function App() {
       return;
     }
     updateSession(workspacePatch(next));
+  }
+  function showArtifact(sourceId: string) {
+    if (!sessionRef.current) return;
+    commitWorkspace(openArtifact(usable(sessionRef.current), sourceId));
+    setArtifact(sourceId);
+    setSeek(null);
   }
   function openFile(file: Source, mode: 'preview' | 'retain' = 'preview') {
     if (!sessionRef.current) return;
@@ -938,8 +949,8 @@ export function App() {
                   )}
                   refreshKey={catalog.files}
                   open={(file) => {
-                    openFile(file, 'retain');
-                    setArtifact(file.id);
+                    showArtifact(file.id);
+                    if (panels.drawer === 'left') setLeft(false);
                   }}
                   t={t}
                 />
@@ -1367,7 +1378,7 @@ export function App() {
                       )}
                       {artifact === source.id ? (
                         <div className="artifact-stage">
-                          <Button variant="ghost" onClick={() => setArtifact(false)}>
+                          <Button variant="ghost" onClick={() => openFile(source, 'retain')}>
                             <ArrowLeft size={14} />
                             {t.originalSource}
                           </Button>
@@ -1774,7 +1785,7 @@ export function App() {
                       type="button"
                       className="artifact-card"
                       onClick={() => {
-                        setArtifact(active.id);
+                        showArtifact(active.id);
                         if (panels.drawer === 'right') setRight(false);
                       }}
                     >
@@ -1892,7 +1903,7 @@ export function App() {
                   <button
                     type="button"
                     className="artifact-card artifact-link"
-                    onClick={() => setArtifact(active.id)}
+                    onClick={() => showArtifact(active.id)}
                   >
                     <strong>
                       <Activity size={14} />

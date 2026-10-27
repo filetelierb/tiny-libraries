@@ -140,6 +140,8 @@ export const resourceTabSchema = z
       .max(2)
       .refine((values) => new Set(values).size === values.length),
     preview: z.boolean(),
+    /** An artifact tab shows the source's generated artifact instead of the source. */
+    view: z.literal('artifact').optional(),
     focusedSource: z.string().optional(),
     splitRatio: z.number().min(0.2).max(0.8).optional(),
   })

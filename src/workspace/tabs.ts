@@ -59,7 +59,7 @@ export function openResource(
   mode: 'preview' | 'retain',
 ): ResourceWorkspace {
   const existing = state.resourceTabs.find(
-    (tab) => tab.sources.length === 1 && tab.sources[0] === sourceId,
+    (tab) => tab.sources.length === 1 && tab.sources[0] === sourceId && !tab.view,
   );
   if (existing)
     return {
@@ -68,7 +68,7 @@ export function openResource(
       ),
       activeTabId: existing.id,
     };
-  const preview = state.resourceTabs.find((tab) => tab.preview);
+  const preview = state.resourceTabs.find((tab) => tab.preview && !tab.view);
   const next: ResourceTab = {
     id: mode === 'preview' && preview ? preview.id : crypto.randomUUID(),
     sources: [sourceId],
@@ -81,6 +81,21 @@ export function openResource(
         : [...state.resourceTabs, next],
     activeTabId: next.id,
   };
+}
+
+/** Artifacts open in their own tab, beside the source they were generated from. */
+export function openArtifact(state: ResourceWorkspace, sourceId: string): ResourceWorkspace {
+  const existing = state.resourceTabs.find(
+    (tab) => tab.view === 'artifact' && tab.sources[0] === sourceId,
+  );
+  if (existing) return { ...state, activeTabId: existing.id };
+  const next: ResourceTab = {
+    id: `artifact:${sourceId}`,
+    sources: [sourceId],
+    preview: false,
+    view: 'artifact',
+  };
+  return { resourceTabs: [...state.resourceTabs, next], activeTabId: next.id };
 }
 
 export function retainTab(state: ResourceWorkspace, id: string): ResourceWorkspace {

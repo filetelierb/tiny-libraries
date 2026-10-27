@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, Columns2, Pencil, Pin, X } from 'lucide-react';
+import { Activity, ArrowLeft, ArrowRight, Columns2, Pencil, Pin, X } from 'lucide-react';
 import type { Source } from '../../shared/domain';
 import { IconButton } from '../design/components';
 import { ResourceIcon } from '../design/ResourceIcon';
@@ -158,9 +158,19 @@ export function ResourceTabs({
       <div role="tablist" aria-label={t.files} className="tab-list" ref={strip}>
         {visible.map((tab, index) => {
           const sources = tab.sources.map((id) => files.find((file) => file.id === id)!);
-          const label = sources.map((file) => file.name).join(' + '),
+          const label =
+              tab.view === 'artifact'
+                ? `${t.artifact} · ${sources[0].name}`
+                : sources.map((file) => file.name).join(' + '),
             kind = sources[0].kind;
-          const icon = sources.length === 2 ? <Columns2 size={16} /> : <ResourceIcon kind={kind} />;
+          const icon =
+            tab.view === 'artifact' ? (
+              <Activity size={16} />
+            ) : sources.length === 2 ? (
+              <Columns2 size={16} />
+            ) : (
+              <ResourceIcon kind={kind} />
+            );
           const selected = tab.id === workspace.activeTabId,
             expanded = context?.tabId === tab.id;
           return (

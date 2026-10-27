@@ -16,6 +16,7 @@ import {
   visibleWorkspace,
   reorderResourceTabs,
   splitWithResource,
+  openArtifact,
 } from '../src/workspace/tabs';
 import { splitLimits } from '../src/workspace/SplitWorkspace';
 import {
@@ -291,4 +292,16 @@ test('tab split actions target the focused pane and reuse an existing pair witho
   assert.equal(splitWithResource(state, 'slides'), state);
   assert.equal(splitWithResource(state, 'missing'), state);
   assert.equal(splitWithResource({ ...state, activeTabId: null }, 'notes').activeTabId, null);
+});
+
+test('artifacts open in their own tab without replacing the source tab', () => {
+  let state = openResource({ resourceTabs: [], activeTabId: null }, 'a', 'retain');
+  state = openArtifact(state, 'a');
+  assert.equal(state.resourceTabs.length, 2);
+  assert.equal(state.resourceTabs[1].view, 'artifact');
+  assert.equal(state.activeTabId, 'artifact:a');
+  assert.deepEqual(openArtifact(state, 'a').resourceTabs, state.resourceTabs);
+  const back = openResource(state, 'a', 'preview');
+  assert.equal(back.activeTabId, state.resourceTabs[0].id);
+  assert.equal(back.resourceTabs.length, 2);
 });
