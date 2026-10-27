@@ -18,6 +18,9 @@
   --ring: oklch(0.58 0.12 186);
   --media: #0b2227;
   --folder: #d69445;
+  --chart-1: oklch(0.58 0.13 186);
+  --chart-2: oklch(0.66 0.14 55);
+  --chart-3: oklch(0.55 0.12 260);
   --radius-sm: 0.49rem;
   --radius: 0.7rem;
   --radius-lg: 0.875rem;

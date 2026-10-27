@@ -892,6 +892,12 @@ const en = {
   amplitude: 'Amplitude',
   alias: 'Observed alias frequency',
   persisted: 'Parameters saved locally',
+  nyquistRate: 'Nyquist rate',
+  aliasingNote:
+    'Sampling is below twice the signal frequency, so the samples trace a slower alias.',
+  cleanSamplingNote:
+    'Sampling is above twice the signal frequency, so the samples follow the signal.',
+  signalCaptionLead: 'How to read it.',
   unsupported: 'Unsupported file type',
   maxSize: 'Each file must be 512 MB or smaller.',
   noQuestions: 'Prepare the source to unlock practice.',
@@ -1956,6 +1962,12 @@ const es: Dictionary = {
   amplitude: 'Amplitud',
   alias: 'Frecuencia aparente',
   persisted: 'Parámetros guardados localmente',
+  nyquistRate: 'Frecuencia de Nyquist',
+  aliasingNote:
+    'El muestreo es menor que el doble de la frecuencia, así que las muestras dibujan un alias más lento.',
+  cleanSamplingNote:
+    'El muestreo supera el doble de la frecuencia, así que las muestras siguen la señal.',
+  signalCaptionLead: 'Cómo leerlo.',
   unsupported: 'Formato no compatible',
   maxSize: 'Cada archivo debe tener 512 MB o menos.',
   noQuestions: 'Prepara la fuente para practicar.',
