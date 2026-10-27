@@ -1,5 +1,21 @@
 import type { Locale } from '../shared/domain';
 const en = {
+  tutorGeneration: 'Model and reasoning',
+  tutorModel: 'Tutor model',
+  effortCompactAuto: 'Auto',
+  reasoningEffort: 'Reasoning effort',
+  useSettingsModel: 'Use Settings default',
+  generationNotice: 'Applies to the next question. A reply in progress keeps its model and effort.',
+  reasoningCostNotice:
+    'Higher effort may take longer and use more tokens. Automatic lets the model decide.',
+  resetGeneration: 'Reset to defaults',
+  effort_auto: 'Automatic',
+  effort_minimal: 'Minimal',
+  effort_low: 'Low',
+  effort_medium: 'Medium',
+  effort_high: 'High',
+  effort_xhigh: 'Very high',
+  effort_max: 'Maximum',
   attachForQuestion: 'Attach to this question',
   questionAttachment: 'Question attachment',
   questionAttachments: 'Attachments for this question',
@@ -794,6 +810,23 @@ const en = {
 };
 type Dictionary = typeof en;
 const es: Dictionary = {
+  tutorGeneration: 'Modelo y razonamiento',
+  tutorModel: 'Modelo del tutor',
+  effortCompactAuto: 'Auto',
+  reasoningEffort: 'Esfuerzo de razonamiento',
+  useSettingsModel: 'Usar modelo de Ajustes',
+  generationNotice:
+    'Se aplica a la próxima pregunta. Una respuesta en curso conserva su modelo y esfuerzo.',
+  reasoningCostNotice:
+    'Un esfuerzo mayor puede tardar más y usar más tokens. Automático deja decidir al modelo.',
+  resetGeneration: 'Restablecer valores',
+  effort_auto: 'Automático',
+  effort_minimal: 'Mínimo',
+  effort_low: 'Bajo',
+  effort_medium: 'Medio',
+  effort_high: 'Alto',
+  effort_xhigh: 'Muy alto',
+  effort_max: 'Máximo',
   attachForQuestion: 'Adjuntar a esta pregunta',
   questionAttachment: 'Adjunto de la pregunta',
   questionAttachments: 'Adjuntos de esta pregunta',

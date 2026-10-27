@@ -26,6 +26,7 @@ import {
   type TutorConcept,
 } from '../shared/tutor-context';
 import { questionContent, type QuestionContext } from '../shared/conversations';
+import { reasoningParameter, type TutorGeneration } from '../shared/tutor-generation';
 import {
   attachmentMention,
   type AttachmentContent,
@@ -366,6 +367,7 @@ export async function runAssistant(
   transport: MetaFetch = fetch,
   context?: QuestionContext,
   actions: {
+    reasoningEffort?: TutorGeneration['reasoningEffort'];
     concepts?: TutorConcept[];
     attachments?: Array<AttachmentContent & { imageData?: string }>;
     createBookmark?: (value: {
@@ -377,6 +379,7 @@ export async function runAssistant(
   } = {},
 ) {
   const attached = actions.attachments || [];
+  const reasoning = reasoningParameter(actions.reasoningEffort || 'auto');
   const attachmentEvidence = new Map(
     attached.flatMap(({ attachment, segments }) =>
       segments.map((segment) => [segment.id, { attachment, segment }] as const),
@@ -568,7 +571,13 @@ export async function runAssistant(
   const createdBookmarks = new Set<string>();
   for (let step = 0; step < 5; step++) {
     const result = completionSchema.parse(
-        await metaRequest(key, 'chat/completions', { model, messages, tools }, false, transport),
+        await metaRequest(
+          key,
+          'chat/completions',
+          { model, messages, tools, ...reasoning },
+          false,
+          transport,
+        ),
       ),
       message = result.choices[0].message;
     if (!message.tool_calls?.length) {

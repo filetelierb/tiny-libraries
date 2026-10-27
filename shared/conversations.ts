@@ -3,6 +3,7 @@ import type { StudySession, Source } from './domain';
 import { locationSchema } from './annotations';
 import { conceptMentionsSchema, tutorCitationSchema, type ConceptMention } from './tutor-context';
 import { attachmentMentionsSchema, type AttachmentMention } from './tutor-attachments';
+import { tutorGenerationSchema } from './tutor-generation';
 
 export const questionContextSchema = z.object({
   sourceId: z.string().uuid(),
@@ -40,6 +41,7 @@ export const chatMessageSchema = z.object({
   context: questionContextSchema.optional(),
   concepts: conceptMentionsSchema.optional(),
   attachments: attachmentMentionsSchema.optional(),
+  generation: tutorGenerationSchema.optional(),
   citations: z.array(tutorCitationSchema).max(40).optional(),
   requestId: z.string().uuid().optional(),
   requestFingerprint: z

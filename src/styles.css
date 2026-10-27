@@ -4698,6 +4698,78 @@ body:has(.panel-resizer.resizing) {
   align-items: center;
   gap: 8px;
 }
+.composer-actions .generation-trigger {
+  margin-left: auto;
+  min-width: 0;
+  flex: 1 1 auto;
+  padding: 7px 6px;
+  gap: 4px;
+  justify-content: flex-end;
+  color: var(--muted-text);
+  font-size: var(--font-size-small);
+}
+.generation-trigger > span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.generation-trigger > svg {
+  flex: 0 0 auto;
+}
+.generation-trigger > svg:first-child {
+  color: var(--primary);
+}
+.generation-popover {
+  position: fixed;
+  z-index: 150;
+  width: min(320px, calc(100vw - 16px));
+  max-height: calc(100dvh - 16px);
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--paper-shadow);
+  padding: 16px;
+  font-size: var(--font-size-small);
+}
+.generation-popover-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  font-size: 1rem;
+}
+.generation-popover label {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.generation-popover select {
+  width: 100%;
+  min-height: 44px;
+}
+.generation-popover > p {
+  margin: 8px 0;
+  line-height: 1.5;
+}
+.generation-popover .button {
+  min-height: 36px;
+}
+.message-generation {
+  display: block;
+  color: var(--muted-text);
+  margin-top: 6px;
+}
+@media (max-width: 720px) {
+  .generation-popover .button {
+    min-height: 44px;
+  }
+  .composer-actions > .icon-button {
+    min-width: 44px;
+    flex-shrink: 0;
+  }
+}
 .question-attachments {
   width: 100%;
   border: 1px solid var(--border);

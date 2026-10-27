@@ -38,6 +38,14 @@ import { citationFromHref, remarkTutorCitations } from '../tutor/citations';
 import { useCitationRecovery } from '../tutor/useCitationRecovery';
 import { AttachmentPicker } from '../tutor/AttachmentPicker';
 import { AttachmentInspector } from '../tutor/AttachmentInspector';
+import { GenerationControl, GenerationLabel } from '../tutor/GenerationControl';
+import {
+  tutorPreferenceSchema,
+  defaultTutorPreference,
+  resolveTutorGeneration,
+  type TutorPreference,
+  type TutorGeneration,
+} from '../../shared/tutor-generation';
 import type { AnnotationRequest } from '../annotations/AnnotationEditor';
 import {
   questionAttachmentSchema,
@@ -283,6 +291,24 @@ function ConversationThread({
   const conceptKey = `tl:concept-draft:${conversation.id}`;
   const retryKey = `tl:conversation-request:${conversation.id}`;
   const attachmentKey = `tl:attachment-draft:${conversation.id}`;
+  const generationKey = `tl:generation-draft:${conversation.id}`;
+  const [generationPreference, setGenerationPreference] = useState<TutorPreference>(() => {
+    try {
+      const parsed = tutorPreferenceSchema.safeParse(JSON.parse(stored(generationKey) || 'null'));
+      return parsed.success ? parsed.data : defaultTutorPreference;
+    } catch {
+      return defaultTutorPreference;
+    }
+  });
+  const generationRef = useRef(generationPreference);
+  generationRef.current = generationPreference;
+  const changeGeneration = (value: TutorPreference) => {
+    generationRef.current = value;
+    setGenerationPreference(value);
+    store(generationKey, JSON.stringify(value));
+  };
+  const [runningGeneration, setRunningGeneration] = useState<TutorGeneration | null>(null),
+    [sentGeneration, setSentGeneration] = useState<TutorGeneration | null>(null);
   const [attachments, setAttachments] = useState<QuestionAttachment[]>(() => {
     try {
       const value = questionAttachmentSchema
@@ -398,11 +424,15 @@ function ConversationThread({
     let cancelled = false;
     const load = async () => {
       try {
-        const value = await api<Conversation & { pending: boolean }>(
-          `/conversations/${conversation.id}`,
-        );
+        const value = await api<
+          Conversation & {
+            pending: boolean;
+            pendingGeneration?: TutorGeneration;
+          }
+        >(`/conversations/${conversation.id}`);
         if (cancelled) return;
         setRunning(value.pending);
+        setRunningGeneration(value.pendingGeneration || null);
         if (value.updatedAt !== conversation.updatedAt) await receive(value);
       } catch {
         /* A transient polling failure must not discard this conversation. */
@@ -565,12 +595,14 @@ function ConversationThread({
     const conceptStamp = conceptDraftRef.current.stamp,
       questionStamp = contextStamp.current;
     const questionAttachments = attachmentRef.current.map((item) => item.id);
+    const generation = resolveTutorGeneration(generationRef.current, catalog.settings.model);
     const fingerprint = JSON.stringify({
       prompt: text,
       context: question,
       concepts: questionConcepts,
       sourceIds: [...conversation.sourceIds].sort(),
       attachments: questionAttachments,
+      generation,
     });
     if (!text || pending || running || mentionBusy.current) return;
     let previous: { prompt?: string; requestId?: string; fingerprint?: string } = {};
@@ -588,6 +620,7 @@ function ConversationThread({
         context: question,
         concepts: questionConcepts,
         attachments: questionAttachments,
+        generation,
         conceptStamp,
         contextStamp: questionStamp,
         fingerprint,
@@ -595,6 +628,7 @@ function ConversationThread({
       }),
     );
     setPending(true);
+    setSentGeneration(generation);
     setSentAttachments(attachmentRef.current.map(attachmentMention));
     setPrompt(text);
     changeDraft('');
@@ -604,6 +638,7 @@ function ConversationThread({
         requestId,
         concepts: questionConcepts,
         attachments: questionAttachments,
+        generation,
         ...(question ? { context: question } : {}),
       });
       await receive(next);
@@ -630,6 +665,7 @@ function ConversationThread({
         setPending(false);
         setPrompt('');
         setSentAttachments([]);
+        setSentGeneration(null);
       }
     }
   }
@@ -792,6 +828,11 @@ function ConversationThread({
                     .join(', ')}
                 </small>
               ) : null}
+              {message.generation && (
+                <small className="message-generation" aria-label={t.tutorGeneration}>
+                  <GenerationLabel value={message.generation} t={t} />
+                </small>
+              )}
             </div>
           );
         })}
@@ -807,12 +848,24 @@ function ConversationThread({
             </div>
             <p role="status" className="muted">
               <LoaderCircle className="spin" size={14} /> {t.thinking}
+              {sentGeneration && (
+                <>
+                  {' '}
+                  · <GenerationLabel value={sentGeneration} t={t} />
+                </>
+              )}
             </p>
           </>
         )}
         {!pending && running && (
           <p role="status" className="muted">
             <LoaderCircle className="spin" size={14} /> {t.thinking}
+            {runningGeneration && (
+              <>
+                {' '}
+                · <GenerationLabel value={runningGeneration} t={t} />
+              </>
+            )}
           </p>
         )}
       </div>
@@ -949,6 +1002,12 @@ function ConversationThread({
           <IconButton label={t.addQuestionAttachment} onClick={() => setAttachmentPicker(true)}>
             <Plus size={16} />
           </IconButton>
+          <GenerationControl
+            value={generationPreference}
+            defaultModel={catalog.settings.model}
+            change={changeGeneration}
+            t={t}
+          />
           <Button
             variant="primary"
             type="submit"
