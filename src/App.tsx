@@ -13,7 +13,6 @@ import {
   Archive,
   X,
   Check,
-  ChevronRight,
   Sparkles,
   Bookmark,
   StickyNote,
@@ -1011,6 +1010,7 @@ export function App() {
             <PanelSection
               id="study-sessions"
               title={t.sessions}
+              count={catalog.sessions.length}
               t={t}
               grow
               actions={
@@ -1034,17 +1034,11 @@ export function App() {
                           aria-current={item.id === session.id ? 'true' : undefined}
                           onClick={() => selectSession(item)}
                         >
-                          <BookOpen size={15} />
-                          <span>
-                            <span>{item.name}</span>
-                            <small title={preview.source?.name}>
-                              {preview.source?.name || t.noOpenResources}
-                            </small>
-                            <small>
-                              {preview.count} {t.messages}
-                            </small>
-                          </span>
-                          <ChevronRight size={13} />
+                          <span>{item.name}</span>
+                          <small title={preview.source?.name}>
+                            {preview.source?.name || t.noOpenResources} · {preview.count}{' '}
+                            {t.messagesShort}
+                          </small>
                         </button>
                         <ActionMenu
                           label={`${t.sessionOptions}: ${item.name}`}
