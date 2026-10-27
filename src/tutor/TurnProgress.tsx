@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import type { Components } from 'react-markdown';
 import {
   Clock3,
   CornerDownRight,
@@ -18,7 +19,13 @@ import {
 } from '../../shared/tutor-generation';
 import { Button, IconButton, Modal } from '../design/components';
 import { GenerationControl, GenerationLabel } from './GenerationControl';
+import { StudyMarkdown } from '../study/StudyMarkdown';
 import type { T } from '../i18n';
+
+// Unfinished code fences stay plain text instead of mounting diagrams mid-stream.
+const streamingComponents: Components = {
+  pre: ({ node: _node, ...pre }) => <pre {...pre} />,
+};
 
 export function tutorToolLabel(name: string, t: T) {
   return (
@@ -62,8 +69,10 @@ export function TurnProgress({
       data-turn-id={turn.id}
     >
       {turn.partial && (
-        <div className="chat-message assistant tutor-stream-text" aria-live="off">
-          {turn.partial}
+        <div className="chat-message assistant" aria-live="off">
+          <StudyMarkdown t={t} components={streamingComponents}>
+            {turn.partial}
+          </StudyMarkdown>
         </div>
       )}
       <div className="tutor-run-status" title={t.savedProgressNotice}>

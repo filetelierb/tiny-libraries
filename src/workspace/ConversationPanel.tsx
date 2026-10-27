@@ -13,6 +13,9 @@ import {
   Globe,
   Globe2,
   CornerDownRight,
+  ChevronDown,
+  FileStack,
+  FileText,
   StickyNote,
 } from 'lucide-react';
 import { readWebDraft, type WebDraft } from '../../shared/tutor-web';
@@ -126,6 +129,7 @@ export function ConversationPanel({
   const [threads, setThreads] = useState<ConversationDetail[]>([]),
     [selected, select] = useState(() => stored(selectionKey)),
     [history, setHistory] = useState(false),
+    [renameRequest, setRenameRequest] = useState(0),
     [query, setQuery] = useState(''),
     [loading, setLoading] = useState(true),
     [creating, setCreating] = useState(false);
@@ -219,6 +223,11 @@ export function ConversationPanel({
         <strong title={current?.name}>
           {history ? t.conversationHistory : current?.name || t.assistant}
         </strong>
+        {!history && current && (
+          <IconButton label={t.renameConversation} onClick={() => setRenameRequest((n) => n + 1)}>
+            <Pencil />
+          </IconButton>
+        )}
         <IconButton
           label={t.conversationHistory}
           aria-pressed={history}
@@ -282,6 +291,7 @@ export function ConversationPanel({
       ) : current ? (
         <ConversationThread
           key={current.id}
+          renameRequest={renameRequest}
           conversation={current}
           catalog={catalog}
           t={t}
@@ -326,6 +336,7 @@ function ConversationThread({
   changed,
   prepareSource,
   createAttachment,
+  renameRequest,
 }: {
   conversation: ConversationDetail;
   catalog: Catalog;
@@ -339,6 +350,7 @@ function ConversationThread({
   changed: () => Promise<unknown>;
   prepareSource: (source: Source) => void;
   createAttachment: () => Promise<AnnotationRequest | null>;
+  renameRequest: number;
   receive: (conversation: ConversationDetail, refresh?: boolean) => Promise<void>;
   onError: (message: string) => void;
   cite: (sourceId: string, segment: Segment) => void;
@@ -541,6 +553,13 @@ function ConversationThread({
     [rename, setRename] = useState(false),
     [title, setTitle] = useState(conversation.name),
     [query, setQuery] = useState('');
+  const seenRename = useRef(renameRequest);
+  useEffect(() => {
+    if (renameRequest === seenRename.current) return;
+    seenRename.current = renameRequest;
+    setTitle(conversation.name);
+    setRename(true);
+  }, [renameRequest]);
   const mentionDismissedKey = `tl:mention-dismissed:${conversation.id}`;
   const [mentionDismissed, setMentionDismissed] = useState(
     () => !!stored(draftKey) && stored(mentionDismissedKey) === stored(draftKey),
@@ -1012,49 +1031,6 @@ function ConversationThread({
   }
   return (
     <div className="assistant">
-      <div className="conversation-actions">
-        <Button variant="ghost" onClick={() => setPicker(true)}>
-          <Paperclip size={14} />
-          {t.references} ({conversation.sourceIds.length})
-        </Button>
-        <IconButton
-          label={t.renameConversation}
-          onClick={() => {
-            setTitle(conversation.name);
-            setRename(true);
-          }}
-        >
-          <Pencil />
-        </IconButton>
-      </div>
-      <div className="context-tray" aria-label={t.references}>
-        {conversation.sourceIds.map((id) => {
-          const file = catalog.files.find((item) => item.id === id);
-          return (
-            <span key={id}>
-              <span title={file?.name}>{file?.name || t.missingReference}</span>
-              <IconButton
-                label={`${t.removeReference}: ${file?.name || id}`}
-                disabled={pending}
-                onClick={() =>
-                  void patch({ sourceIds: conversation.sourceIds.filter((value) => value !== id) })
-                }
-              >
-                <X />
-              </IconButton>
-            </span>
-          );
-        })}
-      </div>
-      <p className="muted">
-        {conversation.sourceIds.length
-          ? t.referencesNotice
-          : context
-            ? t.questionContextNotice
-            : attachments.length
-              ? t.attachmentQuestionContext
-              : t.generalTutorNotice}
-      </p>
       <div
         ref={messageViewport}
         className="conversation-messages"
@@ -1258,40 +1234,6 @@ function ConversationThread({
           void send();
         }}
       >
-        {!!attachments.length && (
-          <section className="question-attachments" aria-label={t.questionAttachments}>
-            <strong>
-              {t.questionAttachments} ({attachments.length}/{MAX_QUESTION_ATTACHMENTS})
-            </strong>
-            <p>{t.attachmentDraftNotice}</p>
-            {attachments.map((item) => (
-              <div className="question-attachment" data-attachment-id={item.id} key={item.id}>
-                <button
-                  type="button"
-                  title={t.inspectQuestionAttachment}
-                  onClick={() => setInspectedAttachment(item.id)}
-                >
-                  <Paperclip size={14} />
-                  {item.name}
-                  {item.annotationRevision ? ` · ${t.revision} ${item.annotationRevision}` : ''}
-                  <small>
-                    {attachmentImages(item).length
-                      ? `${t.attachmentSelectedImages}: ${attachmentImages(item).length}`
-                      : t.attachmentTextOnly}
-                  </small>
-                </button>
-                <IconButton
-                  label={`${t.removeQuestionAttachment}: ${item.name}`}
-                  onClick={() =>
-                    changeAttachments(attachmentRef.current.filter((value) => value.id !== item.id))
-                  }
-                >
-                  <X size={14} />
-                </IconButton>
-              </div>
-            ))}
-          </section>
-        )}
         {context && (
           <div className="question-context" aria-label={t.questionContext}>
             <div>
@@ -1362,6 +1304,60 @@ function ConversationThread({
           </div>
         )}
         <div className="composer-card">
+          <div className="composer-strip">
+            <button
+              type="button"
+              className="reference-chip"
+              title={[
+                ...conversation.sourceIds.map(
+                  (id) => catalog.files.find((item) => item.id === id)?.name || t.missingReference,
+                ),
+                conversation.sourceIds.length
+                  ? t.referencesNotice
+                  : context
+                    ? t.questionContextNotice
+                    : attachments.length
+                      ? t.attachmentQuestionContext
+                      : t.generalTutorNotice,
+              ].join('\n')}
+              onClick={() => setPicker(true)}
+            >
+              <FileStack />
+              <span>
+                {t.references} ({conversation.sourceIds.length})
+              </span>
+              <ChevronDown />
+            </button>
+            {attachments.map((item) => (
+              <span className="draft-chip" data-attachment-id={item.id} key={item.id}>
+                <button
+                  type="button"
+                  title={`${t.inspectQuestionAttachment} · ${
+                    attachmentImages(item).length
+                      ? `${t.attachmentSelectedImages}: ${attachmentImages(item).length}`
+                      : t.attachmentTextOnly
+                  }`}
+                  onClick={() => setInspectedAttachment(item.id)}
+                >
+                  <Paperclip />
+                  <span>
+                    {item.name}
+                    {item.annotationRevision ? ` · ${t.revision} ${item.annotationRevision}` : ''}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  aria-label={`${t.removeQuestionAttachment}: ${item.name}`}
+                  title={t.removeQuestionAttachment}
+                  onClick={() =>
+                    changeAttachments(attachmentRef.current.filter((value) => value.id !== item.id))
+                  }
+                >
+                  <X />
+                </button>
+              </span>
+            ))}
+          </div>
           <textarea
             ref={composer}
             aria-label={t.assistant}
@@ -1526,6 +1522,30 @@ function ConversationThread({
       {picker && (
         <Modal title={t.references} close={() => setPicker(false)} closeLabel={t.close}>
           <p className="muted">{t.referencesNotice}</p>
+          {!!conversation.sourceIds.length && (
+            <ul className="reference-list" aria-label={t.references}>
+              {conversation.sourceIds.map((id) => {
+                const file = catalog.files.find((item) => item.id === id);
+                return (
+                  <li key={id}>
+                    <FileText />
+                    <span title={file?.name}>{file?.name || t.missingReference}</span>
+                    <IconButton
+                      label={`${t.removeReference}: ${file?.name || id}`}
+                      disabled={pending}
+                      onClick={() =>
+                        void patch({
+                          sourceIds: conversation.sourceIds.filter((value) => value !== id),
+                        })
+                      }
+                    >
+                      <X />
+                    </IconButton>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
           <input
             type="search"
             aria-label={t.search}
