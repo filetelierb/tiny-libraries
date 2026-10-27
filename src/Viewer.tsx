@@ -189,7 +189,7 @@ export function Viewer({
   return (
     <article
       ref={documentRoot}
-      className="document-reader"
+      className={`document-reader ${source.kind === 'markdown' ? '' : 'text-reader'}`}
       onScroll={() => {
         const root = documentRoot.current;
         if (!root) return;
@@ -227,9 +227,11 @@ export function Viewer({
       }}
     >
       {source.kind === 'markdown' ? (
-        <StudyMarkdown t={t} remarkPlugins={[remarkSourceAnchors]}>
-          {text}
-        </StudyMarkdown>
+        <div className="document-column">
+          <StudyMarkdown t={t} remarkPlugins={[remarkSourceAnchors]}>
+            {text}
+          </StudyMarkdown>
+        </div>
       ) : (
         <pre data-source-start="0" data-source-end={text.length}>
           {text}

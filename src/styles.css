@@ -1589,45 +1589,61 @@ body:has(.panel-resizer.resizing) {
 }
 .document-reader {
   overflow: auto;
-  padding: 38px clamp(25px, 7%, 85px) 70px;
-  font-size: 17px;
+  padding: 28px 32px;
+  font-size: 16px;
   line-height: 1.72;
-  background: var(--surface);
+  background: var(--background);
 }
-.document-reader h1 {
+@media (min-width: 1024px) {
+  .document-reader {
+    padding-inline: 8%;
+  }
+}
+.document-column {
+  max-width: 56rem;
+  margin: 0 auto;
+}
+.document-reader h1,
+.document-reader h2,
+.document-reader h3 {
   font-family: var(--font-body);
-  font-size: 28px;
   font-weight: 700;
   line-height: 1.25;
-  margin-bottom: 25px;
+  margin: 1.25em 0 0.55em;
+}
+.document-reader h1 {
+  font-size: 1.65rem;
 }
 .document-reader h2 {
-  font-size: 22px;
-  font-weight: 700;
-  margin: 38px 0 13px;
+  font-size: 1.3rem;
 }
 .document-reader h3 {
-  font-size: 17px;
+  font-size: 1.08rem;
 }
-.document-reader p {
+.document-column > :first-child,
+.document-column > * > :first-child {
+  margin-top: 0;
+}
+.document-reader p,
+.document-reader li {
   line-height: 1.72;
   color: var(--foreground);
+}
+.document-reader p {
   margin-bottom: 18px;
+}
+.document-reader code {
+  background: var(--muted);
+  border-radius: 0.35rem;
+  padding: 0.12rem 0.32rem;
+  font-family: var(--font-mono);
+  font-size: 0.88em;
 }
 .document-reader pre {
   font-family: var(--font-mono);
   font-size: var(--font-size-control);
   white-space: pre-wrap;
   line-height: 1.85;
-}
-.document-reader code {
-  background: var(--muted);
-  border-radius: 4px;
-  padding: 2px 4px;
-  font-family: var(--font-mono);
-  font-size: 0.85em;
-}
-.document-reader pre {
   padding: 16px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -1636,6 +1652,17 @@ body:has(.panel-resizer.resizing) {
 .document-reader pre code {
   background: none;
   padding: 0;
+}
+.document-reader.text-reader {
+  padding: 0;
+}
+.document-reader.text-reader > pre {
+  margin: 0;
+  padding: 24px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  font: 12px/1.625 var(--font-mono);
 }
 .document-reader a {
   overflow-wrap: anywhere;
@@ -2355,14 +2382,14 @@ body:has(.panel-resizer.resizing) {
   overflow: auto;
   display: grid;
   place-items: center;
-  padding: 25px;
-  background: var(--muted);
+  padding: 24px;
+  background: none;
 }
 .image-stage img {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
 }
 .artifact-stage {
   overflow: auto;
@@ -2981,11 +3008,8 @@ body:has(.panel-resizer.resizing) {
   .sessions-heading .icon-button {
     min-height: 36px;
   }
-  .document-reader {
+  .document-reader:not(.text-reader) {
     padding: 28px 23px;
-  }
-  .document-reader h1 {
-    font-size: 27px;
   }
   .viewers.split {
     flex-direction: column;
