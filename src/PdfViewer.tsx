@@ -9,15 +9,22 @@ import {
 } from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import 'pdfjs-dist/web/pdf_viewer.css';
-import { ChevronLeft, ChevronRight, Minus, Plus, LoaderCircle, PenTool } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, PenTool } from 'lucide-react';
 import type { Source } from '../shared/domain';
 import type { Annotation, SourceLocation, DrawingStroke } from '../shared/annotations';
 import { listAnnotations } from './annotations/api';
 import { api } from './api';
 import { PinLayer, Sketch, StrokeLayer } from './annotations/Sketch';
 import { plainDocument } from '../shared/annotations';
-import { boundedPage, pdfScale, readPdfZoom, type PdfZoom } from '../shared/pdf-reader';
-import { Button, IconButton, Modal } from './design/components';
+import {
+  PDF_ZOOM_PRESETS,
+  boundedPage,
+  pdfScale,
+  readPdfZoom,
+  steppedZoom,
+  type PdfZoom,
+} from '../shared/pdf-reader';
+import { Button, IconButton, Modal, Spinner } from './design/components';
 import type { T } from './i18n';
 
 GlobalWorkerOptions.workerSrc = workerUrl;
@@ -278,7 +285,7 @@ export default function PdfViewer({
       >
         {!loaded && !error && (
           <p role="status" className="pdf-loading">
-            <LoaderCircle className="spin" />
+            <Spinner />
             {t.loadingPdf}
           </p>
         )}
@@ -298,78 +305,82 @@ export default function PdfViewer({
           ))}
       </div>
       <div className="pdf-controls">
-        <IconButton
-          label={t.previousPage}
-          disabled={!loaded || page <= 1}
-          onClick={() => navigate(page - 1)}
-        >
-          <ChevronLeft />
-        </IconButton>
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            navigate(Number(pageInput));
-          }}
-        >
-          <label>
-            {t.page}
-            <input
-              aria-label={t.page}
-              type="number"
-              min={1}
-              max={document?.numPages || 1}
-              value={pageInput}
-              disabled={!loaded}
-              onChange={(event) => setPageInput(event.target.value)}
-              onBlur={() => navigate(Number(pageInput))}
-            />
-          </label>
-        </form>
-        <span>
-          {t.of} {document?.numPages || '—'}
-        </span>
-        <IconButton
-          label={t.nextPage}
-          disabled={!loaded || page >= (document?.numPages || 1)}
-          onClick={() => navigate(page + 1)}
-        >
-          <ChevronRight />
-        </IconButton>
-        <IconButton
-          label={t.zoomOut}
-          disabled={typeof zoom === 'number' && zoom <= 25}
-          onClick={() => setZoom(readPdfZoom((typeof zoom === 'number' ? zoom : 100) - 25))}
-        >
-          <Minus />
-        </IconButton>
-        <select
-          aria-label={t.zoom}
-          value={zoom}
-          onChange={(event) =>
-            setZoom(
-              readPdfZoom(
-                event.target.value === 'width' || event.target.value === 'page'
-                  ? event.target.value
-                  : Number(event.target.value),
-              ),
-            )
-          }
-        >
-          <option value="width">{t.fitWidth}</option>
-          <option value="page">{t.fitPage}</option>
-          {Array.from({ length: 12 }, (_, index) => (index + 1) * 25).map((value) => (
-            <option key={value} value={value}>
-              {value}%
-            </option>
-          ))}
-        </select>
-        <IconButton
-          label={t.zoomIn}
-          disabled={typeof zoom === 'number' && zoom >= 300}
-          onClick={() => setZoom(readPdfZoom((typeof zoom === 'number' ? zoom : 100) + 25))}
-        >
-          <Plus />
-        </IconButton>
+        <div className="pdf-control-group">
+          <IconButton
+            label={t.previousPage}
+            disabled={!loaded || page <= 1}
+            onClick={() => navigate(page - 1)}
+          >
+            <ChevronLeft />
+          </IconButton>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              navigate(Number(pageInput));
+            }}
+          >
+            <label>
+              {t.page}
+              <input
+                aria-label={t.page}
+                type="number"
+                min={1}
+                max={document?.numPages || 1}
+                value={pageInput}
+                disabled={!loaded}
+                onChange={(event) => setPageInput(event.target.value)}
+                onBlur={() => navigate(Number(pageInput))}
+              />
+            </label>
+          </form>
+          <span>
+            {t.of} {document?.numPages || '—'}
+          </span>
+          <IconButton
+            label={t.nextPage}
+            disabled={!loaded || page >= (document?.numPages || 1)}
+            onClick={() => navigate(page + 1)}
+          >
+            <ChevronRight />
+          </IconButton>
+        </div>
+        <div className="pdf-control-group">
+          <IconButton
+            label={t.zoomOut}
+            disabled={typeof zoom === 'number' && zoom <= PDF_ZOOM_PRESETS[0]}
+            onClick={() => setZoom(steppedZoom(zoom, -1))}
+          >
+            <ZoomOut />
+          </IconButton>
+          <select
+            aria-label={t.zoom}
+            value={zoom}
+            onChange={(event) =>
+              setZoom(
+                readPdfZoom(
+                  event.target.value === 'width' || event.target.value === 'page'
+                    ? event.target.value
+                    : Number(event.target.value),
+                ),
+              )
+            }
+          >
+            <option value="width">{t.fitWidth}</option>
+            <option value="page">{t.fitPage}</option>
+            {PDF_ZOOM_PRESETS.map((value) => (
+              <option key={value} value={value}>
+                {value}%
+              </option>
+            ))}
+          </select>
+          <IconButton
+            label={t.zoomIn}
+            disabled={typeof zoom === 'number' && zoom >= PDF_ZOOM_PRESETS.at(-1)!}
+            onClick={() => setZoom(steppedZoom(zoom, 1))}
+          >
+            <ZoomIn />
+          </IconButton>
+        </div>
         <IconButton label={t.drawOnPage} disabled={!loaded} onClick={drawOnPage}>
           <PenTool />
         </IconButton>
@@ -400,7 +411,7 @@ export default function PdfViewer({
               disabled={!pageDrawing.strokes.length || pageDrawing.saving}
               onClick={() => void savePageDrawing()}
             >
-              {pageDrawing.saving && <LoaderCircle size={14} className="spin" />}
+              {pageDrawing.saving && <Spinner size={14} />}
               {t.saveDrawing}
             </Button>
             <Button variant="ghost" onClick={() => setPageDrawing(null)}>
@@ -508,6 +519,11 @@ function PdfPage({
         } as CSSProperties
       }
     >
+      {!rendered && !error && (
+        <span className="pdf-page-loading" aria-hidden="true">
+          <Spinner size={20} />
+        </span>
+      )}
       <canvas ref={canvas} aria-hidden="true" />
       <div className="textLayer" ref={text} />
       {strokes.length > 0 && (

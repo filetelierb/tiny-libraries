@@ -2037,15 +2037,24 @@ body:has(.panel-resizer.resizing) {
   min-height: 0;
   flex: 1;
   overflow: auto;
-  padding: 16px;
+  padding: 12px 16px 16px;
   scrollbar-gutter: stable;
 }
 .pdf-page {
   position: relative;
   background: white;
-  margin: 0 auto 16px;
-  box-shadow: 0 2px 7px #0002;
+  margin: 0 auto 20px;
+  box-shadow:
+    0 4px 6px -1px rgb(0 0 0 / 0.1),
+    0 2px 4px -2px rgb(0 0 0 / 0.1);
   flex-shrink: 0;
+}
+.pdf-page-loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--muted-text);
 }
 .pdf-page > canvas {
   display: block;
@@ -2060,7 +2069,17 @@ body:has(.panel-resizer.resizing) {
   flex-wrap: wrap;
   flex-shrink: 0;
   justify-content: center;
-  gap: 6px;
+  column-gap: 12px;
+  row-gap: 4px;
+  height: auto;
+  padding: 6px 8px;
+  border-top: 1px solid var(--border);
+  border-bottom: 0;
+}
+.pdf-control-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 .pdf-controls form,
 .pdf-controls form label {
@@ -2071,14 +2090,20 @@ body:has(.panel-resizer.resizing) {
 }
 .pdf-controls select {
   width: auto;
-  max-width: 145px;
+  max-width: 176px;
+  height: 32px;
+  padding: 0 8px;
+  font-size: 12px;
 }
 .pdf-loading {
   display: flex;
   gap: 8px;
   align-items: center;
   justify-content: center;
+  height: 100%;
   padding: 30px;
+  color: var(--muted-text);
+  font-size: 14px;
 }
 .modal:has(.annotation-editor) {
   width: min(900px, calc(100vw - 24px));
@@ -2280,7 +2305,7 @@ body:has(.panel-resizer.resizing) {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: var(--muted);
+  background: #e8e7e3;
 }
 .pdf-stage iframe {
   width: 100%;
@@ -2305,10 +2330,14 @@ body:has(.panel-resizer.resizing) {
   gap: 5px;
 }
 .pdf-controls input {
-  width: 50px;
+  width: 56px;
+  height: 32px;
   padding: 4px;
+  text-align: center;
+  border-radius: var(--radius);
+  background: var(--background);
 }
-.pdf-controls > span {
+.pdf-controls .pdf-control-group > span {
   font-size: var(--font-size-small);
   min-width: 35px;
   text-align: center;
