@@ -66,6 +66,28 @@ const toolIcons = {
   spotlight: Focus,
   crop: Crop,
 };
+/** Ten capture swatches, in display order, plus the per-tool defaults. */
+const PALETTE = [
+  '#ffffff',
+  '#000000',
+  '#f52e33',
+  '#ff7a14',
+  '#ffd114',
+  '#38c759',
+  '#1ac7d1',
+  '#1f7afa',
+  '#944df5',
+  '#f53894',
+];
+const DEFAULT_COLOR = '#ff3b30',
+  SPOTLIGHT_DEFAULT_COLOR = '#ffffff';
+const initialStyles = () =>
+  Object.fromEntries(
+    (Object.keys(toolIcons) as Tool[]).map((name) => [
+      name,
+      { color: name === 'spotlight' ? SPOTLIGHT_DEFAULT_COLOR : DEFAULT_COLOR, width: 3 },
+    ]),
+  ) as Record<Tool, { color: string; width: number }>;
 const textEditSchema = z.object({
   kind: z.enum(['text', 'comment']),
   id: z.string().uuid(),
@@ -152,10 +174,10 @@ function StudioBody({
 }) {
   const [drawing, setDrawing] = useState(initial.drawing),
     [editing, setEditing] = useState(initial.editing),
-    [tool, setTool] = useState<Tool>('select'),
+    [tool, setTool] = useState<Tool>('highlight'),
     [selected, setSelected] = useState<string | null>(null),
-    [color, setColor] = useState('#007f78'),
-    [width, setWidth] = useState(3),
+    // Each tool keeps its own colour and width, as in the reference capture tools.
+    [styles, setStyles] = useState(initialStyles),
     [textStyle, setTextStyle] = useState<'plain' | 'sticky' | 'bubble'>('plain'),
     [shape, setShape] = useState<'rect' | 'stroke'>('rect'),
     [zoom, setZoom] = useState(1),
@@ -180,6 +202,11 @@ function StudioBody({
     future = useRef<CaptureDrawing[]>([]),
     alive = useRef(true),
     [position, setPosition] = useState({ left: 12, top: 100, width: 300, maxHeight: 300 });
+  const { color, width } = styles[tool];
+  const setColor = (value: string) =>
+    setStyles((current) => ({ ...current, [tool]: { ...current[tool], color: value } }));
+  const setWidth = (value: number) =>
+    setStyles((current) => ({ ...current, [tool]: { ...current[tool], width: value } }));
   const gesture = useRef<{
     id: number;
     start: CapturePoint;
@@ -676,18 +703,25 @@ function StudioBody({
           </IconButton>
         </div>
         <div className="capture-properties">
-          <label>
-            {t.captureColor}
-            <input
-              type="color"
-              aria-label={t.captureColor}
-              value={active && 'color' in active ? active.color : color}
-              onChange={(e) => {
-                setColor(e.target.value);
-                if (active && 'color' in active) patchSelected({ color: e.target.value });
-              }}
-            />
-          </label>
+          <div className="capture-swatches" role="group" aria-label={t.captureColor}>
+            {PALETTE.map((swatch) => {
+              const current = (active && 'color' in active ? active.color : color).toLowerCase();
+              return (
+                <button
+                  key={swatch}
+                  type="button"
+                  className="capture-swatch"
+                  style={{ background: swatch }}
+                  aria-label={`${t.captureColor} ${swatch}`}
+                  aria-pressed={current === swatch}
+                  onClick={() => {
+                    setColor(swatch);
+                    if (active && 'color' in active) patchSelected({ color: swatch });
+                  }}
+                />
+              );
+            })}
+          </div>
           <label>
             {t.captureWidth}
             <input

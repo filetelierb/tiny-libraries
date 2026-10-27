@@ -7941,3 +7941,20 @@ body:has(.panel-resizer.resizing) {
   min-width: 28px;
   height: 28px;
 }
+.capture-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.capture-swatch {
+  width: 22px;
+  height: 22px;
+  min-height: 0;
+  padding: 0;
+  border: 1px solid rgb(0 0 0 / 20%);
+  border-radius: 50%;
+}
+.capture-swatch[aria-pressed='true'] {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
