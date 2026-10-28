@@ -32,15 +32,12 @@ export type TreeActions = {
   create: (parentPath: string) => void;
   renameDirectory: (directory: Directory) => void;
   archiveDirectory: (directory: Directory, restore: boolean) => void;
-  trashDirectory: (directory: Directory) => void;
-  restoreDirectory: (directory: Directory) => void;
   upload: (directory: Directory) => void;
   renameFile: (source: Source) => void;
   archiveFile: (source: Source, restore: boolean) => void;
-  trashFile: (source: Source) => void;
-  restoreFile: (source: Source) => void;
-  deleteFile?: (source: Source) => void;
-  deleteDirectory?: (directory: Directory) => void;
+  /** Deleting is permanent; the confirmation offers archiving instead. */
+  deleteFile: (source: Source) => void;
+  deleteDirectory: (directory: Directory) => void;
   moveFile?: (source: Source, folder: string) => void;
   moveDirectory?: (directory: Directory, parentPath: string) => void;
 };
@@ -234,27 +231,6 @@ export function DirectoryTree({
   const directoryActions = (directory: Directory): MenuAction[] => {
     const state = directoryState(directory.path, directories),
       parentState = directoryState(parentPath(directory.path), directories);
-    if (state === 'trash')
-      return directory.trashed
-        ? [
-            {
-              label: t.restore,
-              icon: <ArchiveRestore size={16} />,
-              disabled: parentState === 'trash',
-              run: () => actions.restoreDirectory(directory),
-            },
-            ...(actions.deleteDirectory
-              ? [
-                  {
-                    label: t.deletePermanently,
-                    icon: <Trash2 size={16} />,
-                    danger: true,
-                    run: () => actions.deleteDirectory!(directory),
-                  },
-                ]
-              : []),
-          ]
-        : [];
     return [
       ...(state === 'files'
         ? [
@@ -289,7 +265,7 @@ export function DirectoryTree({
         icon: <Trash2 size={16} />,
         danger: true,
         separator: true,
-        run: () => actions.trashDirectory(directory),
+        run: () => actions.deleteDirectory(directory),
       },
     ];
   };
@@ -303,27 +279,6 @@ export function DirectoryTree({
         },
       ];
     const parentState = directoryState(file.folder, directories);
-    if (view === 'trash')
-      return file.trashed
-        ? [
-            {
-              label: t.restore,
-              icon: <ArchiveRestore size={16} />,
-              disabled: parentState === 'trash',
-              run: () => actions.restoreFile(file),
-            },
-            ...(actions.deleteFile
-              ? [
-                  {
-                    label: t.deletePermanently,
-                    icon: <Trash2 size={16} />,
-                    danger: true,
-                    run: () => actions.deleteFile!(file),
-                  },
-                ]
-              : []),
-          ]
-        : [];
     return [
       ...(mode === 'manage'
         ? [
@@ -364,7 +319,7 @@ export function DirectoryTree({
         icon: <Trash2 size={16} />,
         danger: true,
         separator: true,
-        run: () => actions.trashFile(file),
+        run: () => actions.deleteFile(file),
       },
     ];
   };
@@ -463,14 +418,7 @@ export function DirectoryTree({
                     type="button"
                     {...dragSource({ kind: 'file', item: file })}
                     data-file-choice={file.id}
-                    title={
-                      view === 'trash'
-                        ? `${file.name} · ${t.restoreToOpen}`
-                        : mode === 'manage'
-                          ? `${file.name} · ${t.doubleClickHint}`
-                          : file.name
-                    }
-                    disabled={view === 'trash'}
+                    title={mode === 'manage' ? `${file.name} · ${t.doubleClickHint}` : file.name}
                     onClick={() => chooseFile?.(file, 'preview')}
                     onDoubleClick={() => chooseFile?.(file, 'retain')}
                   >

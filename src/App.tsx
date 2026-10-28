@@ -144,8 +144,6 @@ const localGet = (key: string, fallback: string) => localStorage.getItem(key) ||
 type DirectoryDialog =
   | { action: 'create'; parentPath: string }
   | { action: 'rename'; directory: Directory }
-  | { action: 'trash'; directory: Directory }
-  | { action: 'trashFile'; file: Source }
   | { action: 'deleteDirectory'; directory: Directory }
   | { action: 'deleteFile'; file: Source };
 
@@ -753,16 +751,12 @@ export function App() {
     renameDirectory: (directory) => setDirectoryDialog({ action: 'rename', directory }),
     archiveDirectory: (directory, restore) =>
       void run(() => directoryMutation(directory, restore ? 'unarchive' : 'archive')),
-    trashDirectory: (directory) => setDirectoryDialog({ action: 'trash', directory }),
-    restoreDirectory: (directory) => void run(() => directoryMutation(directory, 'restore')),
     upload: (directory) => showUpload(directory.id),
     renameFile: (file) => {
       setRename(file);
       setModal('rename');
     },
     archiveFile: (file, restore) => void run(() => editFile(file, { archived: !restore })),
-    trashFile: (file) => setDirectoryDialog({ action: 'trashFile', file }),
-    restoreFile: (file) => void run(() => editFile(file, { trashed: false })),
     deleteFile: (file) => setDirectoryDialog({ action: 'deleteFile', file }),
     deleteDirectory: (directory) => setDirectoryDialog({ action: 'deleteDirectory', directory }),
     moveFile: (file, folder) => void run(() => editFile(file, { folder })),
@@ -1084,31 +1078,6 @@ export function App() {
                   </div>
                 </PanelSection>
               )}
-              <PanelSection
-                id="library-trash"
-                title={t.trash}
-                icon={<Trash2 size={13} />}
-                count={
-                  catalog.files.filter((f) => sourceState(f, catalog.directories) === 'trash')
-                    .length
-                }
-                t={t}
-                defaultOpen={false}
-              >
-                <div className="file-tree">
-                  <DirectoryTree
-                    directories={catalog.directories}
-                    files={catalog.files}
-                    t={t}
-                    active={active?.id}
-                    view="trash"
-                    query={query}
-                    chooseFile={openFile}
-                    actions={treeActions}
-                    storageKey="tl:tree:sidebar"
-                  />
-                </div>
-              </PanelSection>
             </>
           )}
           {libraryTab === 'sessions' && (
@@ -1797,17 +1766,6 @@ export function App() {
             </h2>
           </div>
         )}
-        <div className="study-resource" aria-label={t.activeResource}>
-          <FileText size={15} />
-          <span title={active?.name}>{active?.name || t.noOpenResources}</span>
-          <ActionMenu
-            label={t.moreStudyTools}
-            actions={auxiliaryStudyTools.map((tool) => ({
-              label: t[tool],
-              run: () => selectStudyTool(tool),
-            }))}
-          />
-        </div>
         <div
           id="study-content"
           role={isPrimaryStudyTool(tab) ? 'tabpanel' : 'region'}
@@ -2133,10 +2091,7 @@ export function App() {
                   navigate={(item) => navigateAnnotation(item.sourceId!, item.location)}
                   remove={async (item) => {
                     await run(async () => {
-                      await api(`/annotations/${item.id}`, 'PATCH', {
-                        deleted: !item.deleted,
-                        expectedRevision: item.revision,
-                      });
+                      await api(`/annotations/${item.id}`, 'DELETE');
                       setBookmarkTick((value) => value + 1);
                     });
                   }}
@@ -2409,18 +2364,11 @@ export function App() {
           const dialog = directoryDialog,
             folder = 'directory' in dialog ? dialog.directory : null,
             item = 'file' in dialog ? dialog.file : null,
-            permanent = dialog.action === 'deleteDirectory' || dialog.action === 'deleteFile';
+            path = folder ? `/directories/${folder.id}` : `/files/${item!.id}`;
           return (
-            <TrashModal
+            <DeleteModal
               t={t}
-              permanent={permanent}
-              title={
-                permanent
-                  ? t.deletePermanentlyTitle
-                  : folder
-                    ? t.trashDirectoryTitle
-                    : t.trashFileTitle
-              }
+              title={folder ? t.deleteDirectoryTitle : t.deleteFileTitle}
               name={folder ? folder.path : item!.name}
               files={
                 folder
@@ -2436,15 +2384,10 @@ export function App() {
                   : 0
               }
               close={() => setDirectoryDialog(null)}
-              purgePath={
-                permanent
-                  ? folder
-                    ? `/directories/${folder.id}`
-                    : `/files/${item!.id}`
-                  : undefined
-              }
+              purgePath={path}
+              // Archiving is the reversible alternative, unless the item already is archived.
               archive={
-                permanent
+                (folder ? folder.archived : item!.archived)
                   ? undefined
                   : async () => {
                       if (folder) await directoryMutation(folder, 'archive');
@@ -2453,21 +2396,13 @@ export function App() {
                     }
               }
               submit={async (concepts) => {
-                if (permanent) {
-                  const path = folder ? `/directories/${folder.id}` : `/files/${item!.id}`;
-                  await api(
-                    concepts.length ? `${path}?concepts=${concepts.join(',')}` : path,
-                    'DELETE',
-                  );
-                  const data = await refresh();
-                  if (sessionRef.current) commitWorkspace(usable(sessionRef.current, data));
-                } else if (folder) await directoryMutation(folder, 'trash');
-                else {
-                  await editFile(item!, { trashed: true });
-                  await saveChain.current;
-                  const data = await refresh();
-                  if (sessionRef.current) commitWorkspace(usable(sessionRef.current, data));
-                }
+                await saveChain.current;
+                await api(
+                  concepts.length ? `${path}?concepts=${concepts.join(',')}` : path,
+                  'DELETE',
+                );
+                const data = await refresh();
+                if (sessionRef.current) commitWorkspace(usable(sessionRef.current, data));
                 setDirectoryDialog(null);
               }}
             />
@@ -2970,13 +2905,12 @@ function TextModal({
   );
 }
 
-function TrashModal({
+function DeleteModal({
   t,
   title,
   name,
   files,
   folders,
-  permanent = false,
   purgePath,
   close,
   archive,
@@ -2987,9 +2921,8 @@ function TrashModal({
   name: string;
   files: number;
   folders: number;
-  permanent?: boolean;
-  /** For a permanent delete: the file or folder, to find concepts that cite only it. */
-  purgePath?: string;
+  /** The file or folder route, also used to find concepts that cite only it. */
+  purgePath: string;
   close: () => void;
   archive?: () => Promise<void>;
   submit: (concepts: string[]) => Promise<void>;
@@ -2999,7 +2932,6 @@ function TrashModal({
   const [concepts, setConcepts] = useState<Array<{ id: string; term: string }> | null>(null),
     [chosen, setChosen] = useState<Set<string>>(new Set());
   useEffect(() => {
-    if (!purgePath) return;
     let live = true;
     api<{ concepts: Array<{ id: string; term: string }> }>(`${purgePath}/purge-preview`)
       .then((value) => {
@@ -3034,12 +2966,12 @@ function TrashModal({
       <p>
         <strong>{name}</strong>
       </p>
-      <p>{permanent ? t.deletePermanentlyExplanation : t.trashExplanation}</p>
+      <p>{t.deletePermanentlyExplanation}</p>
       <p className="muted">
         {t.affectedItems.replace('{files}', String(files)).replace('{folders}', String(folders))}
       </p>
       {archive && <p className="muted">{t.archiveHint}</p>}
-      {purgePath && concepts === null && <LoadingRow>{t.loading}</LoadingRow>}
+      {concepts === null && <LoadingRow>{t.loading}</LoadingRow>}
       {!!concepts?.length && (
         <fieldset className="purge-concepts">
           <legend>{t.purgeConceptsTitle.replace('{n}', String(concepts.length))}</legend>
@@ -3079,11 +3011,11 @@ function TrashModal({
         )}
         <Button
           variant="danger"
-          disabled={pending || (!!purgePath && concepts === null)}
+          disabled={pending || concepts === null}
           onClick={() => void attempt(() => submit([...chosen]))}
         >
           <Trash2 size={16} />
-          {permanent ? t.deletePermanently : t.moveToTrash}
+          {t.deletePermanently}
         </Button>
         <Button variant="ghost" disabled={pending} onClick={close}>
           {t.cancel}

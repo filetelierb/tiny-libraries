@@ -429,6 +429,31 @@ export async function annotationRoute(
     });
     return json(value, existing ? 200 : 201);
   }
+  if (request.method === 'DELETE') {
+    // Deleting is permanent: the record, its list entries, receipts and saved captures.
+    if (!existing) throw new AnnotationError('Annotation not found', 404);
+    await storage.transaction(async (tx) => {
+      await tx.delete([
+        key,
+        `annotation-summary:${existing.sessionId}:${id}`,
+        annotationScopeKey(existing),
+      ]);
+      for (const prefix of [
+        `annotation-receipt:${id}:`,
+        `annotation-receipt-value:${id}:`,
+        `capture-base:${id}:`,
+        `capture-version:${id}:`,
+      ]) {
+        const keys = [...(await tx.list({ prefix })).keys()];
+        for (let i = 0; i < keys.length; i += 128) await tx.delete(keys.slice(i, i + 128));
+      }
+    });
+    for (const prefix of [`annotation/${id}/`, `capture/${id}/`]) {
+      const objects = await env.FILES.list({ prefix });
+      if (objects.objects.length) await env.FILES.delete(objects.objects.map((o) => o.key));
+    }
+    return json({ deleted: true });
+  }
   if (request.method === 'PATCH') {
     const input = z
       .object({ deleted: z.boolean(), expectedRevision: z.number().int().positive() })

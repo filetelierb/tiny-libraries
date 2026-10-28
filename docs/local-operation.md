@@ -49,11 +49,11 @@ The repository alone is not a backup of your library. No user documents, transcr
 
 Use **New folder** at the root or **Create subfolder** from a folder's `+` menu. The same tree and folder actions are available in resource pickers and upload destinations. Empty folders persist. Renaming a parent changes descendant paths while preserving directory/file identities and saved study links. A selected upload destination follows its directory identity through a rename.
 
-**Archive** hides a directory and its descendants from the active tree and pickers. Restoring it preserves each file's individual archive choice. **Delete** asks for confirmation and moves the item or subtree to **Trash**; restore it there. This version does not automatically purge originals or study history. Restore an archived/trashed parent before writing into its descendants.
+**Archive** hides a directory and its descendants from the active tree and pickers. Restoring it preserves each file's individual archive choice. **Delete** asks for confirmation, offers **Archive instead**, and then deletes the item or subtree permanently, with its originals and study data; there is no Trash. The confirmation lists concepts that cite only the deleted files, to delete with them. Restore an archived parent before writing into its descendants.
 
 Entering or restoring a split tab hides and unpins both side panels while preserving their widths; reopen them as drawers or pin them explicitly. Each split tab saves its width ratio and selected source. Drag its central divider, use arrow keys (Shift for larger steps), Home/End for limits, or double-click/press Enter for equal widths. The shared toolbar follows the clicked/focused pane; **Tools target** also selects the owner explicitly. Notes, bookmarks, tutor responses and reader positions remain tied to source identity. On narrow screens, select one full-width source; hidden media pauses.
 
-Directory records, Trash/archive state and split preferences live in celld. Tree expansion/scroll, side-panel preferences and unsaved source-specific note drafts are browser-local and follow the same browser profile and origin.
+Directory records, archive state and split preferences live in celld. Tree expansion/scroll, side-panel preferences and unsaved source-specific note drafts are browser-local and follow the same browser profile and origin.
 
 ## Verification
 
@@ -93,7 +93,7 @@ The PDF worker, fonts and decoders are bundled locally. Opening a PDF needs no M
 
 Use **Annotate resource** to write a formatted note and draw on a local PDF-page, video-frame or image capture. The editor supports Markdown, headings, emphasis, lists, links, code and tables. Pen/highlighter strokes, erasing, undo and clear remain editable after saving. PDF drawings appear over their saved page. Captures and originals are separate local objects.
 
-File annotations are shared across study sessions by file identity and retain their creator, page/time and selected quote. **Current resource** shows that file’s annotations. **All resources** gathers annotations for files open in the session, with an inline directory filter, per-file counts and select-all/none controls. Unbound session annotations have a separate checkbox and remain in their original session. Editing a shared note updates the same record. Read, edit, jump to source, or move an annotation to Trash and restore it. Revision checks reject stale edits from another window. Existing text notes remain available through automatic migration.
+File annotations are shared across study sessions by file identity and retain their creator, page/time and selected quote. **Current resource** shows that file’s annotations. **All resources** gathers annotations for files open in the session, with an inline directory filter, per-file counts and select-all/none controls. Unbound session annotations have a separate checkbox and remain in their original session. Editing a shared note updates the same record. Read, edit, jump to source, or delete an annotation permanently, with its captures. Revision checks reject stale edits from another window. Existing text notes remain available through automatic migration.
 
 Select PDF or document text and choose **Ask tutor** to attach a removable **For this question** context. Its source and quote stay fixed if you change the reader's active tab. A selected passage can be discussed without preparing the entire file. Without a quote, prepare the source first. Persistent conversation references remain unchanged. The exchange records its source/page/time and citations; **Save as annotation** opens an editable note with that context.
 
@@ -101,6 +101,6 @@ Unsent text and question context stay in browser storage. Saved annotations, cap
 
 ## Bookmarks
 
-Use **Bookmark** in the reader toolbar or **Add bookmark** in the panel to label the current source location. File bookmarks are shared across study sessions. Edit the label, jump to the saved time/page, or move a bookmark to Trash and restore it. Existing session bookmarks are migrated automatically without changing their original session records.
+Use **Bookmark** in the reader toolbar or **Add bookmark** in the panel to label the current source location. File bookmarks are shared across study sessions. Edit the label, jump to the saved time/page, or delete a bookmark permanently. Existing session bookmarks are migrated automatically without changing their original session records.
 
 The panel filters **All bookmarks**, **Personal**, or **Suggested by Meta**; the same filter applies to playback markers. The navigation count shows the active file’s complete non-deleted total. Ask the tutor to bookmark a selected passage or an evidence-linked study location to create a Suggested bookmark. Its source and locator must resolve to the material available in that question. One reply can save up to three distinct locations; retry identities prevent duplicate records for the same request/location.

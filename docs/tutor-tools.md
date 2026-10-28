@@ -20,20 +20,20 @@ Writes go through internal Library routes (`/internal/tutor-*`) and run only whi
 
 ## Gaps by record
 
-| Record                | The tutor can                 | Missing                                                                 |
-| --------------------- | ----------------------------- | ----------------------------------------------------------------------- |
-| Files and folders     | Read selected references only | List and search, rename, move, archive, trash, restore, delete, prepare |
-| Artifacts             | Save a new version            | List, read other versions, restore a version                            |
-| Annotations (notes)   | Nothing                       | List, create, edit, delete                                              |
-| Bookmarks             | Create                        | List, edit, delete                                                      |
-| Glossary              | Read supplied concepts, save  | Search, edit, link, merge, archive, delete, unlinked clean-up           |
-| Sessions and tabs     | Nothing                       | List, open files, rename                                                |
-| Tests, quizzes, cards | Practice statistics           | List, start, read results                                               |
+| Record                | The tutor can                 | Missing                                                          |
+| --------------------- | ----------------------------- | ---------------------------------------------------------------- |
+| Files and folders     | Read selected references only | List and search, rename, move, archive, restore, delete, prepare |
+| Artifacts             | Save a new version            | List, read other versions, restore a version                     |
+| Annotations (notes)   | Nothing                       | List, create, edit, delete                                       |
+| Bookmarks             | Create                        | List, edit, delete                                               |
+| Glossary              | Read supplied concepts, save  | Search, edit, link, merge, archive, delete, unlinked clean-up    |
+| Sessions and tabs     | Nothing                       | List, open files, rename                                         |
+| Tests, quizzes, cards | Practice statistics           | List, start, read results                                        |
 
 ## Principles
 
 1. **Library-wide reading is a decision, not a default.** Today the tutor sees only what the student selects. Managing records needs a metadata view of the whole library (names, folders, states, counts) while file contents stay scoped to selected references.
-2. **Three kinds of tools.** Read tools run freely. Reversible writes (rename, move, archive, trash, edit) run directly and record an undo entry. Destructive actions (permanent delete, concept clean-up) never run directly: the tool returns a pending action that the chat shows as a confirmation card, and only the student's click executes it.
+2. **Three kinds of tools.** Read tools run freely. Reversible writes (rename, move, archive, edit) run directly and record an undo entry. Destructive actions (deleting any record, concept clean-up) never run directly: the tool returns a pending action that the chat shows as a confirmation card, and only the student's click executes it.
 3. **Same code paths as the UI.** Each tool calls the worker function behind the matching UI route (for example `deleteConcepts`, `orphanSnapshot`, `purgeTargets`), so validation, versions and transactions stay identical.
 4. **Bounded and replay-safe.** Every write is idempotent per turn and request, limited per reply, and listed in an action log under the reply: what changed, with undo where possible.
 
@@ -49,7 +49,7 @@ Writes go through internal Library routes (`/internal/tutor-*`) and run only whi
 
 0. **Done:** `save_concept` with chat origin; the unlinked-concept view and clean-up in the glossary UI.
 1. **Glossary group and the shared infrastructure.** Confirmation cards, the action log with undo, and tools: `search_concepts`, `update_concept`, `link_concepts`, `merge_concepts`, `archive_concept`, `list_unlinked_concepts`, `clean_up_unlinked_concepts` (confirmation).
-2. **Library group.** `search_library` (metadata), rename, move, archive, trash, restore, prepare, and permanent delete (confirmation, offering the concepts that cite only those files, as the UI does).
+2. **Library group.** `search_library` (metadata), rename, move, archive, restore, prepare, and delete (confirmation, offering the concepts that cite only those files, as the UI does).
 3. **Study records group.** Notes and bookmarks: list, create, edit, delete. Artifact versions: list, restore.
 4. **Practice group.** Tests, quizzes and cards. Then decide on specialist sub-agents from the phase 1–3 measurements.
 

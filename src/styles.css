@@ -9812,3 +9812,53 @@ body:has(.panel-resizer.resizing) {
   margin: 0;
   color: var(--muted-text);
 }
+
+/* Tutor: the chat fills the panel; history and new conversation float at its top right. */
+.conversation-panel {
+  position: relative;
+}
+.conversation-float {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  z-index: 3;
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: color-mix(in oklch, var(--card) 92%, transparent);
+  box-shadow: 0 6px 14px -8px rgb(0 0 0 / 25%);
+  backdrop-filter: blur(8px);
+}
+.conversation-float .icon-button {
+  width: 30px;
+  min-width: 30px;
+  min-height: 30px;
+  border-radius: var(--radius-pill);
+}
+.conversation-messages.conversation-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+  color: var(--muted-text);
+  font-size: var(--font-size-control);
+}
+.conversation-row-host {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+.conversation-row-host > .conversation-row {
+  flex: 1;
+  min-width: 0;
+}
+.conversation-empty + .tutor-composer .composer-actions {
+  justify-content: flex-end;
+}
+/* Room under the floating history and new-conversation buttons. */
+.conversation-panel > .assistant > .conversation-messages {
+  padding-top: 48px;
+}

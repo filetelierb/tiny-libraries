@@ -179,7 +179,7 @@ test('moving a directory carries descendants and refuses moves into itself', () 
   );
 });
 
-test('permanent delete only purges trashed files and whole trashed folders', () => {
+test('deleting purges a file, or a folder with everything inside it, right away', () => {
   let state = changeDirectory([], [], { action: 'create', parentPath: '', name: 'Course' });
   state = changeDirectory(state.directories, state.files, {
     action: 'create',
@@ -189,15 +189,7 @@ test('permanent delete only purges trashed files and whole trashed folders', () 
   const inside = file('Course/Week 1'),
     outside = file('Other');
   const course = state.directories.find((directory) => directory.path === 'Course')!;
-  assert.throws(() => purgeTargets(state.directories, [inside], { kind: 'file', id: inside.id }));
-  assert.throws(() =>
-    purgeTargets(state.directories, [inside], { kind: 'directory', id: course.id }),
-  );
-  const trashed = changeDirectory(state.directories, [inside, outside], {
-    action: 'trash',
-    id: course.id,
-  });
-  const purge = purgeTargets(trashed.directories, trashed.files, {
+  const purge = purgeTargets(state.directories, [inside, outside], {
     kind: 'directory',
     id: course.id,
   });
@@ -210,9 +202,8 @@ test('permanent delete only purges trashed files and whole trashed folders', () 
     [inside.id],
   );
   assert.equal(
-    purgeTargets(trashed.directories, trashed.files, { kind: 'file', id: inside.id }).files[0].id,
+    purgeTargets(state.directories, [inside], { kind: 'file', id: inside.id }).files[0].id,
     inside.id,
   );
-  const loose = { ...outside, trashed: true };
-  assert.equal(purgeTargets([], [loose], { kind: 'file', id: loose.id }).files.length, 1);
+  assert.throws(() => purgeTargets([], [], { kind: 'file', id: inside.id }));
 });

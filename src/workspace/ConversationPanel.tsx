@@ -138,7 +138,11 @@ export function ConversationPanel({
     [renameRequest, setRenameRequest] = useState(0),
     [query, setQuery] = useState(''),
     [loading, setLoading] = useState(true),
-    [creating, setCreating] = useState(false);
+    [creating, setCreating] = useState(false),
+    // A message written before any conversation exists; it is sent once one is created for it.
+    [openingMessage, setOpeningMessage] = useState<{ conversationId: string; text: string } | null>(
+      null,
+    );
   const alive = useRef(true);
   useEffect(() => {
     alive.current = true;
@@ -187,7 +191,7 @@ export function ConversationPanel({
     if (refresh)
       await changed().catch((error) => onError(error instanceof Error ? error.message : t.error));
   };
-  const create = async () => {
+  const create = async (text?: string) => {
     setCreating(true);
     try {
       const created = await api<ConversationDetail>(
@@ -200,6 +204,7 @@ export function ConversationPanel({
       );
       await receive(created);
       if (alive.current) {
+        if (text) setOpeningMessage({ conversationId: created.id, text });
         select(created.id);
         setHistory(false);
       }
@@ -220,35 +225,27 @@ export function ConversationPanel({
   }, [questionRequest?.id, loading, current?.id, creating]);
   return (
     <div className="conversation-panel">
-      <div className="conversation-heading">
-        {history && (
+      {history ? (
+        <div className="conversation-heading">
           <IconButton label={t.backToConversation} onClick={() => setHistory(false)}>
             <ChevronLeft />
           </IconButton>
-        )}
-        <strong title={current?.name}>
-          {history ? t.conversationHistory : current?.name || t.assistant}
-        </strong>
-        {!history && current && (
-          <IconButton label={t.renameConversation} onClick={() => setRenameRequest((n) => n + 1)}>
-            <Pencil />
+          <strong>{t.conversationHistory}</strong>
+        </div>
+      ) : (
+        <div className="conversation-float">
+          <IconButton label={t.conversationHistory} onClick={() => setHistory(true)}>
+            <History />
           </IconButton>
-        )}
-        <IconButton
-          label={t.conversationHistory}
-          aria-pressed={history}
-          onClick={() => setHistory(!history)}
-        >
-          <History />
-        </IconButton>
-        <IconButton
-          label={t.newConversation}
-          disabled={creating || loading}
-          onClick={() => void create()}
-        >
-          <Plus />
-        </IconButton>
-      </div>
+          <IconButton
+            label={t.newConversation}
+            disabled={creating || loading}
+            onClick={() => void create()}
+          >
+            <Plus />
+          </IconButton>
+        </div>
+      )}
       {history ? (
         <div className="conversation-history">
           <div className="search-field">
@@ -269,26 +266,37 @@ export function ConversationPanel({
               ),
             )
             .map((item) => (
-              <button
-                className={`conversation-row ${item.id === selected ? 'active' : ''}`}
-                key={item.id}
-                onClick={() => {
-                  select(item.id);
-                  setHistory(false);
-                }}
-              >
-                <span className="conversation-row-title">
-                  <strong>{item.name}</strong>
-                  <Badge>{item.messageCount ?? item.messages.length}</Badge>
-                </span>
-                <span>{item.messages.at(-1)?.content.slice(0, 120) || t.noMessages}</span>
-                <small>
-                  {new Date(item.updatedAt).toLocaleString(undefined, {
-                    dateStyle: 'medium',
-                    timeStyle: 'short',
-                  })}
-                </small>
-              </button>
+              <div className="conversation-row-host" key={item.id}>
+                <button
+                  className={`conversation-row ${item.id === selected ? 'active' : ''}`}
+                  onClick={() => {
+                    select(item.id);
+                    setHistory(false);
+                  }}
+                >
+                  <span className="conversation-row-title">
+                    <strong>{item.name}</strong>
+                    <Badge>{item.messageCount ?? item.messages.length}</Badge>
+                  </span>
+                  <span>{item.messages.at(-1)?.content.slice(0, 120) || t.noMessages}</span>
+                  <small>
+                    {new Date(item.updatedAt).toLocaleString(undefined, {
+                      dateStyle: 'medium',
+                      timeStyle: 'short',
+                    })}
+                  </small>
+                </button>
+                <IconButton
+                  label={`${t.renameConversation}: ${item.name}`}
+                  onClick={() => {
+                    select(item.id);
+                    setHistory(false);
+                    setRenameRequest((n) => n + 1);
+                  }}
+                >
+                  <Pencil />
+                </IconButton>
+              </div>
             ))}
           {!threads.length && <p className="small-empty">{t.noMessages}</p>}
         </div>
@@ -315,14 +323,13 @@ export function ConversationPanel({
           changed={changed}
           prepareSource={prepareSource}
           createAttachment={createAttachment}
+          openingMessage={
+            openingMessage?.conversationId === current.id ? openingMessage.text : undefined
+          }
+          consumeOpeningMessage={() => setOpeningMessage(null)}
         />
       ) : (
-        <div className="small-empty">
-          <p>{t.startConversationBody}</p>
-          <Button variant="primary" disabled={creating} onClick={() => void create()}>
-            {t.startConversation}
-          </Button>
-        </div>
+        <DraftComposer source={source} t={t} busy={creating} send={(text) => create(text)} />
       )}
     </div>
   );
@@ -347,6 +354,8 @@ function ConversationThread({
   prepareSource,
   createAttachment,
   renameRequest,
+  openingMessage,
+  consumeOpeningMessage,
 }: {
   conversation: ConversationDetail;
   catalog: Catalog;
@@ -363,6 +372,9 @@ function ConversationThread({
   prepareSource: (source: Source) => void;
   createAttachment: () => Promise<AnnotationRequest | null>;
   renameRequest: number;
+  /** Written before this conversation existed: sent as soon as the thread opens. */
+  openingMessage?: string;
+  consumeOpeningMessage: () => void;
   receive: (conversation: ConversationDetail, refresh?: boolean) => Promise<void>;
   onError: (message: string) => void;
   cite: (sourceId: string, segment: Segment) => void;
@@ -556,6 +568,12 @@ function ConversationThread({
     consumeQuestion();
     composer.current?.focus();
   }, [questionRequest?.id]);
+  useEffect(() => {
+    if (!openingMessage) return;
+    consumeOpeningMessage();
+    changeDraft(openingMessage);
+    void send();
+  }, []);
   useEffect(() => {
     if (!incomingAttachment) return;
     consumeAttachment();
@@ -1711,6 +1729,82 @@ function ConversationThread({
           />
         </Modal>
       )}
+    </div>
+  );
+}
+
+/**
+ * The chat before any conversation exists: the same composer, with the open file as its
+ * reference. Sending starts a new conversation in the session with that message.
+ */
+function DraftComposer({
+  source,
+  t,
+  busy,
+  send,
+}: {
+  source: Source | null;
+  t: T;
+  busy: boolean;
+  send: (text: string) => Promise<void>;
+}) {
+  const [draft, setDraft] = useState('');
+  const submit = () => {
+    const text = draft.trim();
+    if (!text || busy) return;
+    void send(text);
+  };
+  return (
+    <div className="assistant">
+      <div className="conversation-messages conversation-empty">
+        <p>{t.startConversationBody}</p>
+      </div>
+      <form
+        className="tutor-composer"
+        onSubmit={(event) => {
+          event.preventDefault();
+          submit();
+        }}
+      >
+        <div className="composer-card">
+          <div className="composer-strip">
+            <span className="reference-chip" title={source ? source.name : t.generalTutorNotice}>
+              <FileStack />
+              <span>
+                {t.references} ({source ? 1 : 0})
+              </span>
+            </span>
+          </div>
+          <div className="composer-input">
+            <textarea
+              aria-label={t.assistant}
+              placeholder={t.chatPlaceholder}
+              maxLength={8000}
+              value={draft}
+              disabled={busy}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+                  event.preventDefault();
+                  submit();
+                }
+              }}
+            />
+          </div>
+          <div className="composer-actions">
+            <Button
+              variant="primary"
+              type="submit"
+              className="composer-send"
+              aria-label={t.send}
+              title={t.send}
+              disabled={busy || !draft.trim()}
+            >
+              {busy ? <LoaderCircle className="spin" /> : <ArrowUp />}
+            </Button>
+          </div>
+        </div>
+      </form>
     </div>
   );
 }

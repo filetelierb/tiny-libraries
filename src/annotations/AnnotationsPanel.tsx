@@ -1,15 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import {
-  FileText,
-  Paperclip,
-  Pencil,
-  Play,
-  Plus,
-  RotateCcw,
-  Search,
-  StickyNote,
-  Trash2,
-} from 'lucide-react';
+import { FileText, Paperclip, Pencil, Play, Plus, Search, StickyNote, Trash2 } from 'lucide-react';
 import type { Annotation, AnnotationSummary, SourceLocation } from '../../shared/annotations';
 import type { Catalog, Source } from '../../shared/domain';
 import { sourceState } from '../../shared/directories';
@@ -58,7 +48,6 @@ export function AnnotationsPanel({
     [all, setAll] = useState(!source),
     [excluded, setExcluded] = useState<Set<string>>(() => new Set()),
     [includeSession, setIncludeSession] = useState(true),
-    [trash, setTrash] = useState(false),
     [loading, setLoading] = useState(true),
     [refresh, setRefresh] = useState(0),
     [query, setQuery] = useState(''),
@@ -108,11 +97,11 @@ export function AnnotationsPanel({
   );
   const counts = new Map<string, number>();
   for (const item of items)
-    if (item.sourceId && item.deleted === trash)
+    if (item.sourceId && !item.deleted)
       counts.set(item.sourceId, (counts.get(item.sourceId) || 0) + 1);
   const visible = items.filter(
     (item) =>
-      item.deleted === trash &&
+      !item.deleted &&
       (all
         ? item.sourceId
           ? selectedIds.has(item.sourceId)
@@ -130,10 +119,7 @@ export function AnnotationsPanel({
   };
   const remove = async (item: AnnotationSummary) => {
     try {
-      await api(`/annotations/${item.id}`, 'PATCH', {
-        deleted: !item.deleted,
-        expectedRevision: item.revision,
-      });
+      await api(`/annotations/${item.id}`, 'DELETE');
       setOpened(null);
       setRefresh((value) => value + 1);
       changed?.();
@@ -153,13 +139,6 @@ export function AnnotationsPanel({
             <p>{t.notes}</p>
             <small>{all ? t.openSessionResources : source?.name || t.selectMaterial}</small>
           </div>
-          <IconButton
-            label={t.showDeletedAnnotations}
-            aria-pressed={trash}
-            onClick={() => setTrash(!trash)}
-          >
-            <Trash2 />
-          </IconButton>
           <IconButton label={t.newAnnotation} onClick={create}>
             <Plus />
           </IconButton>
@@ -260,7 +239,7 @@ export function AnnotationsPanel({
         {!loading && !visible.length && (
           <div className="panel-empty">
             <StickyNote />
-            <strong>{trash ? t.noDeletedNotes : t.noNotesTitle}</strong>
+            <strong>{t.noNotesTitle}</strong>
             <p>
               {all && !openFiles.length && !items.some((item) => !item.sourceId)
                 ? t.openResourcesForNotes
@@ -298,21 +277,19 @@ export function AnnotationsPanel({
                 >
                   {item.title || t.untitledAnnotation}
                 </button>
-                {!trash && (
-                  <IconButton
-                    label={`${t.editAnnotation}: ${item.title || t.untitledAnnotation}`}
-                    disabled={unavailable}
-                    onClick={() => void open(item, true)}
-                  >
-                    <Pencil />
-                  </IconButton>
-                )}
                 <IconButton
-                  label={trash ? t.restoreAnnotation : t.deleteAnnotation}
-                  className="icon-button annotation-delete"
-                  onClick={() => (trash ? void remove(item) : setDeleteTarget(item.id))}
+                  label={`${t.editAnnotation}: ${item.title || t.untitledAnnotation}`}
+                  disabled={unavailable}
+                  onClick={() => void open(item, true)}
                 >
-                  {trash ? <RotateCcw /> : <Trash2 />}
+                  <Pencil />
+                </IconButton>
+                <IconButton
+                  label={t.deleteAnnotation}
+                  className="icon-button annotation-delete"
+                  onClick={() => setDeleteTarget(item.id)}
+                >
+                  <Trash2 />
                 </IconButton>
               </header>
               <AnnotationPreview
@@ -349,27 +326,25 @@ export function AnnotationsPanel({
                   </div>
                 </div>
               ) : (
-                !trash && (
-                  <div className="annotation-card-actions">
-                    <Button
-                      size="sm"
-                      disabled={!item.sourceId || unavailable}
-                      onClick={() => item.sourceId && navigate(item.sourceId, item.location)}
-                    >
-                      <Play />
-                      {t.reviewNote}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="primary"
-                      disabled={unavailable}
-                      onClick={() => attach(item)}
-                    >
-                      <Paperclip />
-                      {t.attachNote}
-                    </Button>
-                  </div>
-                )
+                <div className="annotation-card-actions">
+                  <Button
+                    size="sm"
+                    disabled={!item.sourceId || unavailable}
+                    onClick={() => item.sourceId && navigate(item.sourceId, item.location)}
+                  >
+                    <Play />
+                    {t.reviewNote}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    disabled={unavailable}
+                    onClick={() => attach(item)}
+                  >
+                    <Paperclip />
+                    {t.attachNote}
+                  </Button>
+                </div>
               )}
             </article>
           );

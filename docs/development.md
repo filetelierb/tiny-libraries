@@ -94,3 +94,11 @@ Removed the glossary suggestion review. Preparing a file now turns each of its g
 Permanently deleting a file or folder lists the concepts that cite only those files and deletes the checked ones in the same transaction. The glossary gains a creation filter and a "Not linked to any file" view: concepts that cite no existing file (archived and trashed files count) and are not connected through synonyms or relations to one that does. Clean up deletes them, with their history and the links other concepts kept to them.
 
 Verification: unit tests cover one-time ingestion and origin tagging, linking without proposals, orphan detection through relations, concepts left behind by a delete, the clean-up route and link removal; type checks and build pass. The browser showed origin badges, the creation filter and the unlinked view on the local library.
+
+### No Trash; a chat-first tutor panel
+
+Deleting is now permanent. Files and folders are deleted from their menu after a confirmation that offers archiving instead and lists concepts that cite only them; the Trash section is gone. Annotations and bookmarks are deleted permanently too, annotations with their captures; their deleted views are gone. Records trashed before this change stay hidden.
+
+The tutor panel drops the active-file row and its tools menu (chapters, practice and review still open from their own entry points) and the Tutor heading. The chat always shows; writing in it before any conversation exists starts a new conversation in the session with that message. History and New conversation float at the top right; History rows can be renamed.
+
+Verification: 266 tests, type checks and build pass. In the browser, a message sent from the empty chat created a conversation in the session and received a cited reply, and History listed it.

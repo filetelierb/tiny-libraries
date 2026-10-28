@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { Bookmark, Plus, Pencil, Trash2, RotateCcw, Play } from 'lucide-react';
+import { Bookmark, Plus, Pencil, Trash2, Play } from 'lucide-react';
 import type { AnnotationSummary } from '../../shared/annotations';
 import { Button, IconButton } from '../design/components';
 import type { T } from '../i18n';
@@ -27,11 +27,10 @@ export function BookmarksPanel({
   sourceName?: string;
   composer?: ReactNode;
 }) {
-  const [deleted, setDeleted] = useState(false),
-    [target, setTarget] = useState<string | null>(null),
+  const [target, setTarget] = useState<string | null>(null),
     [pending, setPending] = useState(false);
   const visible = items
-    .filter((item) => item.deleted === deleted && (filter === 'all' || item.origin === filter))
+    .filter((item) => !item.deleted && (filter === 'all' || item.origin === filter))
     .sort(
       (a, b) =>
         (a.location.seconds ?? a.location.page ?? 0) - (b.location.seconds ?? b.location.page ?? 0),
@@ -44,13 +43,6 @@ export function BookmarksPanel({
             <p>{t.bookmarks}</p>
             <small>{sourceName || t.selectMaterial}</small>
           </div>
-          <IconButton
-            label={t.showDeletedBookmarks}
-            aria-pressed={deleted}
-            onClick={() => setDeleted(!deleted)}
-          >
-            <Trash2 />
-          </IconButton>
           <IconButton label={t.newBookmark} onClick={create}>
             <Plus />
           </IconButton>
@@ -73,7 +65,7 @@ export function BookmarksPanel({
         {!visible.length && (
           <div className="panel-empty">
             <Bookmark />
-            <strong>{deleted ? t.noDeletedBookmarks : t.noBookmarksTitle}</strong>
+            <strong>{t.noBookmarksTitle}</strong>
             <p>
               {filter === 'manual'
                 ? t.noPersonalBookmarks
@@ -100,26 +92,21 @@ export function BookmarksPanel({
                     : t.open}
               </Button>
               <small>{item.origin === 'tutor' ? t.suggestedOrigin : t.personalOrigin}</small>
-              {!deleted && (
-                <IconButton label={`${t.editBookmark}: ${item.title}`} onClick={() => edit(item)}>
-                  <Pencil />
-                </IconButton>
-              )}
+              <IconButton label={`${t.editBookmark}: ${item.title}`} onClick={() => edit(item)}>
+                <Pencil />
+              </IconButton>
               <IconButton
-                label={deleted ? t.restoreBookmark : `${t.deleteBookmark}: ${item.title}`}
+                label={`${t.deleteBookmark}: ${item.title}`}
                 disabled={pending}
-                onClick={() => {
-                  if (deleted) void remove(item);
-                  else setTarget(item.id);
-                }}
+                onClick={() => setTarget(item.id)}
               >
-                {deleted ? <RotateCcw /> : <Trash2 />}
+                <Trash2 />
               </IconButton>
             </div>
             <p>{item.title || item.text}</p>
             {target === item.id && (
               <div className="bookmark-delete-confirm">
-                <p>{t.confirmBookmarkTrash}</p>
+                <p>{t.confirmBookmarkDelete}</p>
                 <div>
                   <Button
                     size="sm"
