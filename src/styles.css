@@ -4690,25 +4690,100 @@ body:has(.panel-resizer.resizing) {
   .reader-study-layout {
     flex-direction: column;
   }
-  .chapter-index,
-  .chapter-index.collapsed {
-    flex: 0 0 auto;
-    width: 100%;
-    border-right: 0;
-    border-bottom: 1px solid var(--border);
-    max-height: 180px;
+}
+/* A tight reader keeps a one-line chapter bar; the index opens as a sheet over the content. */
+.reader-study {
+  position: relative;
+}
+/* The reader is its own stacking context; lift it over the concept hint (z 8) while the sheet is open. */
+.reader-study:has(.chapter-sheet) {
+  z-index: 9;
+}
+.chapter-index.compact {
+  flex: 0 0 auto;
+  align-items: flex-start;
+  width: 100%;
+  padding: 6px 8px;
+  border-right: 0;
+  border-bottom: 1px solid var(--border);
+}
+.chapter-sheet-toggle {
+  max-width: 100%;
+  min-width: 0;
+}
+.chapter-sheet-toggle > span {
+  flex-shrink: 0;
+}
+.chapter-sheet-toggle > small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted-text);
+  font-size: var(--font-size-small);
+}
+.chapter-sheet-mask {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  border: 0;
+  background: oklch(0.18 0.03 244 / 0.42);
+  cursor: default;
+  animation: chapter-mask-in 160ms ease-out;
+}
+.chapter-sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 31;
+  display: flex;
+  flex-direction: column;
+  max-height: min(72%, 560px);
+  padding: 8px 12px 12px;
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  background: var(--surface);
+  box-shadow: 0 -10px 32px oklch(0.18 0.03 244 / 0.22);
+  animation: chapter-sheet-in 200ms ease-out;
+}
+.chapter-sheet::before {
+  content: '';
+  align-self: center;
+  width: 36px;
+  height: 4px;
+  margin-bottom: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--border);
+}
+.chapter-sheet-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 0 8px 4px;
+}
+.chapter-sheet-head > span {
+  flex: 1;
+  color: var(--muted-text);
+  font-size: var(--font-size-small);
+}
+.chapter-sheet .chapter-index-content {
+  flex: 1;
+}
+@keyframes chapter-mask-in {
+  from {
+    opacity: 0;
   }
-  .chapter-index.collapsed {
-    max-height: 44px;
+}
+@keyframes chapter-sheet-in {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
   }
-  .chapter-index-heading {
-    min-height: 40px;
-  }
-  .chapter-index-item {
-    margin-bottom: 2px;
-  }
-  .chapter-index-link {
-    padding: 6px 7px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .chapter-sheet-mask,
+  .chapter-sheet {
+    animation: none;
   }
 }
 

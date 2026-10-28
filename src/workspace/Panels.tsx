@@ -11,7 +11,8 @@ import {
   type Side,
 } from './layout';
 
-export function usePanels() {
+/** `expanded`: the library stays closed and opening the study panel leaves its saved state alone. */
+export function usePanels(expanded = false) {
   const [viewport, setViewport] = useState(window.innerWidth);
   const [preferences, setPreferences] = useState(() => {
     try {
@@ -35,12 +36,13 @@ export function usePanels() {
     }
   }, [preferences]);
   const narrow = viewport < DRAWER_BREAKPOINT;
-  const effective = narrow
+  const shown = narrow
     ? {
         left: { ...preferences.left, open: mobileOpen === 'left' },
         right: { ...preferences.right, open: mobileOpen === 'right' },
       }
     : preferences;
+  const effective = expanded ? { ...shown, left: { ...shown.left, open: false } } : shown;
   const resolved = resolvePanels(effective, viewport);
   const open = (side: Side, value = true) => {
     if (narrow) {
@@ -52,7 +54,7 @@ export function usePanels() {
       return {
         ...previous,
         [side]: { ...previous[side], open: value },
-        ...(value && !previous[side].pinned && !previous[other].pinned
+        ...(value && !expanded && !previous[side].pinned && !previous[other].pinned
           ? { [other]: { ...previous[other], open: false } }
           : {}),
       };

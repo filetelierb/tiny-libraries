@@ -205,15 +205,16 @@ export function App() {
       document.removeEventListener('scroll', scrolled, true);
     };
   }, [selectionMenu]);
-  const panels = usePanels();
+  // Expanded reading hides the library; the study panel stays available beside the content.
+  const [focus, setFocus] = useState(false);
+  const panels = usePanels(focus);
   const left = panels.effective.left.open,
     right = panels.effective.right.open;
   const setLeft = (value: boolean) => panels.open('left', value);
   const setRight = (value: boolean) => panels.open('right', value);
   const leftPanelRef = useRef<HTMLElement>(null),
     rightPanelRef = useRef<HTMLElement>(null);
-  const [focus, setFocus] = useState(false),
-    [tab, setTab] = useState<StudyTab>('assistant'),
+  const [tab, setTab] = useState<StudyTab>('assistant'),
     [query, setQuery] = useState('');
   function selectStudyTool(value: StudyTab) {
     setTab(value);
@@ -233,10 +234,8 @@ export function App() {
     tabId: string | null;
   } | null>(null);
   const [splitQuery, setSplitQuery] = useState('');
-  useDrawerFocus('left', !!catalog && !focus && panels.drawer === 'left', leftPanelRef, () =>
-    setLeft(false),
-  );
-  useDrawerFocus('right', !!catalog && !focus && panels.drawer === 'right', rightPanelRef, () =>
+  useDrawerFocus('left', !!catalog && panels.drawer === 'left', leftPanelRef, () => setLeft(false));
+  useDrawerFocus('right', !!catalog && panels.drawer === 'right', rightPanelRef, () =>
     setRight(false),
   );
   const [processing, setProcessing] = useState(false);
@@ -821,7 +820,7 @@ export function App() {
     });
   }
   // Bookmarks are labelled inline in the bookmarks panel when it can show.
-  const bookmarkInline = right && !focus && tab === 'bookmarks';
+  const bookmarkInline = right && tab === 'bookmarks';
   useEffect(() => {
     if (!bookmarkIntent) return;
     setTab('bookmarks');
@@ -845,7 +844,7 @@ export function App() {
       />
     );
   // New and edited annotations open inline in the annotations panel when it can show.
-  const annotationInline = right && !focus && tab === 'notes';
+  const annotationInline = right && tab === 'notes';
   useEffect(() => {
     if (!annotationRequest) return;
     setTab('notes');
@@ -1190,7 +1189,7 @@ export function App() {
           />
         )}
       </aside>
-      {left && !focus && panels.resolved.left.docked && (
+      {left && panels.resolved.left.docked && (
         <PanelResizer
           side="left"
           label={t.filePanelWidth}
@@ -1200,7 +1199,7 @@ export function App() {
           change={(value) => panels.resize('left', value)}
         />
       )}
-      {panels.drawer && !focus && !panels.narrow && (
+      {panels.drawer && !panels.narrow && (
         <button
           className="drawer-backdrop"
           tabIndex={-1}
@@ -1208,17 +1207,19 @@ export function App() {
           onClick={() => panels.open(panels.drawer!, false)}
         />
       )}
-      <main className="workspace" inert={!!panels.drawer && !focus}>
+      <main className="workspace" inert={!!panels.drawer}>
         <div className="resource-tabs">
-          <IconButton
-            label={left ? t.hideFiles : t.openFiles}
-            aria-controls="left-panel"
-            aria-expanded={left && !focus}
-            data-panel-toggle="left"
-            onClick={() => setLeft(!left)}
-          >
-            {left && !focus ? <PanelLeftClose /> : <PanelLeftOpen />}
-          </IconButton>
+          {!focus && (
+            <IconButton
+              label={left ? t.hideFiles : t.openFiles}
+              aria-controls="left-panel"
+              aria-expanded={left}
+              data-panel-toggle="left"
+              onClick={() => setLeft(!left)}
+            >
+              {left ? <PanelLeftClose /> : <PanelLeftOpen />}
+            </IconButton>
+          )}
           <ResourceTabs
             workspace={resources}
             files={catalog.files}
@@ -1231,13 +1232,13 @@ export function App() {
             splitWith={splitResourceTab}
           />
           <IconButton
-            label={right && !focus ? t.hideStudy : t.showStudy}
-            aria-expanded={right && !focus}
+            label={right ? t.hideStudy : t.showStudy}
+            aria-expanded={right}
             aria-controls="right-panel"
             data-panel-toggle="right"
             onClick={() => setRight(!right)}
           >
-            {right && !focus ? <PanelRightClose /> : <PanelRightOpen />}
+            {right ? <PanelRightClose /> : <PanelRightOpen />}
           </IconButton>
         </div>
         {error && (
@@ -1548,7 +1549,7 @@ export function App() {
                         !!quizRequest ||
                         !!deckRequest ||
                         assessmentOpen ||
-                        (right && !focus && tab === 'review')
+                        (right && tab === 'review')
                       }
                       resumeSignal={
                         resumePlayback?.sourceId === source.id ? resumePlayback.nonce : 0
@@ -1767,7 +1768,7 @@ export function App() {
           </>
         )}
       </main>
-      {right && !focus && panels.resolved.right.docked && (
+      {right && panels.resolved.right.docked && (
         <PanelResizer
           side="right"
           label={t.studyPanelWidth}
@@ -1781,7 +1782,7 @@ export function App() {
         id="right-panel"
         ref={rightPanelRef}
         aria-label={t.study}
-        hidden={!right || focus}
+        hidden={!right}
         inert={!!panels.drawer && panels.drawer !== 'right'}
         className={`study-panel ${panels.resolved.right.docked ? 'docked' : 'floating'}${panels.narrow ? ' narrow' : ''}`}
         role={panels.drawer === 'right' ? 'dialog' : undefined}
