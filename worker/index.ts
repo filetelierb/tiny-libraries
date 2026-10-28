@@ -919,7 +919,7 @@ export default {
         if (!kind || !name.trim() || name.length > 240 || folder.length > 240)
           throw new ApiError('Unsupported file or invalid name');
         if (!Number.isSafeInteger(size) || size < 1 || size > MAX_FILE_BYTES)
-          throw new ApiError('File must be between 1 byte and 512 MB', 413);
+          throw new ApiError('File must be between 1 byte and 2 GB', 413);
         if (!request.body) throw new ApiError('Missing file');
         const file: Source = {
           id: crypto.randomUUID(),

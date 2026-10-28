@@ -975,7 +975,7 @@ const en = {
     'Sampling is above twice the signal frequency, so the samples follow the signal.',
   signalCaptionLead: 'How to read it.',
   unsupported: 'Unsupported file type',
-  maxSize: 'Each file must be 512 MB or smaller.',
+  maxSize: 'Each file must be 2 GB or smaller.',
   noQuestions: 'Prepare the source to unlock practice.',
   noChat:
     'Ask for an explanation tied to this source. Tools can read its segments and your recorded practice.',
@@ -2127,7 +2127,7 @@ const es: Dictionary = {
     'El muestreo supera el doble de la frecuencia, así que las muestras siguen la señal.',
   signalCaptionLead: 'Cómo leerlo.',
   unsupported: 'Formato no compatible',
-  maxSize: 'Cada archivo debe tener 512 MB o menos.',
+  maxSize: 'Cada archivo debe tener 2 GB o menos.',
   noQuestions: 'Prepara la fuente para practicar.',
   noChat:
     'Pide una explicación vinculada a esta fuente. Las herramientas consultan sus segmentos y tus intentos.',

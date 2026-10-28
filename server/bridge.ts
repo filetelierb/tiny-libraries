@@ -198,7 +198,7 @@ export async function startBridge(
             bytes += value.length;
             if (bytes > MAX_FILE_BYTES) {
               await reader.cancel();
-              throw new Error('File exceeds 512 MB');
+              throw new Error('File exceeds 2 GB');
             }
             await handle.write(value);
           }

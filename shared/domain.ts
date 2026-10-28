@@ -279,7 +279,8 @@ export type Catalog = {
   conversations: import('./conversations').Conversation[];
   settings: Settings;
 };
-export const MAX_FILE_BYTES = 512 * 1024 * 1024;
+/** Full-length lecture recordings commonly reach about 1 GB. */
+export const MAX_FILE_BYTES = 2 * 1024 * 1024 * 1024;
 /**
  * Rejects questions without a usable solution. True/false questions always offer
  * true (index 0) then false (index 1); the interface shows them in the student's language.
