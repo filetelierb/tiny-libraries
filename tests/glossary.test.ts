@@ -6,15 +6,21 @@ import {
   matchConcept,
   summarizeConcept,
   mergeGeneratedConcept,
+  orphanConcepts,
+  conceptsOnlyIn,
+  type GlossaryEntry,
 } from '../shared/glossary';
 import {
   ensureGlossary,
   glossaryRoute,
   glossarySnapshot,
   ingestGeneratedConcept,
+  ingestLearning,
+  saveChatConcept,
+  deleteConcepts,
   saveConcept,
 } from '../worker/glossary';
-import type { Concept } from '../shared/domain';
+import type { Concept, Learning } from '../shared/domain';
 import { MemoryStore } from './storage';
 
 const input = (term: string) =>
@@ -110,22 +116,25 @@ test('concurrent glossary saves use revision checks; retries are idempotent and 
   );
 });
 
-test('generation resolves aliases and preserves reviewed meanings while deduplicating proposals', async () => {
+test('generation resolves aliases and links the file to a reviewed meaning without proposals', async () => {
   const store = new MemoryStore(),
     original = input('Sampling frequency');
   original.aliases = ['Sample rate'];
   const entry = await saveConcept(store.storage(), original);
+  assert.equal(entry.origin, 'manual');
   const source = { sourceId: crypto.randomUUID(), sourceVersion: 1, segmentIds: ['segment-1'] };
-  const proposed = await ingestGeneratedConcept(
+  const linked = await ingestGeneratedConcept(
     store.storage(),
     'Sample rate',
     'A different explanation.',
     source,
   );
-  assert.equal(proposed.id, entry.id);
-  assert.equal(proposed.reviewed, true);
-  assert.equal(proposed.definition, entry.definition);
-  assert.equal(proposed.proposals.length, 1);
+  assert.equal(linked.id, entry.id);
+  assert.equal(linked.reviewed, true);
+  assert.equal(linked.definition, entry.definition);
+  assert.equal(linked.proposals.length, 0);
+  assert.deepEqual(linked.senses[0].sources, [source]);
+  assert.equal(linked.origin, 'manual');
   assert.equal(
     (
       await ingestGeneratedConcept(
@@ -135,24 +144,103 @@ test('generation resolves aliases and preserves reviewed meanings while deduplic
         source,
       )
     ).version,
-    proposed.version,
+    linked.version,
   );
-  const accepted = (await (await route(store, `/${entry.id}/proposals`, 'POST', {
-    version: proposed.version,
-    mutationId: crypto.randomUUID(),
-    action: 'add',
-    proposalId: proposed.proposals[0].id,
-  }))!.json()) as ReturnType<typeof normalizeConcept>;
-  assert.equal(accepted.senses.length, 2);
-  assert.equal(accepted.definition, entry.definition);
-  assert.equal(accepted.senses[1].definition, 'A different explanation.');
-  assert.equal(accepted.proposals.length, 0);
-  assert.notEqual(
-    mergeGeneratedConcept(entry, entry.term, 'si', source).proposals.length,
-    mergeGeneratedConcept(entry, entry.term, 'sí', source).proposals.filter(
-      (p) => p.definition === 'si',
-    ).length,
+  const fresh = mergeGeneratedConcept(undefined, 'Aliasing', 'Folding of frequencies.', source);
+  assert.equal(fresh.origin, 'analysis');
+});
+
+test('prepared files create concepts once, tagged as file analysis', async () => {
+  const store = new MemoryStore(),
+    sourceId = crypto.randomUUID();
+  await store.put(`file:${sourceId}`, { id: sourceId, version: 1 });
+  const learning = {
+    sourceId,
+    sourceVersion: 1,
+    createdAt: '2026-10-28T00:00:00.000Z',
+    segments: [
+      { id: 's1', text: 'Aliasing folds high frequencies.' },
+      { id: 's2', text: 'The Nyquist rate is twice the bandwidth.' },
+    ],
+    synthesis: {
+      glossary: [
+        { term: 'Aliasing', definition: 'Folding of frequencies.', segmentIds: ['s1'] },
+        { term: 'Nyquist rate', definition: 'Twice the bandwidth.', segmentIds: ['s2', 'missing'] },
+        { term: 'Unsupported', definition: 'No evidence.', segmentIds: ['missing'] },
+      ],
+    },
+  } as unknown as Learning;
+  await ingestLearning(store.storage(), learning);
+  await ingestLearning(store.storage(), learning);
+  const entries = await glossarySnapshot(store.storage());
+  assert.deepEqual(entries.map((e) => e.term).sort(), ['Aliasing', 'Nyquist rate']);
+  assert.ok(entries.every((e) => e.origin === 'analysis' && e.version === 1));
+  assert.deepEqual(
+    entries.find((e) => e.term === 'Nyquist rate')!.senses[0].sources.map((s) => s.segmentIds),
+    [['s2']],
   );
+  const chat = await saveChatConcept(store.storage(), {
+    term: 'Sampling theorem',
+    definition: 'Sampling above twice the bandwidth allows reconstruction.',
+    sources: [],
+  });
+  assert.equal(chat.origin, 'chat');
+  assert.equal(summarizeConcept(chat).origin, 'chat');
+});
+
+test('orphans cite no file and reach no concept that does; deleting them drops links', async () => {
+  const store = new MemoryStore(),
+    fileId = crypto.randomUUID(),
+    gone = crypto.randomUUID();
+  await store.put(`file:${fileId}`, { id: fileId, version: 1 });
+  const cite = (sourceId: string) => [{ sourceId, sourceVersion: 1, segmentIds: ['s1'] }];
+  const anchored = await saveConcept(store.storage(), input('Anchored'));
+  const near = await saveConcept(store.storage(), input('Near'));
+  const lonely = await saveConcept(store.storage(), input('Lonely'));
+  const stale = await saveConcept(store.storage(), input('Stale'));
+  const save = (entry: GlossaryEntry, sources: ReturnType<typeof cite>, links: string[] = []) =>
+    store.storage().transaction(async (tx) => {
+      const next = normalizeConcept({
+        ...entry,
+        senses: entry.senses.map((sense) => ({
+          ...sense,
+          sources,
+          relations: links.map((entryId) => ({ entryId, description: 'Related' })),
+        })),
+      });
+      await tx.put(`concept-entry:${entry.id}`, next);
+      return next;
+    });
+  // Near has no file of its own but relates to Anchored; Stale cites a deleted file.
+  const all = [
+    await save(anchored, cite(fileId)),
+    await save(near, [], [anchored.id]),
+    await save(lonely, []),
+    await save(stale, cite(gone), [lonely.id]),
+  ];
+  const files = new Set([fileId]);
+  assert.deepEqual(
+    orphanConcepts(all, files)
+      .map((e) => e.term)
+      .sort(),
+    ['Lonely', 'Stale'],
+  );
+  assert.deepEqual(
+    conceptsOnlyIn(all, new Set([fileId, gone]), new Set([gone])).map((e) => e.term),
+    ['Stale'],
+  );
+  const listed = (await (await route(store, '?orphans=true'))!.json()) as { total: number };
+  assert.equal(listed.total, 2);
+  const result = (await (await route(store, '/vacuum', 'POST', {}))!.json()) as {
+    deleted: number;
+  };
+  assert.equal(result.deleted, 2);
+  const left = await glossarySnapshot(store.storage());
+  assert.deepEqual(left.map((e) => e.term).sort(), ['Anchored', 'Near']);
+  assert.equal(await store.get(`concept-name:lonely`), undefined);
+  await store.storage().transaction((tx) => deleteConcepts(tx, [anchored.id]));
+  const remaining = await glossarySnapshot(store.storage());
+  assert.deepEqual(remaining[0].senses[0].relations, []);
 });
 
 test('explicit merge retains distinct meanings, archive forwarding, history and canonical alias ownership', async () => {

@@ -267,6 +267,8 @@ export type Concept = {
   archived?: boolean;
   mergedInto?: string;
   updatedAt?: string;
+  /** How the concept was first created; older entries without one are inferred. */
+  origin?: import('./glossary').ConceptOrigin;
 };
 export type Catalog = {
   files: Source[];

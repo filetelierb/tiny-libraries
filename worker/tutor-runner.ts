@@ -11,6 +11,7 @@ import {
   type TutorAgentCheckpoint,
   type ArtifactWriter,
   type BookmarkWriter,
+  type ConceptWriter,
 } from './tutor-agent';
 import { TutorJournal } from './tutor-journal';
 import { parseTutorAnswer, visibleTutorText } from '../shared/study-note';
@@ -29,6 +30,11 @@ export type TutorRunnerServices = {
     record: TurnRecord,
     intent: TurnIntent,
     input: Parameters<ArtifactWriter>[0],
+  ): Promise<unknown>;
+  concept?(
+    record: TurnRecord,
+    intent: TurnIntent,
+    input: Parameters<ConceptWriter>[0],
   ): Promise<unknown>;
 };
 class ControlCheckpoint extends Error {}
@@ -241,7 +247,8 @@ export class TutorRunner {
           )
             throw new ControlCheckpoint();
         };
-        const artifact = this.services.artifact?.bind(this.services);
+        const artifact = this.services.artifact?.bind(this.services),
+          concept = this.services.concept?.bind(this.services);
         await agent.executeNextTool(
           async (value) => {
             await guard();
@@ -251,6 +258,11 @@ export class TutorRunner {
             (async (value) => {
               await guard();
               return artifact(record!, intent, value);
+            }),
+          concept &&
+            (async (value) => {
+              await guard();
+              return concept(record!, intent, value);
             }),
         );
         const checkpointObject = await this.journal.objects.put(agent.snapshot());

@@ -60,7 +60,15 @@ import {
 import { api, SessionExpiredError, uploadFile } from './api';
 import type { QuestionAttachment } from '../shared/tutor-attachments';
 import { dictionaries, type T } from './i18n';
-import { Badge, Button, Empty, IconButton, Modal, ToolbarButton } from './design/components';
+import {
+  Badge,
+  Button,
+  Empty,
+  IconButton,
+  LoadingRow,
+  Modal,
+  ToolbarButton,
+} from './design/components';
 import { StudyReader } from './study/StudyReader';
 import { ChapterQuiz, questionChoices, type ChapterQuizRequest } from './study/ChapterQuiz';
 import { FlashcardDeck, type DeckRequest } from './study/FlashcardDeck';
@@ -123,7 +131,6 @@ import { useBookmarks } from './bookmarks/useBookmarks';
 import { BookmarkEditor, type BookmarkIntent } from './bookmarks/BookmarkEditor';
 import { BookmarksPanel, type BookmarkFilter } from './bookmarks/BookmarksPanel';
 import { GlossaryPanel } from './glossary/GlossaryPanel';
-import { ResourceConceptSuggestions } from './glossary/ResourceConceptSuggestions';
 const AnnotationEditor = lazy(() => import('./annotations/AnnotationEditor'));
 const AssessmentWorkspace = lazy(() =>
   import('./study/AssessmentWorkspace').then((module) => ({ default: module.AssessmentWorkspace })),
@@ -147,7 +154,6 @@ export function App() {
     [locale, setLocale] = useState<Locale>(() => localGet('tl:locale', 'en') as Locale),
     [session, setSession] = useState<StudySession | null>(null);
   const [annotationRequest, setAnnotationRequest] = useState<AnnotationRequest | null>(null);
-  const [conceptSuggestionsOpen, setConceptSuggestionsOpen] = useState(false);
   const [glossaryFocus, setGlossaryFocus] = useState<{ id: string; nonce: string } | null>(null);
   const [annotationTick, setAnnotationTick] = useState(0);
   const [quizRequest, setQuizRequest] = useState<ChapterQuizRequest | null>(null);
@@ -1432,8 +1438,11 @@ export function App() {
                     <StickyNote />
                   </IconButton>
                   <IconButton
-                    label={t.conceptSuggestions}
-                    onClick={() => setConceptSuggestionsOpen(true)}
+                    label={t.glossary}
+                    onClick={() => {
+                      setRight(true);
+                      setTab('glossary');
+                    }}
                   >
                     <Lightbulb />
                   </IconButton>
@@ -1721,43 +1730,6 @@ export function App() {
                   );
                 }}
               </SplitWorkspace>
-              <ResourceConceptSuggestions
-                key={`${active.id}:${active.version}`}
-                source={active}
-                preparedAt={learning?.createdAt || ''}
-                location={resourceLocation(active)}
-                open={conceptSuggestionsOpen}
-                setOpen={setConceptSuggestionsOpen}
-                catalog={catalog}
-                t={t}
-                changed={refresh}
-                prepare={() => void run(prepare)}
-                navigate={(id, location) => {
-                  setConceptSuggestionsOpen(false);
-                  navigateAnnotation(id, location, t.conceptSuggestions);
-                }}
-                followup={(prompt, location) => {
-                  setConceptSuggestionsOpen(false);
-                  setQuestionRequest({
-                    id: crypto.randomUUID(),
-                    context: {
-                      sourceId: active.id,
-                      sourceVersion: active.version,
-                      sourceName: active.name,
-                      location,
-                    },
-                    prompt,
-                  });
-                  setRight(true);
-                  setTab('assistant');
-                }}
-                openConcept={(id) => {
-                  setConceptSuggestionsOpen(false);
-                  setGlossaryFocus({ id, nonce: crypto.randomUUID() });
-                  setRight(true);
-                  setTab('glossary');
-                }}
-              />
             </div>
           </>
         )}
@@ -2464,6 +2436,13 @@ export function App() {
                   : 0
               }
               close={() => setDirectoryDialog(null)}
+              purgePath={
+                permanent
+                  ? folder
+                    ? `/directories/${folder.id}`
+                    : `/files/${item!.id}`
+                  : undefined
+              }
               archive={
                 permanent
                   ? undefined
@@ -2473,9 +2452,13 @@ export function App() {
                       setDirectoryDialog(null);
                     }
               }
-              submit={async () => {
+              submit={async (concepts) => {
                 if (permanent) {
-                  await api(folder ? `/directories/${folder.id}` : `/files/${item!.id}`, 'DELETE');
+                  const path = folder ? `/directories/${folder.id}` : `/files/${item!.id}`;
+                  await api(
+                    concepts.length ? `${path}?concepts=${concepts.join(',')}` : path,
+                    'DELETE',
+                  );
                   const data = await refresh();
                   if (sessionRef.current) commitWorkspace(usable(sessionRef.current, data));
                 } else if (folder) await directoryMutation(folder, 'trash');
@@ -2994,6 +2977,7 @@ function TrashModal({
   files,
   folders,
   permanent = false,
+  purgePath,
   close,
   archive,
   submit,
@@ -3004,12 +2988,30 @@ function TrashModal({
   files: number;
   folders: number;
   permanent?: boolean;
+  /** For a permanent delete: the file or folder, to find concepts that cite only it. */
+  purgePath?: string;
   close: () => void;
   archive?: () => Promise<void>;
-  submit: () => Promise<void>;
+  submit: (concepts: string[]) => Promise<void>;
 }) {
   const [pending, setPending] = useState(false),
     [error, setError] = useState('');
+  const [concepts, setConcepts] = useState<Array<{ id: string; term: string }> | null>(null),
+    [chosen, setChosen] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (!purgePath) return;
+    let live = true;
+    api<{ concepts: Array<{ id: string; term: string }> }>(`${purgePath}/purge-preview`)
+      .then((value) => {
+        if (!live) return;
+        setConcepts(value.concepts);
+        setChosen(new Set(value.concepts.map((concept) => concept.id)));
+      })
+      .catch(() => live && setConcepts([]));
+    return () => {
+      live = false;
+    };
+  }, [purgePath]);
   async function attempt(work: () => Promise<void>) {
     setPending(true);
     setError('');
@@ -3037,6 +3039,32 @@ function TrashModal({
         {t.affectedItems.replace('{files}', String(files)).replace('{folders}', String(folders))}
       </p>
       {archive && <p className="muted">{t.archiveHint}</p>}
+      {purgePath && concepts === null && <LoadingRow>{t.loading}</LoadingRow>}
+      {!!concepts?.length && (
+        <fieldset className="purge-concepts">
+          <legend>{t.purgeConceptsTitle.replace('{n}', String(concepts.length))}</legend>
+          <p className="muted">{t.purgeConceptsBody}</p>
+          <ul>
+            {concepts.map((concept) => (
+              <li key={concept.id}>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={chosen.has(concept.id)}
+                    onChange={(event) => {
+                      const next = new Set(chosen);
+                      if (event.target.checked) next.add(concept.id);
+                      else next.delete(concept.id);
+                      setChosen(next);
+                    }}
+                  />
+                  {concept.term}
+                </label>
+              </li>
+            ))}
+          </ul>
+        </fieldset>
+      )}
       {error && (
         <p role="alert" className="form-error">
           {error}
@@ -3049,7 +3077,11 @@ function TrashModal({
             {t.archiveInstead}
           </Button>
         )}
-        <Button variant="danger" disabled={pending} onClick={() => void attempt(submit)}>
+        <Button
+          variant="danger"
+          disabled={pending || (!!purgePath && concepts === null)}
+          onClick={() => void attempt(() => submit([...chosen]))}
+        >
           <Trash2 size={16} />
           {permanent ? t.deletePermanently : t.moveToTrash}
         </Button>

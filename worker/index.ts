@@ -27,7 +27,6 @@ import {
   runAssistant,
   bridgedFetch,
   gradeShortAnswer,
-  analyzeConcepts,
   generateCards,
   generateArtifactStudy,
   generateReinforcement,
@@ -61,7 +60,6 @@ import {
 } from './assessments';
 import { assessmentOptions, captureStudyProgress } from './assessment-context';
 import { assessmentMarkdown } from '../shared/assessments';
-import { conceptSuggestionsRoute } from './concept-suggestions';
 import {
   conversationRoute,
   conversationSnapshot,
@@ -80,7 +78,15 @@ import {
   ensureSharedAnnotations,
   createSuggestedBookmark,
 } from './annotations';
-import { glossaryRoute, glossarySnapshot, GlossaryError } from './glossary';
+import {
+  glossaryRoute,
+  glossarySnapshot,
+  GlossaryError,
+  deleteConcepts,
+  ingestLearning,
+  saveChatConcept,
+} from './glossary';
+import { conceptSourceSchema, conceptsOnlyIn, type GlossaryEntry } from '../shared/glossary';
 import {
   changeDirectory,
   ensureDirectories,
@@ -213,6 +219,20 @@ export class Library extends DurableObject<Env> {
         const saved = await saveTutorVersion(this.ctx.storage, value.sourceId, value);
         return json({ saved: true, revision: saved.revision, title: saved.title });
       }
+      if (path === '/internal/tutor-concept' && request.method === 'POST') {
+        const value = z
+          .object({
+            conversationId: z.string().min(1).max(200),
+            term: z.string().trim().min(1).max(200),
+            definition: z.string().trim().min(1).max(6000),
+            sources: z.array(conceptSourceSchema).max(8),
+          })
+          .parse(await boundedJson(request));
+        if (!(await this.ctx.storage.get(`conversation:${value.conversationId}`)))
+          throw new ApiError('Conversation not found', 404);
+        const saved = await saveChatConcept(this.ctx.storage, value);
+        return json({ saved: true, id: saved.id, term: saved.term, version: saved.version });
+      }
       if (path === '/internal/tutor-bookmark' && request.method === 'POST') {
         const value = z
           .object({
@@ -279,14 +299,48 @@ export class Library extends DurableObject<Env> {
         return json({ folder });
       }
       const directoryMatch = path.match(/^\/api\/directories\/([a-f0-9-]+)$/);
-      const purgeMatch = path.match(/^\/api\/(files|directories)\/([a-f0-9-]+)$/);
-      if (purgeMatch && request.method === 'DELETE') {
+      const purgeMatch = path.match(/^\/api\/(files|directories)\/([a-f0-9-]+)(\/purge-preview)?$/);
+      // Concepts that cite only the files being deleted, offered for deletion alongside them.
+      const conceptsLeftBehind = async (
+        storage: Pick<DurableObjectStorage, 'list'>,
+        files: Array<{ id: string }>,
+        all: Array<{ id: string }>,
+      ) =>
+        conceptsOnlyIn(
+          [...(await storage.list<GlossaryEntry>({ prefix: 'concept-entry:' })).values()],
+          new Set(all.map((file) => file.id)),
+          new Set(files.map((file) => file.id)),
+        );
+      if (purgeMatch?.[3] && request.method === 'GET') {
+        const snapshot = await this.directorySnapshot();
+        const target = purgeTargets(snapshot.directories, snapshot.files, {
+          kind: purgeMatch[1] === 'files' ? 'file' : 'directory',
+          id: purgeMatch[2],
+        });
+        const concepts = await conceptsLeftBehind(this.ctx.storage, target.files, snapshot.files);
+        return json({
+          files: target.files.length,
+          concepts: concepts.map((entry) => ({ id: entry.id, term: entry.term })),
+        });
+      }
+      if (purgeMatch && !purgeMatch[3] && request.method === 'DELETE') {
+        const chosen = new Set(
+          (url.searchParams.get('concepts') || '').split(',').filter(Boolean).slice(0, 2000),
+        );
         const removed = await this.ctx.storage.transaction(async (storage) => {
           const snapshot = await this.directorySnapshot(storage);
           const target = purgeTargets(snapshot.directories, snapshot.files, {
             kind: purgeMatch[1] === 'files' ? 'file' : 'directory',
             id: purgeMatch[2],
           });
+          // Only concepts still tied to nothing but these files go with them.
+          if (chosen.size)
+            await deleteConcepts(
+              storage,
+              (await conceptsLeftBehind(storage, target.files, snapshot.files))
+                .map((entry) => entry.id)
+                .filter((id) => chosen.has(id)),
+            );
           for (const file of target.files) {
             await storage.delete([`file:${file.id}`, `learning:${file.id}`]);
             await deleteRevisions(storage, file.id);
@@ -586,6 +640,10 @@ export class Library extends DurableObject<Env> {
             throw new ApiError('Source version changed', 409);
           await this.ctx.storage.put(`learning:${id}`, value);
           await recordGenerated(this.ctx.storage, value);
+          // The file's glossary terms become concepts without a review step.
+          await ingestLearning(this.ctx.storage, value).catch((error) =>
+            console.error('Concept creation after preparation failed', error),
+          );
           return json({ ok: true });
         }
         const value = await this.ctx.storage.get<Learning>(`learning:${id}`);
@@ -788,20 +846,6 @@ export class Library extends DurableObject<Env> {
         settings: () => this.settings(),
       });
       if (conversationResponse) return conversationResponse;
-      const suggestionsResponse = await conceptSuggestionsRoute({
-        request,
-        storage: this.ctx.storage,
-        executionId: this.executionId,
-        body: () => boundedJson(request),
-        settings: () => this.settings(),
-        start: (task) => this.ctx.waitUntil(task),
-        analyze: async (learning, known, locale, model) => {
-          const key = await this.ctx.storage.get<string>('apiKey');
-          if (!key) throw new ApiError('Add a Meta API key in Settings', 409);
-          return analyzeConcepts(key, model, learning, known, locale, bridgedFetch(this.env));
-        },
-      });
-      if (suggestionsResponse) return suggestionsResponse;
       const glossaryResponse = await glossaryRoute(request, this.ctx.storage, () =>
         boundedJson(request),
       );

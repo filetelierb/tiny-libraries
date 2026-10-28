@@ -16,15 +16,38 @@ import {
   SlidersHorizontal,
   ChevronRight,
   Merge,
+  PencilLine,
+  MessageSquare,
+  FileSearch,
+  Unlink,
+  Trash2,
 } from 'lucide-react';
 import type { Catalog, ConceptSource, PublicLearning, Source } from '../../shared/domain';
 import type { SourceLocation } from '../../shared/annotations';
-import { normalizeConcept, type GlossaryEntry, type GlossarySummary } from '../../shared/glossary';
+import {
+  conceptOrigin,
+  normalizeConcept,
+  type ConceptOrigin,
+  type GlossaryEntry,
+  type GlossarySummary,
+} from '../../shared/glossary';
 import { api } from '../api';
-import { Badge, Button, IconButton } from '../design/components';
+import { Badge, Button, IconButton, Modal } from '../design/components';
 import { GlossaryEditor } from './GlossaryEditor';
 import type { TreeActions } from '../workspace/DirectoryTree';
 import type { T } from '../i18n';
+
+const originIcons = { manual: PencilLine, chat: MessageSquare, analysis: FileSearch };
+/** How a concept was created: by hand, by the tutor on request, or from a prepared file. */
+function OriginBadge({ origin, t }: { origin: ConceptOrigin; t: T }) {
+  const Icon = originIcons[origin];
+  return (
+    <Badge tone="outline">
+      <Icon />
+      {t[`conceptOrigin_${origin}`]}
+    </Badge>
+  );
+}
 
 type Revision = {
   version: number;
@@ -94,6 +117,10 @@ export function GlossaryPanel({
   const [query, setQuery] = useState(() => preference('query', ''));
   const [archived, setArchived] = useState(() => preference('archived', 'false') === 'true');
   const [reviewed, setReviewed] = useState(() => preference('reviewed', 'all'));
+  const [origin, setOrigin] = useState(() => preference('origin', 'all'));
+  // The orphan view replaces the active/archived status: it shows concepts tied to no file.
+  const [orphans, setOrphans] = useState(() => preference('orphans', 'false') === 'true');
+  const [vacuum, setVacuum] = useState<'confirm' | 'running' | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [search, setSearch] = useState(query),
     [page, setPage] = useState<Page>({ items: [], nextCursor: null, total: 0 });
@@ -120,6 +147,8 @@ export function GlossaryPanel({
     q: search,
     archived: String(archived),
     reviewed,
+    origin,
+    ...(orphans ? { orphans: 'true' } : {}),
     ...(sourceKey ? { sources: sourceKey } : {}),
   });
   const paramsKey = params.toString();
@@ -141,9 +170,11 @@ export function GlossaryPanel({
       query,
       archived: String(archived),
       reviewed,
+      origin,
+      orphans: String(orphans),
     }))
       localStorage.setItem(`tl:glossary:${key}`, value);
-  }, [scope, query, archived, reviewed]);
+  }, [scope, query, archived, reviewed, origin, orphans]);
   useEffect(() => {
     const current = ++generation.current;
     setLoading(true);
@@ -348,11 +379,10 @@ export function GlossaryPanel({
           </details>
         </header>
         <h2 title={`${t.revision} ${entry.version}`}>{entry.term}</h2>
-        {entry.archived && (
-          <div className="glossary-meta">
-            <Badge tone="outline">{t.archived}</Badge>
-          </div>
-        )}
+        <div className="glossary-meta">
+          <OriginBadge origin={conceptOrigin(entry)} t={t} />
+          {entry.archived && <Badge tone="outline">{t.archived}</Badge>}
+        </div>
         {entry.mergedInto ? (
           <Button onClick={() => void open(entry.mergedInto!)}>
             {t.mergedConcept} {name(entry.mergedInto)}
@@ -664,7 +694,24 @@ export function GlossaryPanel({
         )}
       </div>
     );
-  const activeFilters = Number(scope !== 'all') + Number(archived) + Number(reviewed !== 'all');
+  const activeFilters =
+    Number(scope !== 'all') +
+    Number(archived || orphans) +
+    Number(reviewed !== 'all') +
+    Number(origin !== 'all');
+  async function cleanUp() {
+    setVacuum('running');
+    try {
+      await api('/glossary/vacuum', 'POST', {});
+      setEntry(null);
+      setTick((value) => value + 1);
+      await changed();
+    } catch (cause) {
+      onError(cause instanceof Error ? cause.message : t.error);
+    } finally {
+      setVacuum(null);
+    }
+  }
   return (
     <div className="glossary-panel">
       <div className="annotation-panel-head">
@@ -713,11 +760,24 @@ export function GlossaryPanel({
             <label>
               {t.status}
               <select
-                value={String(archived)}
-                onChange={(e) => setArchived(e.target.value === 'true')}
+                value={orphans ? 'orphans' : String(archived)}
+                onChange={(e) => {
+                  setOrphans(e.target.value === 'orphans');
+                  setArchived(e.target.value === 'true');
+                }}
               >
                 <option value="false">{t.activeConcepts}</option>
                 <option value="true">{t.archived}</option>
+                <option value="orphans">{t.orphanConcepts}</option>
+              </select>
+            </label>
+            <label>
+              {t.conceptOriginFilter}
+              <select value={origin} onChange={(e) => setOrigin(e.target.value)}>
+                <option value="all">{t.all}</option>
+                <option value="manual">{t.conceptOrigin_manual}</option>
+                <option value="chat">{t.conceptOrigin_chat}</option>
+                <option value="analysis">{t.conceptOrigin_analysis}</option>
               </select>
             </label>
             <label>
@@ -731,6 +791,34 @@ export function GlossaryPanel({
           </div>
         )}
       </div>
+      {orphans && !loading && page.total > 0 && (
+        <div className="glossary-orphans">
+          <Unlink aria-hidden="true" />
+          <p>{t.orphanConceptsHint.replace('{n}', String(page.total))}</p>
+          <Button size="sm" variant="danger" onClick={() => setVacuum('confirm')}>
+            <Trash2 />
+            {t.cleanUpOrphans}
+          </Button>
+        </div>
+      )}
+      {vacuum && (
+        <Modal
+          title={t.cleanUpOrphansTitle}
+          close={() => vacuum !== 'running' && setVacuum(null)}
+          closeLabel={t.close}
+        >
+          <p>{t.cleanUpOrphansBody.replace('{n}', String(page.total))}</p>
+          <div className="modal-actions">
+            <Button variant="danger" disabled={vacuum === 'running'} onClick={() => void cleanUp()}>
+              <Trash2 />
+              {t.cleanUpOrphans}
+            </Button>
+            <Button variant="ghost" disabled={vacuum === 'running'} onClick={() => setVacuum(null)}>
+              {t.cancel}
+            </Button>
+          </div>
+        </Modal>
+      )}
       <p className="sr-only" role="status">
         {loading
           ? t.loading
@@ -764,6 +852,7 @@ export function GlossaryPanel({
             {item.match === 'synonym' && <small>{t.synonymMatch}</small>}
             <p>{item.preview}</p>
             <span className="glossary-meta">
+              <OriginBadge origin={item.origin} t={t} />
               <Badge>
                 <BookOpen />
                 {item.senseCount}{' '}

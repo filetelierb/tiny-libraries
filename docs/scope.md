@@ -55,7 +55,7 @@ Store keys backend-only and redact API responses. The initial app is single-user
 - A03: video/audio/PDF/image/text each produce appropriate source locators.
 - A04: translated captions retain cue identity and timing; original remains available.
 - A05: reject unresolvable chapter/question references before publishing.
-- A06: normalized glossary duplicates merge; conflicting definitions remain review proposals.
+- A06: prepared terms become concepts without a review step; a known term gains the new file as a source, keeping its definition. Each concept records whether it was added manually, from the chat or from file analysis.
 - A07: local endpoints reject foreign origins/hosts; no remote multi-user isolation is claimed.
 - A08: deterministic artifact interaction works and survives refresh.
 - A09: attempt scores and review evidence agree; zero attempts yields no mastery claim.

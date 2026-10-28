@@ -9,7 +9,10 @@ import {
   matchConcept,
   mergeGeneratedConcept,
   mergeGlossaryEntries,
+  orphanConcepts,
   sameSource,
+  conceptOrigins,
+  type ConceptOrigin,
   type GlossaryEntry,
   type GlossaryInput,
   type GlossarySummary,
@@ -235,6 +238,7 @@ export async function saveConcept(storage: GlossaryStorage, input: GlossaryInput
       reviewed: false,
       sources: [],
       proposals: previous?.proposals || [],
+      origin: previous ? previous.origin : 'manual',
       updatedAt: new Date().toISOString(),
     });
     await writeEntry(tx, value, previous);
@@ -247,12 +251,13 @@ export async function ingestGeneratedConcept(
   term: string,
   definition: string,
   source: ConceptSource,
+  origin: ConceptOrigin = 'analysis',
 ) {
   await ensureGlossary(storage);
   return storage.transaction(async (tx) => {
     const id = await tx.get<string>(`concept-name:${conceptName(term)}`);
     const previous = id ? await resolveEntry(tx, id) : undefined;
-    const next = mergeGeneratedConcept(previous, term, definition, source);
+    const next = mergeGeneratedConcept(previous, term, definition, source, origin);
     if (JSON.stringify(previous) === JSON.stringify(next)) return previous!;
     const value = {
       ...next,
@@ -263,6 +268,141 @@ export async function ingestGeneratedConcept(
     await writeEntry(tx, value, previous);
     return value;
   });
+}
+/** A concept the tutor saves at the student's request, with the evidence it cited, if any. */
+export async function saveChatConcept(
+  storage: GlossaryStorage,
+  input: { term: string; definition: string; sources: ConceptSource[] },
+) {
+  await ensureGlossary(storage);
+  return storage.transaction(async (tx) => {
+    const id = await tx.get<string>(`concept-name:${conceptName(input.term)}`);
+    const previous = id ? await resolveEntry(tx, id) : undefined;
+    let next: GlossaryEntry = previous
+      ? normalizeConcept(previous)
+      : normalizeConcept({
+          id: crypto.randomUUID(),
+          term: input.term,
+          definition: input.definition,
+          version: 1,
+          reviewed: false,
+          sources: [],
+          proposals: [],
+          origin: 'chat',
+        });
+    for (const source of input.sources)
+      next = mergeGeneratedConcept(next, input.term, input.definition, source, 'chat');
+    if (previous && JSON.stringify(previous) === JSON.stringify(next)) return previous;
+    const value = {
+      ...next,
+      version: previous ? previous.version + 1 : 1,
+      updatedAt: new Date().toISOString(),
+    };
+    glossaryInputSchema.parse({ ...value, mutationId: crypto.randomUUID() });
+    await writeEntry(tx, value, previous);
+    return value;
+  });
+}
+/** Every glossary term of a prepared file becomes, or links to, a concept once per preparation. */
+export async function ingestLearning(storage: GlossaryStorage, learning: Learning) {
+  const marker = `concept-ingested:${learning.sourceId}:${learning.sourceVersion}:${learning.createdAt}`;
+  if (await storage.get(marker)) return;
+  for (const term of learning.synthesis?.glossary || []) {
+    const segments = term.segmentIds
+      .map((id) => learning.segments.find((s) => s.id === id && s.text.trim()))
+      .filter((s) => !!s)
+      .slice(0, 8);
+    if (!term.term.trim() || !term.definition.trim() || !segments.length) continue;
+    try {
+      for (const segment of segments)
+        await ingestGeneratedConcept(
+          storage,
+          term.term.slice(0, 200),
+          term.definition.slice(0, 6000),
+          {
+            sourceId: learning.sourceId,
+            sourceVersion: learning.sourceVersion,
+            segmentIds: [segment.id],
+            ...(segment.end != null ? { endSeconds: segment.end } : {}),
+            location: {
+              quote: segment.text.slice(0, 2000),
+              ...(segment.page ? { page: segment.page } : {}),
+              ...(segment.start != null ? { seconds: segment.start } : {}),
+            },
+          },
+        );
+    } catch (error) {
+      // One unusable term (a name taken by an alias, an oversized entry) never blocks the rest.
+      if (!(error instanceof GlossaryError) && !(error instanceof z.ZodError)) throw error;
+    }
+  }
+  await storage.put(marker, true);
+}
+/** Files prepared before concepts were created automatically get their terms once. */
+async function ingestPrepared(storage: GlossaryStorage) {
+  if (await storage.get('glossary-ingest:v1')) return;
+  for (const learning of (await storage.list<Learning>({ prefix: 'learning:' })).values())
+    if (
+      (await storage.get<Source>(`file:${learning.sourceId}`))?.version === learning.sourceVersion
+    )
+      await ingestLearning(storage, learning);
+  await storage.put('glossary-ingest:v1', true);
+}
+async function existingFileIds(storage: GlossaryStore) {
+  return new Set(
+    [...(await storage.list({ prefix: 'file:' })).keys()].map((key) => key.slice('file:'.length)),
+  );
+}
+/**
+ * Removes concepts for good: their records, names and history, and the synonym or relation
+ * links other concepts kept to them.
+ */
+export async function deleteConcepts(tx: GlossaryStore, ids: string[]) {
+  const removed = new Set(ids);
+  for (const id of removed) {
+    const entry = await tx.get<GlossaryEntry>(entryKey(id));
+    if (!entry) continue;
+    for (const name of names(entry))
+      if ((await tx.get(`concept-name:${name}`)) === id) await tx.delete(`concept-name:${name}`);
+    for (const prefix of [`glossary-history:${id}:`, `glossary-revision:${id}:`])
+      for (const key of (await tx.list({ prefix })).keys()) await tx.delete(key);
+    await tx.delete(entryKey(id));
+    await tx.delete(`concept-summary:${id}`);
+  }
+  for (const other of (await tx.list<GlossaryEntry>({ prefix: 'concept-entry:' })).values()) {
+    if (other.mergedInto && removed.has(other.mergedInto)) {
+      await tx.delete(entryKey(other.id));
+      await tx.delete(`concept-summary:${other.id}`);
+      continue;
+    }
+    const linked = other.senses.some(
+      (sense) =>
+        sense.synonyms.some((id) => removed.has(id)) ||
+        sense.relations.some((r) => removed.has(r.entryId)),
+    );
+    if (!linked) continue;
+    await writeEntry(
+      tx,
+      normalizeConcept({
+        ...other,
+        senses: other.senses.map((sense) => ({
+          ...sense,
+          synonyms: sense.synonyms.filter((id) => !removed.has(id)),
+          relations: sense.relations.filter((r) => !removed.has(r.entryId)),
+        })),
+        version: other.version + 1,
+        updatedAt: new Date().toISOString(),
+      }),
+      other,
+    );
+  }
+  return removed.size;
+}
+export async function orphanSnapshot(storage: GlossaryStore) {
+  return orphanConcepts(
+    [...(await storage.list<GlossaryEntry>({ prefix: 'concept-entry:' })).values()],
+    await existingFileIds(storage),
+  );
 }
 const proposalAction = z.object({
   version: z.number().int().positive(),
@@ -287,6 +427,7 @@ export async function glossaryRoute(
     path = url.pathname;
   if (!path.startsWith('/api/glossary')) return null;
   await ensureGlossary(storage);
+  await ingestPrepared(storage);
   if (path === '/api/glossary' && request.method === 'GET') {
     const query = (url.searchParams.get('q') || '').slice(0, 200),
       archived = url.searchParams.get('archived') === 'true';
@@ -296,13 +437,23 @@ export async function glossaryRoute(
     const filter = url.searchParams.get('reviewed') || 'all';
     if (!['all', 'true', 'false'].includes(filter))
       throw new GlossaryError('Invalid review filter');
-    const all = [
-      ...(await storage.list<GlossarySummary>({ prefix: 'concept-summary:' })).values(),
-    ].sort((a, b) => a.id.localeCompare(b.id));
+    const origin = url.searchParams.get('origin') || 'all';
+    if (origin !== 'all' && !(conceptOrigins as readonly string[]).includes(origin))
+      throw new GlossaryError('Invalid origin filter');
+    // The orphan view lists archived and active concepts alike: both can be cleaned up.
+    const orphans =
+      url.searchParams.get('orphans') === 'true'
+        ? new Set((await orphanSnapshot(storage)).map((entry) => entry.id))
+        : null;
+    // Summaries saved before origins existed infer theirs the same way entries do.
+    const all = [...(await storage.list<GlossarySummary>({ prefix: 'concept-summary:' })).values()]
+      .map((e) => ({ ...e, origin: e.origin ?? (e.sourceIds.length ? 'analysis' : 'manual') }))
+      .sort((a, b) => a.id.localeCompare(b.id));
     const items = all
       .filter(
         (e) =>
-          e.archived === archived &&
+          (orphans ? orphans.has(e.id) : e.archived === archived) &&
+          (origin === 'all' || e.origin === origin) &&
           (filter === 'all' || e.reviewed === (filter === 'true')) &&
           (!sourceIds.length || e.sourceIds.some((id) => sourceIds.includes(id))),
       )
@@ -320,6 +471,21 @@ export async function glossaryRoute(
       nextCursor: remaining.length > 50 ? page.at(-1)!.id : null,
       total: items.length,
     });
+  }
+  if (path === '/api/glossary/vacuum' && request.method === 'POST') {
+    const input = z
+      .object({ ids: z.array(z.string().uuid()).min(1).max(2000).optional() })
+      .parse(await body());
+    // Only concepts that are still orphans when the clean-up runs are removed; without a
+    // list, every current orphan is.
+    const deleted = await storage.transaction(async (tx) => {
+      const orphans = (await orphanSnapshot(tx)).map((entry) => entry.id);
+      return deleteConcepts(
+        tx,
+        input.ids ? orphans.filter((id) => input.ids!.includes(id)) : orphans,
+      );
+    });
+    return json({ deleted });
   }
   if (path === '/api/glossary/merge' && request.method === 'POST') {
     const input = mergeInput.parse(await body()),

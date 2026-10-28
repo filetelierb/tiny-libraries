@@ -86,3 +86,11 @@ File annotations now remain available across study sessions while retaining crea
 Added labeled personal bookmarks, edit, origin filters, count badges and recoverable Trash. Existing bookmark locators migrate with stable identities. A bounded Meta bookmark tool saves actual source-linked Suggested records on explicit requests; source/version checks and deterministic request/location identities protect writes. Annotation queries exclude bookmark records, and playback markers follow the bookmark origin filter.
 
 Browser/API/live Meta checks verified cross-session editing, source jumps, checkbox filters, personal bookmark lifecycle, a saved Meta bookmark at PDF page two and exact playback seeking to 4.5 seconds. The active file’s count remains independent of filtering. Unit tests cover mixed-kind pagination, migration, source-bounded actions and the three-location write limit.
+
+### Automatic concepts, origins and unlinked-concept clean-up
+
+Removed the glossary suggestion review. Preparing a file now turns each of its glossary terms into a concept, or adds the file as a source of an existing concept with the same name or alias, without proposals. Files prepared earlier are processed once on the first glossary request. Concepts record their origin: added manually, added from the chat (a new `save_concept` tutor tool, used only on explicit request) or from file analysis; older entries infer theirs from whether they cite a file.
+
+Permanently deleting a file or folder lists the concepts that cite only those files and deletes the checked ones in the same transaction. The glossary gains a creation filter and a "Not linked to any file" view: concepts that cite no existing file (archived and trashed files count) and are not connected through synonyms or relations to one that does. Clean up deletes them, with their history and the links other concepts kept to them.
+
+Verification: unit tests cover one-time ingestion and origin tagging, linking without proposals, orphan detection through relations, concepts left behind by a delete, the clean-up route and link removal; type checks and build pass. The browser showed origin badges, the creation filter and the unlinked view on the local library.

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { widgetInstructions } from '../shared/artifact-widgets';
-import type { Learning, Segment, reviewSummary } from '../shared/domain';
+import type { ConceptSource, Learning, Segment, reviewSummary } from '../shared/domain';
 import { conceptName } from '../shared/glossary';
 import {
   conceptCitationId,
@@ -51,6 +51,7 @@ export type TutorAgentInput = {
   >;
   canCreateBookmark?: boolean;
   canSaveArtifact?: boolean;
+  canSaveConcept?: boolean;
   webSearch?: true;
 };
 export type BookmarkWriter = (value: {
@@ -63,6 +64,11 @@ export type ArtifactWriter = (value: {
   sourceId: string;
   title: string;
   markdown: string;
+}) => Promise<unknown>;
+export type ConceptWriter = (value: {
+  term: string;
+  definition: string;
+  sources: ConceptSource[];
 }) => Promise<unknown>;
 const resultSchema = z.object({
   text: z.string().max(16000),
@@ -301,6 +307,25 @@ export async function createTutorAgent(input: TutorAgentInput, previous?: TutorA
         },
       },
     });
+  if (actions.canSaveConcept)
+    tools.push({
+      type: 'function',
+      function: {
+        name: 'save_concept',
+        description:
+          'Add a concept to the glossary, only when the user explicitly asks to add, save or define a term in the glossary. A known term keeps its definition and gains the cited evidence. Cite available evidence segments where the term appears; do not invent segment IDs.',
+        parameters: {
+          type: 'object',
+          properties: {
+            term: { type: 'string' },
+            definition: { type: 'string' },
+            segmentIds: { type: 'array', items: { type: 'string' }, maxItems: 8 },
+          },
+          required: ['term', 'definition'],
+          additionalProperties: false,
+        },
+      },
+    });
   const initialMessages: Message[] = [
     ...(input.webSearch
       ? [
@@ -374,6 +399,7 @@ export async function createTutorAgent(input: TutorAgentInput, previous?: TutorA
     used = state.used;
   const createdBookmarks = new Set(state.bookmarks),
     savedArtifacts = new Set(state.artifacts || []);
+  let savedConcepts = 0;
   return {
     get result() {
       return state.result;
@@ -444,7 +470,11 @@ export async function createTutorAgent(input: TutorAgentInput, previous?: TutorA
       }
       return state.result;
     },
-    async executeNextTool(writeBookmark?: BookmarkWriter, writeArtifact?: ArtifactWriter) {
+    async executeNextTool(
+      writeBookmark?: BookmarkWriter,
+      writeArtifact?: ArtifactWriter,
+      writeConcept?: ConceptWriter,
+    ) {
       const pending = state.pending;
       if (!pending) return null;
       const call = pending.calls[pending.next];
@@ -573,6 +603,51 @@ export async function createTutorAgent(input: TutorAgentInput, previous?: TutorA
               markdown: input.markdown,
             });
             savedArtifacts.add(material.sourceId);
+          }
+        } else if (
+          call.function.name === 'save_concept' &&
+          actions.canSaveConcept &&
+          writeConcept
+        ) {
+          const input = z
+            .object({
+              term: z.string().trim().min(1).max(200),
+              definition: z.string().trim().min(1).max(6000),
+              segmentIds: z.array(z.string()).max(8).default([]),
+            })
+            .parse(JSON.parse(call.function.arguments));
+          const sources: ConceptSource[] = [];
+          for (const id of input.segmentIds) {
+            const segment = segments.find((s) => s.id === id);
+            const sourceId = attachmentEvidence.has(id)
+              ? undefined
+              : segment?.sourceId || (materials.length === 1 ? materials[0].sourceId : undefined);
+            const sourceVersion =
+              materials.find((m) => m.sourceId === sourceId)?.sourceVersion ||
+              (context && context.sourceId === sourceId ? context.sourceVersion : undefined);
+            if (!segment || !sourceId || !sourceVersion) continue;
+            sources.push({
+              sourceId,
+              sourceVersion,
+              segmentIds: [
+                segment.id.startsWith(`${sourceId}:`)
+                  ? segment.id.slice(sourceId.length + 1)
+                  : segment.id,
+              ],
+              location: {
+                quote: segment.text.slice(0, 2000),
+                ...(segment.page ? { page: segment.page } : {}),
+                ...(segment.start != null ? { seconds: segment.start } : {}),
+              },
+            });
+          }
+          if (input.segmentIds.length && !sources.length)
+            output = { error: 'Concept evidence is not available in the selected references' };
+          else if (savedConcepts >= 5)
+            output = { error: 'At most five concepts can be saved per reply' };
+          else {
+            output = await writeConcept({ ...input, sources });
+            savedConcepts++;
           }
         } else output = { error: 'Tool is not permitted' };
       } catch (error) {

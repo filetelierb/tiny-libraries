@@ -3,6 +3,12 @@ import { fold, type Concept, type ConceptSource } from './domain';
 import { locationSchema } from './annotations';
 
 export const conceptName = (value: string) => fold(value).replace(/\s+/g, ' ');
+/** Added by hand in the glossary, saved by the tutor on request, or taken from a prepared file. */
+export const conceptOrigins = ['manual', 'chat', 'analysis'] as const;
+export type ConceptOrigin = (typeof conceptOrigins)[number];
+/** Entries from before origins were recorded came from file preparation when they cite a file. */
+export const conceptOrigin = (value: Concept): ConceptOrigin =>
+  value.origin ?? (normalizeConcept(value).sources.length ? 'analysis' : 'manual');
 export const conceptSourceSchema = z.object({
   sourceId: z.string().uuid(),
   sourceVersion: z.number().int().positive(),
@@ -57,6 +63,7 @@ export type GlossarySummary = {
   synonymCount: number;
   relationCount: number;
   proposalCount: number;
+  origin: ConceptOrigin;
   mergedInto?: string;
   match?: 'title' | 'synonym';
 };
@@ -136,6 +143,7 @@ export function summarizeConcept(value: Concept): GlossarySummary {
       entry.aliases.length + entry.senses.reduce((n, sense) => n + sense.synonyms.length, 0),
     relationCount: entry.senses.reduce((n, sense) => n + sense.relations.length, 0),
     proposalCount: entry.proposals.length,
+    origin: conceptOrigin(entry),
     ...(entry.mergedInto ? { mergedInto: entry.mergedInto } : {}),
   };
 }
@@ -161,11 +169,16 @@ export function sameDefinition(a: string, b: string) {
     b.normalize('NFKC').replace(/\s+/g, ' ').trim().toLowerCase()
   );
 }
+/**
+ * Adds a term found while preparing a file. A new term becomes a concept right away; a known
+ * one gains the file as a source, on the meaning with the same definition or else its first.
+ */
 export function mergeGeneratedConcept(
   existing: GlossaryEntry | undefined,
   term: string,
   definition: string,
   source: ConceptSource,
+  origin: ConceptOrigin = 'analysis',
 ): GlossaryEntry {
   if (!existing)
     return normalizeConcept({
@@ -176,29 +189,71 @@ export function mergeGeneratedConcept(
       reviewed: false,
       sources: [source],
       proposals: [],
+      origin,
     });
   const entry = normalizeConcept(existing),
-    matching = entry.senses.find((sense) => sameDefinition(sense.definition, definition));
-  if (matching)
-    return normalizeConcept({
-      ...entry,
-      senses: entry.senses.map((sense) =>
-        sense.id === matching.id
-          ? { ...sense, sources: uniqueSources([...sense.sources, source]) }
-          : sense,
-      ),
-    });
-  if (
-    entry.proposals.some(
-      (proposal) =>
-        sameDefinition(proposal.definition, definition) && sameSource(proposal.source, source),
-    )
-  )
-    return entry;
+    target =
+      entry.senses.find((sense) => sameDefinition(sense.definition, definition)) || entry.senses[0];
   return normalizeConcept({
     ...entry,
-    proposals: [...entry.proposals, { id: crypto.randomUUID(), definition, source }],
+    senses: entry.senses.map((sense) =>
+      sense.id === target.id
+        ? { ...sense, sources: uniqueSources([...sense.sources, source]) }
+        : sense,
+    ),
   });
+}
+/** Concept identities a meaning points at: synonyms and related concepts. */
+const linkedIds = (entry: GlossaryEntry) =>
+  entry.senses.flatMap((sense) => [...sense.synonyms, ...sense.relations.map((r) => r.entryId)]);
+/**
+ * Orphans are concepts that cite no existing file (archived and trashed files still count)
+ * and are not connected, through synonyms or relations in either direction, to any concept
+ * that does. Merged forwarders are not concepts of their own and are skipped.
+ */
+export function orphanConcepts(entries: GlossaryEntry[], fileIds: Set<string>) {
+  const live = entries.filter((entry) => !entry.mergedInto).map(normalizeConcept);
+  const forward = new Map(
+    entries.filter((e) => e.mergedInto).map((e) => [e.id, e.mergedInto!] as const),
+  );
+  const resolve = (id: string) => {
+    for (let i = 0; i < 20 && forward.has(id); i++) id = forward.get(id)!;
+    return id;
+  };
+  const neighbours = new Map(live.map((entry) => [entry.id, new Set<string>()]));
+  for (const entry of live)
+    for (const id of linkedIds(entry).map(resolve))
+      if (id !== entry.id && neighbours.has(id)) {
+        neighbours.get(entry.id)!.add(id);
+        neighbours.get(id)!.add(entry.id);
+      }
+  const anchored = new Set(
+    live
+      .filter((entry) => entry.sources.some((source) => fileIds.has(source.sourceId)))
+      .map((entry) => entry.id),
+  );
+  const queue = [...anchored];
+  while (queue.length)
+    for (const id of neighbours.get(queue.pop()!)!)
+      if (!anchored.has(id)) {
+        anchored.add(id);
+        queue.push(id);
+      }
+  return live.filter((entry) => !anchored.has(entry.id));
+}
+/** Concepts that cite files, all of them among `removed`: they lose every file with them. */
+export function conceptsOnlyIn(
+  entries: GlossaryEntry[],
+  fileIds: Set<string>,
+  removed: Set<string>,
+) {
+  return entries
+    .filter((entry) => !entry.mergedInto)
+    .map(normalizeConcept)
+    .filter((entry) => {
+      const files = entry.sources.map((s) => s.sourceId).filter((id) => fileIds.has(id));
+      return files.length > 0 && files.every((id) => removed.has(id));
+    });
 }
 export function mergeGlossaryEntries(target: GlossaryEntry, source: GlossaryEntry): GlossaryEntry {
   const senses = target.senses.map((sense) => ({

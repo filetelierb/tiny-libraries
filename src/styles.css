@@ -9761,3 +9761,54 @@ body:has(.panel-resizer.resizing) {
   justify-content: flex-end;
   gap: 6px;
 }
+
+/* Concepts that lose every file when a permanent delete runs. */
+.purge-concepts {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.purge-concepts legend {
+  padding: 0 4px;
+  font-weight: 600;
+}
+.purge-concepts > p {
+  margin: 0 0 8px;
+}
+.purge-concepts ul {
+  display: grid;
+  gap: 4px;
+  max-height: 180px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+.purge-concepts label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+/* Orphan view: what is listed and the clean-up action. */
+.glossary-orphans {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 16px 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--muted);
+  font-size: var(--font-size-small);
+}
+.glossary-orphans > svg {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  color: var(--muted-text);
+}
+.glossary-orphans > p {
+  flex: 1;
+  margin: 0;
+  color: var(--muted-text);
+}

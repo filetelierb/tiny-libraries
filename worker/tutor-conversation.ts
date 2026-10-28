@@ -160,6 +160,11 @@ export class TutorConversation extends DurableObject<Env> {
           conversationId: record.conversationId,
           requestId: `${record.id}:r${record.intentRevision}`,
         }),
+      concept: (record, _intent, value) =>
+        this.library('/internal/tutor-concept', {
+          ...value,
+          conversationId: record.conversationId,
+        }),
     };
   }
   private async run() {
