@@ -1,0 +1,371 @@
+/* Primitive component styles: buttons, icon buttons, badges, fields, segmented
+   controls, menus, dialogs, empty and loading states. Feature styles live in styles.css. */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  white-space: nowrap;
+  font-size: var(--font-size-control);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.2;
+  text-decoration: none;
+  background: var(--background);
+  transition:
+    background-color 150ms,
+    color 150ms,
+    border-color 150ms,
+    box-shadow 150ms,
+    transform 150ms;
+}
+.button:hover {
+  background: var(--muted);
+}
+.button:active:not([aria-haspopup]):not(:disabled) {
+  transform: translateY(1px);
+}
+.button[aria-expanded='true'] {
+  background: var(--muted);
+}
+.button svg {
+  width: 16px;
+  height: 16px;
+}
+.button-primary {
+  background: var(--primary);
+  border-color: transparent;
+  color: var(--on-primary);
+}
+.button-primary:hover {
+  background: color-mix(in oklch, var(--primary) 80%, transparent);
+}
+.button-secondary {
+  background: var(--secondary);
+  border-color: transparent;
+  color: var(--on-secondary);
+}
+.button-secondary:hover {
+  background: color-mix(in oklch, var(--secondary) 80%, transparent);
+}
+.button-ghost {
+  border-color: transparent;
+  background: transparent;
+}
+.button-ghost:hover,
+.button-ghost[aria-expanded='true'] {
+  background: var(--muted);
+}
+.button-ghost[aria-pressed='true'] {
+  background: var(--muted);
+  color: var(--foreground);
+}
+.button-danger {
+  border-color: transparent;
+  background: color-mix(in oklch, var(--danger), transparent 90%);
+  color: var(--danger);
+}
+.button-danger:hover {
+  background: color-mix(in oklch, var(--danger), transparent 80%);
+}
+.button-danger:focus-visible {
+  border-color: color-mix(in oklch, var(--danger), transparent 60%);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--danger), transparent 80%);
+}
+.button-sm {
+  min-height: 28px;
+  gap: 4px;
+  padding: 0 8px;
+  font-size: 12.8px;
+  border-radius: min(var(--radius), 12px);
+}
+.button-sm svg {
+  width: 14px;
+  height: 14px;
+}
+.icon-button {
+  padding: 0;
+  width: 32px;
+  min-width: 32px;
+}
+.icon-button.button-sm {
+  width: 28px;
+  min-width: 28px;
+}
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: var(--secondary);
+  color: var(--on-secondary);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-medium);
+  line-height: 1;
+  white-space: nowrap;
+}
+.badge svg {
+  width: 12px;
+  height: 12px;
+}
+.badge-success {
+  color: var(--on-secondary);
+  background: var(--secondary);
+}
+.badge-outline {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--foreground);
+}
+.badge-primary {
+  background: var(--primary);
+  color: var(--on-primary);
+}
+.badge-warning {
+  color: var(--on-accent);
+  background: var(--accent);
+}
+.search-field {
+  display: block;
+}
+.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  flex: 1;
+  padding: 24px;
+  text-align: center;
+}
+.empty-icon {
+  color: color-mix(in oklch, var(--primary) 50%, transparent);
+  height: 40px;
+  width: 40px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 16px;
+}
+.empty-icon svg {
+  width: 40px;
+  height: 40px;
+}
+.empty h1 {
+  font-family: var(--font-body);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.5;
+  max-width: 384px;
+  margin: 0;
+}
+.empty > p {
+  color: var(--muted-text);
+  font-size: var(--font-size-control);
+  line-height: 1.5;
+  max-width: 384px;
+  margin: 8px 0 0;
+}
+.modal {
+  position: fixed;
+  border: 0;
+  border-radius: var(--radius-xl);
+  padding: 16px;
+  width: min(var(--modal-w, 384px), calc(100% - 2rem));
+  max-width: none;
+  max-height: calc(100dvh - 2rem);
+  overflow: auto;
+  font-size: var(--font-size-control);
+  color: var(--foreground);
+  background: var(--surface);
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--foreground), transparent 90%);
+}
+.modal[open] {
+  animation: modal-in 100ms ease-out;
+}
+.modal::backdrop {
+  background: rgb(var(--shadow-rgb) / 10%);
+  backdrop-filter: blur(4px);
+}
+.modal-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-right: 28px;
+}
+.modal-title > .icon-button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  border-radius: 11px;
+}
+.modal-title h2 {
+  font-family: var(--font-heading);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-medium);
+  line-height: 1;
+  margin: 0;
+  letter-spacing: 0;
+}
+.modal > p {
+  font-size: var(--font-size-control);
+  color: var(--muted-text);
+}
+/* Footers list the primary action first; it renders on the far right. */
+.modal-actions {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+.spin {
+  animation: spin 1s linear infinite;
+}
+.loading-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 0;
+  font-size: var(--font-size-small);
+  color: var(--muted-text);
+}
+.loading-row > svg {
+  flex: none;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.action-menu {
+  position: fixed;
+  z-index: var(--z-menu);
+  width: 192px;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100dvh - 16px);
+  overflow: auto;
+  border: 0;
+  border-radius: var(--radius-lg);
+  padding: 4px;
+  background: var(--surface);
+  color: var(--foreground);
+  box-shadow:
+    0 0 0 1px color-mix(in oklch, var(--foreground), transparent 90%),
+    0 4px 6px -1px rgb(var(--shadow-rgb) / 10%),
+    0 2px 4px -2px rgb(var(--shadow-rgb) / 10%);
+  animation: menu-in 100ms ease-out;
+}
+.action-menu-file {
+  width: 224px;
+  padding: 6px;
+}
+.action-menu button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  width: 100%;
+  border-radius: var(--radius);
+  font-size: var(--font-size-control);
+  text-align: left;
+  line-height: 20px;
+  outline: none;
+}
+.action-menu-file button {
+  gap: 8px;
+  padding: 8px;
+  font-size: var(--font-size-small);
+}
+.action-menu button svg {
+  width: 16px;
+  height: 16px;
+}
+.action-menu button:hover,
+.action-menu button:focus-visible {
+  background: var(--accent);
+}
+.action-menu-file button:hover,
+.action-menu-file button:focus-visible {
+  background: var(--muted);
+}
+.action-menu button.tone-primary svg {
+  color: var(--primary);
+}
+.action-menu button.danger {
+  color: var(--danger);
+}
+.action-menu button.danger:hover,
+.action-menu button.danger:focus-visible {
+  background: color-mix(in oklch, var(--danger), transparent 90%);
+  color: var(--danger);
+}
+.action-menu-heading {
+  padding: 4px 8px 6px;
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
+  color: var(--muted-text);
+}
+.action-menu-footnote {
+  margin: 4px 0 2px;
+  padding: 0 8px;
+  font-size: 9px;
+  line-height: 1.4;
+  color: var(--muted-text);
+}
+.content-recovery {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 30px;
+  background: var(--surface);
+  overflow: auto;
+}
+.content-recovery h3 {
+  font-size: var(--font-size-heading);
+}
+.content-recovery p {
+  max-width: 48ch;
+  color: var(--muted-text);
+  line-height: 1.6;
+}
+.segmented {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  background: var(--muted);
+}
+.segmented > button {
+  padding: 8px;
+  border-radius: calc(var(--radius-sm) - 2px);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-medium);
+  color: var(--muted-text);
+}
+.segmented > button[aria-selected='true'] {
+  background: var(--card);
+  color: var(--foreground);
+  box-shadow: var(--shadow-xs);
+}
+.segmented > button:disabled {
+  opacity: 0.5;
+}

@@ -16,14 +16,33 @@
   --border: oklch(0.87 0.02 88);
   --input: oklch(0.86 0.02 88);
   --ring: oklch(0.58 0.12 186);
+  --success: #16a34a;
+  --success-strong: #15803d;
+  --amber: #f2a65a;
+  --on-amber: #b26020;
+  /* Paper: PDF pages, drawing and capture surfaces, diagrams. */
+  --page: #fff;
+  --page-stage: #e8e7e3;
+  /* Media stage: players, markers and the capture studio sit on a dark blue-green. */
   --media: #0b2227;
+  --media-deep: #071b20;
+  --on-media: #fff;
+  --on-media-rgb: 255 255 255;
+  --media-accent: #63c7b7;
+  --media-accent-rgb: 99 199 183;
+  --media-ring: #b6ded8;
+  --media-bookmark: #ffd175;
+  --media-error: #412526;
   --folder: #d69445;
   --chart-1: oklch(0.58 0.13 186);
   --chart-2: oklch(0.66 0.14 55);
   --chart-3: oklch(0.55 0.12 260);
   --chart-4: oklch(0.7 0.11 120);
   --chart-5: oklch(0.62 0.14 310);
+  --radius-2xs: 2px;
+  --radius-xs: 4px;
   --radius-sm: 0.49rem;
+  --radius-md: 0.5rem;
   --radius: 0.7rem;
   --radius-lg: 0.875rem;
   --radius-xl: 1.155rem;
@@ -36,12 +55,52 @@
   --space-6: 24px;
   --space-8: 32px;
   --font-body: 'Times New Roman', Times, serif;
-  --font-size-body: 16px;
-  --font-size-control: 14px;
+  /* Type scale: 14px controls, 16px body; the rest steps around them. */
+  --font-size-2xs: 10px;
+  --font-size-xs: 11px;
   --font-size-small: 12px;
+  --font-size-meta: 13px;
+  --font-size-control: 14px;
+  --font-size-lead: 15px;
+  --font-size-body: 16px;
+  --font-size-title: 18px;
+  --font-size-heading: 20px;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
   --font-heading: 'Geist', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'Geist Mono', ui-monospace, 'SFMono-Regular', Consolas, monospace;
-  --paper-shadow: 0 18px 50px rgb(21 45 52 / 7%);
+  /* Shadows: ink-tinted for paper and panels, neutral for floating controls. */
+  --ink-rgb: 21 45 52;
+  --shadow-rgb: 0 0 0;
+  --paper-shadow: 0 18px 50px rgb(var(--ink-rgb) / 7%);
+  --shadow-xs: 0 1px 2px rgb(var(--shadow-rgb) / 5%);
+  --shadow-sm:
+    0 1px 3px 0 rgb(var(--shadow-rgb) / 10%), 0 1px 2px -1px rgb(var(--shadow-rgb) / 10%);
+  --shadow-md:
+    0 4px 6px -1px rgb(var(--shadow-rgb) / 10%), 0 2px 4px -2px rgb(var(--shadow-rgb) / 10%);
+  --shadow-lg:
+    0 10px 15px -3px rgb(var(--shadow-rgb) / 10%), 0 4px 6px -4px rgb(var(--shadow-rgb) / 10%);
+  --shadow-2xl: 0 25px 50px -12px rgb(var(--shadow-rgb) / 25%);
+  /* Layers, lowest first. In-panel values only compete inside their panel. */
+  --z-raised: 1;
+  --z-sticky: 2;
+  --z-float: 3;
+  --z-float-high: 4;
+  --z-popover-local: 5;
+  --z-hint: 8;
+  --z-hint-cover: 9;
+  --z-sheet-mask: 30;
+  --z-sheet: 31;
+  --z-mention: 40;
+  --z-drawer-backdrop: 41;
+  --z-drawer: 42;
+  --z-file-menu: 50;
+  --z-selection-menu: 60;
+  --z-processing: 70;
+  --z-menu: 100;
+  --z-popover: 150;
   --panel-width: 300px;
   --study-width: 360px;
   --resource-strip-height: 48px;

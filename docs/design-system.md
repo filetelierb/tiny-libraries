@@ -12,6 +12,14 @@ Buttons use outlined pill shapes; reader actions share one capsule with a separa
 
 Primitives: Button (default/primary/ghost/danger), IconButton with required accessible label, Badge, Empty, and native-dialog Modal with focus containment and Escape support. Feature components consume tokens rather than hardcode additional palettes.
 
+### Files
+
+- `src/design/tokens.css`: every value with a name. Colors (semantic, success, amber, paper and the media stage), the type scale (`--font-size-2xs` 10px through `--font-size-heading` 20px) and weights, radii (`--radius-2xs` 2px to `--radius-pill`), shadows (`--shadow-xs` to `--shadow-2xl`, plus `--paper-shadow`; `--ink-rgb` and `--shadow-rgb` for tinted variants) and the layer order (`--z-*`).
+- `src/design/components.css`: styles of the primitives and shared patterns: buttons, icon buttons, badges, search fields, segmented controls, action menus, dialogs, empty, loading and recovery states.
+- `src/styles.css`: feature layout and styles, written with those tokens. A few one-off sizes remain literal (9px marker labels, 12.5–12.8px compact controls and large display numbers).
+
+New UI uses tokens and primitives first; add a token when a value repeats, and keep the `--z-*` list as the single place that orders layers.
+
 ## Layout and interaction
 
 - Desktop: independently pinned library and study panels with persisted, bounded widths. Separators support pointer and keyboard resizing. Resource tabs remain scrollable; each split tab saves its own ratio and focused source.
