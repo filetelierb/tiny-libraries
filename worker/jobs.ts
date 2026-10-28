@@ -1,8 +1,12 @@
 import { DurableObject } from 'cloudflare:workers';
 import { visualKey, widgetImages } from '../shared/artifact-widgets';
+import { synthesisWindows } from '../shared/synthesis-windows';
+import { ownedTurns } from '../shared/transcript';
 import {
   captions,
+  validateSynthesis,
   type Job,
+  type Synthesis,
   type Source,
   type Segment,
   type Locale,
@@ -10,7 +14,15 @@ import {
   type NormalizedSource,
 } from '../shared/domain';
 import { internal } from './index';
-import { MetaError, bridgedFetch, synthesize, transcribe, translate } from './meta';
+import {
+  MetaError,
+  bridgedFetch,
+  outlineParts,
+  synthesize,
+  synthesizePart,
+  transcribe,
+  translate,
+} from './meta';
 
 export type Normalized = NormalizedSource;
 export class ProcessingJob extends DurableObject<Env> {
@@ -114,6 +126,7 @@ export class ProcessingJob extends DurableObject<Env> {
             chunk.duration,
             bridgedFetch(this.env),
           );
+          result = ownedTurns(result, chunk, chunk.index === normalized.chunks.length - 1);
           await this.ctx.storage.put(cacheKey, result);
         }
         const segments: Segment[] = [...normalized.segments];
@@ -141,12 +154,11 @@ export class ProcessingJob extends DurableObject<Env> {
           const cacheKey = `translation:${i}`;
           let batch = await this.ctx.storage.get<Segment[]>(cacheKey);
           if (!batch) {
-            batch = await translate(
+            batch = await this.translateBatch(
               key,
               settings.model,
               segments.slice(i, i + 80),
               job.locale,
-              bridgedFetch(this.env),
             );
             await this.ctx.storage.put(cacheKey, batch);
           }
@@ -157,44 +169,85 @@ export class ProcessingJob extends DurableObject<Env> {
       } else if (job.stage === 'synthesize') {
         const segments = (await this.ctx.storage.get<Segment[]>('segments'))!,
           normalized = (await this.ctx.storage.get<Normalized>('normalized'))!;
-        const synthesis = await synthesize(
-          key,
-          settings.model,
-          segments,
-          job.locale,
-          normalized.imageData,
-          normalized.visuals,
-          bridgedFetch(this.env),
-        );
-        // Image widgets show source pictures, which the study record itself does not keep.
-        const pictures = [
-          ...(normalized.imageData ? [{ segmentId: 'image-1', data: normalized.imageData }] : []),
-          ...(normalized.visuals || []),
-        ];
-        for (const segmentId of widgetImages(synthesis.artifact?.explanation || '')) {
-          const match = pictures
-            .find((picture) => picture.segmentId === segmentId)
-            ?.data.match(/^data:(image\/[a-z+]+);base64,(.+)$/);
-          if (match)
-            await this.env.FILES.put(
-              visualKey(file.id, file.version, segmentId),
-              Uint8Array.from(atob(match[2]), (char) => char.charCodeAt(0)),
-              { httpMetadata: { contentType: match[1] } },
+        const windows = synthesisWindows(segments),
+          done = job.completedParts || 0;
+        let synthesis: Synthesis | undefined;
+        if (windows.length === 1)
+          synthesis = await synthesize(
+            key,
+            settings.model,
+            segments,
+            job.locale,
+            normalized.imageData,
+            normalized.visuals,
+            bridgedFetch(this.env),
+          );
+        else if (JSON.stringify(segments).length > 1500000)
+          throw new MetaError('Source text exceeds the analysis limit', false);
+        else if (done < windows.length) {
+          // Long sources are analysed one overlapping window per step; each part is kept.
+          if (!(await this.ctx.storage.get<Synthesis>(`part:${done}`)))
+            await this.ctx.storage.put(
+              `part:${done}`,
+              await synthesizePart(
+                key,
+                settings.model,
+                segments,
+                windows[done],
+                done,
+                windows.length,
+                job.locale,
+                normalized.visuals,
+                bridgedFetch(this.env),
+              ),
             );
+          job = {
+            ...job,
+            completedParts: done + 1,
+            totalParts: windows.length + 1,
+            status: 'partial',
+          };
+        } else {
+          const parts = await Promise.all(
+            windows.map(async (_, i) => (await this.ctx.storage.get<Synthesis>(`part:${i}`))!),
+          );
+          synthesis = validateSynthesis(
+            await outlineParts(key, settings.model, parts, job.locale, bridgedFetch(this.env)),
+            segments,
+            new Set((normalized.visuals || []).map((v) => v.segmentId)),
+          );
         }
-        const learning: Learning = {
-          sourceId: file.id,
-          sourceVersion: file.version,
-          model: settings.model,
-          locale: job.locale,
-          segments,
-          synthesis,
-          createdAt: new Date().toISOString(),
-        };
-        // Publish under a stable source version; repeated publication replaces the same record.
-        if ((await this.ctx.storage.get<Job>('job'))?.status === 'cancelled') return;
-        await internal(this.env, `/internal/learning/${file.id}`, learning);
-        job = { ...job, stage: 'done', status: 'completed' };
+        if (synthesis) {
+          // Image widgets show source pictures, which the study record itself does not keep.
+          const pictures = [
+            ...(normalized.imageData ? [{ segmentId: 'image-1', data: normalized.imageData }] : []),
+            ...(normalized.visuals || []),
+          ];
+          for (const segmentId of widgetImages(synthesis.artifact?.explanation || '')) {
+            const match = pictures
+              .find((picture) => picture.segmentId === segmentId)
+              ?.data.match(/^data:(image\/[a-z+]+);base64,(.+)$/);
+            if (match)
+              await this.env.FILES.put(
+                visualKey(file.id, file.version, segmentId),
+                Uint8Array.from(atob(match[2]), (char) => char.charCodeAt(0)),
+                { httpMetadata: { contentType: match[1] } },
+              );
+          }
+          const learning: Learning = {
+            sourceId: file.id,
+            sourceVersion: file.version,
+            model: settings.model,
+            locale: job.locale,
+            segments,
+            synthesis,
+            createdAt: new Date().toISOString(),
+          };
+          // Publish under a stable source version; repeated publication replaces the same record.
+          if ((await this.ctx.storage.get<Job>('job'))?.status === 'cancelled') return;
+          await internal(this.env, `/internal/learning/${file.id}`, learning);
+          job = { ...job, stage: 'done', status: 'completed' };
+        }
       }
       const current = await this.ctx.storage.get<Job>('job');
       if (current?.status === 'cancelled') return;
@@ -229,6 +282,26 @@ export class ProcessingJob extends DurableObject<Env> {
       if (retryable && attempts < 4)
         await this.ctx.storage.setAlarm(Date.now() + Math.min(60000, 2000 * 2 ** attempts));
       else await this.ctx.storage.deleteAlarm();
+    }
+  }
+  // A batch whose cue identities come back changed is retried in halves; a cue that still
+  // fails keeps its original text, so translation never blocks the study guide.
+  async translateBatch(
+    key: string,
+    model: string,
+    batch: Segment[],
+    locale: Locale,
+  ): Promise<Segment[]> {
+    try {
+      return await translate(key, model, batch, locale, bridgedFetch(this.env));
+    } catch (error) {
+      if (!(error instanceof MetaError) || error.retryable) throw error;
+      if (batch.length === 1) return batch;
+      const half = Math.ceil(batch.length / 2);
+      return [
+        ...(await this.translateBatch(key, model, batch.slice(0, half), locale)),
+        ...(await this.translateBatch(key, model, batch.slice(half), locale)),
+      ];
     }
   }
   async saveCaptions(sourceId: string, track: string, segments: Segment[]) {

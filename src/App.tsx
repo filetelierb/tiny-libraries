@@ -56,6 +56,7 @@ import {
   MAX_RESOURCE_TABS,
   kindFor,
   fold,
+  jobProgress,
 } from '../shared/domain';
 import { api, SessionExpiredError, uploadFile } from './api';
 import type { QuestionAttachment } from '../shared/tutor-attachments';
@@ -1458,7 +1459,7 @@ export function App() {
                     ]
                   }{' '}
                   · {t[job.stage]}
-                  {job.totalChunks > 0 ? ` · ${job.completedChunks}/${job.totalChunks}` : ''}
+                  {jobProgress(job)}
                 </span>
                 {job.error && <span>{job.error}</span>}
                 {['failed', 'cancelled'].includes(job.status) ? (

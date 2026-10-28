@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Check, LoaderCircle, RotateCcw, Square, X } from 'lucide-react';
-import type { Job, Locale, Source } from '../../shared/domain';
+import { jobProgress, type Job, type Locale, type Source } from '../../shared/domain';
 import { api } from '../api';
 import { Button, IconButton } from '../design/components';
 import type { T } from '../i18n';
@@ -168,7 +168,7 @@ export function ProcessingPanel({
                   <span>{file.name}</span>
                   <small>
                     {t[statusLabel[job.status]]} · {t[job.stage]}
-                    {job.totalChunks > 0 ? ` · ${job.completedChunks}/${job.totalChunks}` : ''}
+                    {jobProgress(job)}
                   </small>
                   {job.error && <small className="form-error">{job.error}</small>}
                 </button>

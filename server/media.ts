@@ -1,10 +1,12 @@
 import { spawn } from 'node:child_process';
-import { mkdir, readFile, writeFile, readdir, stat } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Kind, Segment, NormalizedSource } from '../shared/domain';
 import { parseTranscript, transcriptSegments } from '../shared/transcript';
 
 export const CHUNK_SECONDS = 300;
+export const CHUNK_OVERLAP_SECONDS = 20;
+export const MAX_RECORDING_SECONDS = 4 * 3600;
 export function command(binary: string, args: string[], timeout = 180000): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn(binary, args, { stdio: ['ignore', 'pipe', 'pipe'] }),
@@ -50,37 +52,54 @@ export async function normalize(
       ]),
     );
     const duration = Number(probe.format?.duration);
-    if (!Number.isFinite(duration) || duration <= 0 || duration > 3600)
-      throw new Error('Recordings must have a known duration of 60 minutes or less');
-    await command('ffmpeg', [
-      '-nostdin',
-      '-v',
-      'error',
-      '-y',
-      '-i',
-      input,
-      '-vn',
-      '-ac',
-      '1',
-      '-ar',
-      '16000',
-      '-c:a',
-      'pcm_s16le',
-      '-map_metadata',
-      '-1',
-      '-f',
-      'segment',
-      '-segment_time',
-      String(CHUNK_SECONDS),
-      '-reset_timestamps',
-      '1',
-      join(directory, 'chunk-%03d.wav'),
-    ]);
-    const names = (await readdir(directory)).filter((n) => /^chunk-\d+\.wav$/.test(n)).sort();
+    if (!Number.isFinite(duration) || duration <= 0 || duration > MAX_RECORDING_SECONDS)
+      throw new Error('Recordings must have a known duration of 4 hours or less');
+    const audio = join(directory, 'audio.wav');
+    await command(
+      'ffmpeg',
+      [
+        '-nostdin',
+        '-v',
+        'error',
+        '-y',
+        '-i',
+        input,
+        '-vn',
+        '-ac',
+        '1',
+        '-ar',
+        '16000',
+        '-c:a',
+        'pcm_s16le',
+        '-map_metadata',
+        '-1',
+        audio,
+      ],
+      600000,
+    );
+    // Chunks own consecutive spans and also hear CHUNK_OVERLAP_SECONDS of each neighbour,
+    // so speech cut at a boundary is transcribed whole by one of them.
     const chunks = [];
-    let offset = 0;
-    for (let index = 0; index < names.length; index++) {
-      const chunkPath = join(directory, names[index]);
+    for (let index = 0; index * CHUNK_SECONDS < duration; index++) {
+      const from = index * CHUNK_SECONDS,
+        to = Math.min(duration, from + CHUNK_SECONDS),
+        offset = Math.max(0, from - CHUNK_OVERLAP_SECONDS),
+        chunkPath = join(directory, `chunk-${String(index).padStart(3, '0')}.wav`);
+      await command('ffmpeg', [
+        '-nostdin',
+        '-v',
+        'error',
+        '-y',
+        '-ss',
+        String(offset),
+        '-t',
+        String(Math.min(duration, to + CHUNK_OVERLAP_SECONDS) - offset),
+        '-i',
+        audio,
+        '-c:a',
+        'pcm_s16le',
+        chunkPath,
+      ]);
       if ((await stat(chunkPath)).size > 31 * 1024 * 1024)
         throw new Error('Normalized audio chunk exceeds the ASR limit');
       const chunkProbe = JSON.parse(
@@ -97,9 +116,9 @@ export async function normalize(
       const chunkDuration = Number(chunkProbe.format?.duration);
       if (!Number.isFinite(chunkDuration) || chunkDuration <= 0 || chunkDuration > 600)
         throw new Error('Invalid audio chunk duration');
-      chunks.push({ index, offset, duration: chunkDuration });
-      offset += chunkDuration;
+      chunks.push({ index, offset, duration: chunkDuration, from, to });
     }
+    await rm(audio, { force: true });
     const segments: Segment[] = [],
       visuals: Array<{ segmentId: string; data: string }> = [];
     if (kind === 'video') {
@@ -159,7 +178,8 @@ export async function normalize(
     const task = getDocument({ data: new Uint8Array(await readFile(input)), useSystemFonts: true });
     const document = await task.promise;
     try {
-      if (document.numPages > 100) throw new Error('PDFs must contain 100 pages or fewer');
+      // Long PDFs are analysed in overlapping windows; the bound keeps extraction within the step timeout.
+      if (document.numPages > 1000) throw new Error('PDFs must contain 1,000 pages or fewer');
       const segments: Segment[] = [],
         visuals: Array<{ segmentId: string; data: string }> = [];
       let visualBytes = 0;

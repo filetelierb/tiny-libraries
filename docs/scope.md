@@ -25,10 +25,10 @@ Import a recording and a companion document, study them side by side, navigate e
 ## AI processing contract
 
 1. Validate supported type and size, save immutable original, assign a source version.
-2. Normalize video/audio with ffmpeg in a local companion process; mono PCM16 WAV, 16 kHz, chunks below the currently documented 10-minute/32 MB ASR caps. Product target: 60 minutes; validate actual bounds at runtime.
+2. Normalize video/audio with ffmpeg in a local companion process; mono PCM16 WAV, 16 kHz, chunks below the currently documented 10-minute/32 MB ASR caps. Chunks own consecutive 5-minute spans and also carry 20 seconds of each neighbour; each transcribed turn is kept by the chunk that owns its midpoint, so speech at a boundary is neither cut nor repeated. Recordings up to 4 hours; files up to 2 GB.
 3. Persist each chunk, transcript and restored global timestamps before advancing. A restart reuses confirmed steps; retries never imply a failed network request incurred no charge.
 4. Generate original-language VTT and SRT; translate to English or Spanish with stable cue IDs and timing.
-5. Analyze text, PDF pages and visual evidence with Muse Spark; use Muse Wonder for more demanding synthesis. Generate structured chapters, questions and glossary candidates, validate all references, and retain the originating source version and model ID.
+5. Analyze text, PDF pages and visual evidence with Muse Spark; use Muse Wonder for more demanding synthesis. Generate structured chapters, questions and glossary candidates, validate all references, and retain the originating source version and model ID. Sources longer than one analysis window (200,000 characters; PDFs up to 1,000 pages) are analysed in consecutive windows that repeat the last two segments of the previous one; each window is a checkpointed step, and a final outline call regroups the windows' sections into up to 12 chapters for the whole source.
 6. Publish independently useful partial results. Translation failure does not hide the transcript. Jobs support queued/running/partial/completed/failed/cancelled and explicit retry.
 7. Record attempts, calculate scores in application code, and recommend reinforcement from observed evidence. With zero attempts, report insufficient evidence.
 

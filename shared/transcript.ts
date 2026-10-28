@@ -51,3 +51,18 @@ export function transcriptSegments(cues: TranscriptCue[], span = 60, maxChars = 
   }
   return segments;
 }
+
+// Overlapping ASR chunks hear the same speech twice; each turn stays with the chunk that
+// owns its midpoint. Chunks without an owned span keep every turn.
+export function ownedTurns(
+  turns: Segment[],
+  chunk: { from?: number; to?: number },
+  last: boolean,
+): Segment[] {
+  const { from, to } = chunk;
+  if (from === undefined || to === undefined) return turns;
+  return turns.filter((turn) => {
+    const middle = (turn.start! + turn.end!) / 2;
+    return middle >= from && (middle < to || (last && middle <= to));
+  });
+}

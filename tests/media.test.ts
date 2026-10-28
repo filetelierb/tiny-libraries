@@ -25,11 +25,18 @@ test('a recording longer than ten minutes becomes bounded WAV chunks', async () 
   const { rename } = await import('node:fs/promises');
   await rename(join(directory, 'original.wav'), join(directory, 'original'));
   const result = await normalize(directory, 'audio', 'audio/wav');
-  assert.equal(result.chunks.length, 3);
-  assert.equal(result.chunks[0].offset, 0);
-  assert.equal(result.chunks[1].offset, result.chunks[0].duration);
-  assert.equal(result.chunks[2].offset, result.chunks[0].duration + result.chunks[1].duration);
-  assert.ok(Math.abs(result.chunks[2].duration - 11) < 0.1);
+  // Chunks own consecutive five-minute spans and overlap their neighbours by 20 seconds.
+  assert.deepEqual(
+    result.chunks.map((c) => [c.from, c.to, c.offset]),
+    [
+      [0, 300, 0],
+      [300, 600, 280],
+      [600, 611, 580],
+    ],
+  );
+  assert.ok(Math.abs(result.chunks[0].duration - 320) < 0.1);
+  assert.ok(Math.abs(result.chunks[1].duration - 331) < 0.1);
+  assert.ok(Math.abs(result.chunks[2].duration - 31) < 0.1);
   for (let i = 0; i < 3; i++)
     assert.ok(
       (await stat(join(directory, `chunk-${String(i).padStart(3, '0')}.wav`))).size <

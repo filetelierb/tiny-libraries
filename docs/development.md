@@ -102,3 +102,13 @@ Deleting is now permanent. Files and folders are deleted from their menu after a
 The tutor panel drops the active-file row and its tools menu (chapters, practice and review still open from their own entry points) and the Tutor heading. The chat always shows; writing in it before any conversation exists starts a new conversation in the session with that message. History and New conversation float at the top right; History rows can be renamed.
 
 Verification: 266 tests, type checks and build pass. In the browser, a message sent from the empty chat created a conversation in the session and received a cited reply, and History listed it.
+
+### Long sources: split and overlap
+
+Tested with a real course: Stanford EE261 (syllabus, formula sheet, problem set and solutions, lecture 1 transcript, the 428-page course reader and the 52-minute, 842 MB lecture 1 video).
+
+- **Long documents.** PDFs may have up to 1,000 pages (was 100). A source longer than one analysis window (200,000 characters) is analysed in consecutive windows; each repeats the last two segments of the previous one as context, and chapters made only from that context are dropped. Each window is its own checkpointed job step, shown as `n/total` progress. A final outline call regroups the windows' sections into up to 12 chapters for the whole source; questions and glossary terms are taken from each window in turn, so practice and the glossary cover the whole source. Short sources keep the single call.
+- **Recordings.** Up to 4 hours (was 60 minutes). The audio is extracted once and cut into chunks that own consecutive 5-minute spans and carry 20 seconds of each neighbour; each transcribed turn stays with the chunk that owns its midpoint, so speech at a boundary is neither cut nor repeated.
+- **Translation.** A caption batch whose cue identities come back changed is retried in halves; a cue that still fails keeps its original text instead of failing the whole job. Lecture 1 had failed here before the study guide was written.
+
+Verification: unit tests cover windows and overlap, context-only chapters, the outline merge (omitted, unknown and repeated sections, unique question ids, validation), overlapping audio chunk spans and turn ownership; 272 tests, type checks and build pass. The course reader produced 5 windows and an 8-chapter guide spanning pages 8–404 with 23 questions and 40 terms; the lecture produced 4 timed chapters and 255 caption cues. In the browser, the chapter sheet jumped to page 88 (transform pairs and duality), and the tutor answered a question across the reader and the lecture with page and timestamp citations.

@@ -37,7 +37,8 @@ export const segmentSchema = z.object({
 export type Segment = z.infer<typeof segmentSchema>;
 export type NormalizedSource = {
   segments: Segment[];
-  chunks: Array<{ index: number; offset: number; duration: number }>;
+  // `from`–`to` is the span a chunk owns; its audio also covers part of each neighbour.
+  chunks: Array<{ index: number; offset: number; duration: number; from?: number; to?: number }>;
   imageData?: string;
   visuals?: Array<{ segmentId: string; data: string }>;
 };
@@ -242,10 +243,20 @@ export type Job = {
   stage: 'normalize' | 'transcribe' | 'translate' | 'synthesize' | 'done';
   completedChunks: number;
   totalChunks: number;
+  // Windows of a long source analysed so far, plus the final merge step.
+  completedParts?: number;
+  totalParts?: number;
   attempts: number;
   error?: string;
   createdAt: string;
 };
+// A long source's synthesis reports its windows; recordings report their audio chunks.
+export const jobProgress = (job: Job) =>
+  job.stage === 'synthesize' && job.totalParts
+    ? ` · ${job.completedParts || 0}/${job.totalParts}`
+    : job.totalChunks > 0
+      ? ` · ${job.completedChunks}/${job.totalChunks}`
+      : '';
 export type Settings = { configured: boolean; locale: Locale; model: string; keySuffix?: string };
 export type ConceptSource = {
   sourceId: string;
