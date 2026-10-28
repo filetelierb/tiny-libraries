@@ -21,8 +21,6 @@ import {
   MessageSquare,
   Activity,
   Columns2,
-  Maximize2,
-  Minimize2,
   Download,
   ArrowUp,
   ArrowLeft,
@@ -211,8 +209,7 @@ export function App() {
     };
   }, [selectionMenu]);
   // Expanded reading hides the library; the study panel stays available beside the content.
-  const [focus, setFocus] = useState(false);
-  const panels = usePanels(focus);
+  const panels = usePanels();
   const left = panels.effective.left.open,
     right = panels.effective.right.open;
   const setLeft = (value: boolean) => panels.open('left', value);
@@ -924,7 +921,7 @@ export function App() {
     );
   return (
     <div
-      className={`app ${focus ? 'focus' : ''}`}
+      className="app"
       style={
         {
           '--panel-width': `${panels.resolved.left.width}px`,
@@ -936,7 +933,7 @@ export function App() {
         id="left-panel"
         ref={leftPanelRef}
         aria-label={t.library}
-        hidden={!left || focus}
+        hidden={!left}
         inert={!!panels.drawer && panels.drawer !== 'left'}
         className={`library-panel ${panels.resolved.left.docked ? 'docked' : 'floating'}${panels.narrow ? ' narrow' : ''}`}
         role={panels.drawer === 'left' ? 'dialog' : undefined}
@@ -1144,13 +1141,11 @@ export function App() {
               locale={locale}
               t={t}
               review={() => {
-                setFocus(false);
                 setAssessmentStart({ selection: null });
                 setAssessmentOpen(true);
                 if (panels.drawer === 'left') setLeft(false);
               }}
               openTest={(test) => {
-                setFocus(false);
                 setAssessmentStart({ sessionId: test.sessionId, selection: test.id });
                 setAssessmentOpen(true);
                 if (panels.drawer === 'left') setLeft(false);
@@ -1190,17 +1185,15 @@ export function App() {
       )}
       <main className="workspace" inert={!!panels.drawer}>
         <div className="resource-tabs">
-          {!focus && (
-            <IconButton
-              label={left ? t.hideFiles : t.openFiles}
-              aria-controls="left-panel"
-              aria-expanded={left}
-              data-panel-toggle="left"
-              onClick={() => setLeft(!left)}
-            >
-              {left ? <PanelLeftClose /> : <PanelLeftOpen />}
-            </IconButton>
-          )}
+          <IconButton
+            label={left ? t.hideFiles : t.openFiles}
+            aria-controls="left-panel"
+            aria-expanded={left}
+            data-panel-toggle="left"
+            onClick={() => setLeft(!left)}
+          >
+            {left ? <PanelLeftClose /> : <PanelLeftOpen />}
+          </IconButton>
           <ResourceTabs
             workspace={resources}
             files={catalog.files}
@@ -1425,14 +1418,6 @@ export function App() {
                   >
                     <Download size={16} />
                   </a>
-                </div>
-                <div className="focus-action">
-                  <IconButton
-                    label={focus ? t.unfocus : t.focus}
-                    onClick={() => setFocus((v) => !v)}
-                  >
-                    {focus ? <Minimize2 /> : <Maximize2 />}
-                  </IconButton>
                 </div>
               </div>
             </div>
