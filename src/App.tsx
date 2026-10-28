@@ -1161,7 +1161,6 @@ export function App() {
             <TestsList
               tests={tests}
               sessions={catalog.sessions}
-              currentSessionId={session.id}
               locale={locale}
               t={t}
               review={() => {

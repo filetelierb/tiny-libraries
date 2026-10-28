@@ -137,16 +137,11 @@ export function AssessmentWorkspace({
     const valid = new Set(
       values.filter((o) => o.prepared && o.studiedCount > 0).map((o) => o.sourceId),
     );
-    let saved = false;
-    try {
-      saved = localConfigSchema.safeParse(
-        JSON.parse(localStorage.getItem(configKey) || 'null'),
-      ).success;
-    } catch {}
     const current = configRef.current;
-    if (initial.current && !saved)
+    // Opening the review always starts from the session's open files; the rest of the setup is kept.
+    if (initial.current)
       update({
-        ...defaultConfig,
+        ...current,
         sourceIds: values
           .filter((o) => o.suggested && valid.has(o.sourceId))
           .slice(0, 40)

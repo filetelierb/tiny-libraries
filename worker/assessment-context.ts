@@ -135,12 +135,17 @@ export async function assessmentOptions(
     conversations = [...(await tx.list<Conversation>({ prefix: 'conversation:' })).values()].filter(
       (c) => c.sessionId === sessionId,
     );
-  const selected = new Set([
-    ...(session.resourceTabs?.flatMap((t) => t.sources) || session.tabs),
-    ...session.notes.map((n) => n.sourceId),
-    ...session.bookmarks.map((b) => b.sourceId),
-    ...conversations.flatMap((c) => c.sourceIds),
-  ]);
+  // A new test starts from the files open in the session; with none open, from what was studied.
+  const open = session.resourceTabs?.flatMap((t) => t.sources) || session.tabs;
+  const selected = new Set(
+    open.length
+      ? open
+      : [
+          ...session.notes.map((n) => n.sourceId),
+          ...session.bookmarks.map((b) => b.sourceId),
+          ...conversations.flatMap((c) => c.sourceIds),
+        ],
+  );
   return Promise.all(
     files
       .filter((f) => sourceState(f, directories) !== 'trash')
@@ -149,7 +154,7 @@ export async function assessmentOptions(
         return {
           sourceId: file.id,
           prepared: !!evidence,
-          suggested: selected.has(file.id) || file.reviewed || !!evidence?.notes.length,
+          suggested: selected.has(file.id),
           noteCount: evidence?.notes.length || 0,
           studiedCount: evidence?.studiedCount || 0,
           preparedCount: evidence?.preparedCount || 0,

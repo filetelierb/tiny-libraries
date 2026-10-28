@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
-  Activity,
   ChevronDown,
   ChevronRight,
   ClipboardCheck,
+  ClipboardPen,
+  ClipboardPlus,
+  ClipboardX,
   FileStack,
   LibraryBig,
   BookOpen,
@@ -336,10 +338,25 @@ export function useTests(refreshKey: unknown) {
   return state;
 }
 
+/** How a test reads at a glance in the list: its chip and icon. */
+const testState = (status: AssessmentSummary['status']) =>
+  status === 'completed'
+    ? 'complete'
+    : status === 'cancelled'
+      ? 'cancelled'
+      : status === 'failed' || status === 'interrupted'
+        ? 'attention'
+        : 'open';
+const testIcons = {
+  complete: ClipboardCheck,
+  cancelled: ClipboardX,
+  attention: ClipboardX,
+  open: ClipboardPen,
+} as const;
+
 export function TestsList({
   tests,
   sessions,
-  currentSessionId,
   review,
   openTest,
   t,
@@ -347,65 +364,58 @@ export function TestsList({
 }: {
   tests: ReturnType<typeof useTests>;
   sessions: StudySession[];
-  currentSessionId: string;
   review: () => void;
   openTest: (test: AssessmentSummary) => void;
   t: T;
   locale: string;
 }) {
   const names = new Map(sessions.map((session) => [session.id, session.name]));
-  const finished = (test: AssessmentSummary) => ['completed', 'cancelled'].includes(test.status);
-  const groups = [
-    { id: 'tests-open', title: t.testsInProgress, items: tests.items.filter((x) => !finished(x)) },
-    { id: 'tests-done', title: t.testsCompleted, items: tests.items.filter(finished) },
-  ];
+  // Most recent activity first: answering a question or finishing a test moves it up.
+  const items = [...tests.items].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   const date = new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' });
   return (
     <>
-      <div className="tests-review">
-        <Button variant="primary" onClick={review}>
-          <Activity size={15} />
-          {t.reviewLearning}
-        </Button>
-        <p>{t.reviewLearningHint}</p>
+      <div className="tests-header">
+        <h3>{t.myTests}</h3>
+        <IconButton label={t.reviewLearning} title={t.reviewLearningHint} onClick={review}>
+          <ClipboardPlus />
+        </IconButton>
       </div>
       {tests.error && <p className="panel-section-note error">{tests.error}</p>}
       {!tests.loaded ? (
         <LoadingRow>{t.loading}</LoadingRow>
-      ) : !tests.items.length ? (
+      ) : !items.length ? (
         <p className="panel-section-note">{t.noTests}</p>
       ) : (
-        groups.map(
-          (group) =>
-            group.items.length > 0 && (
-              <PanelSection key={group.id} id={group.id} title={group.title} t={t}>
-                <ul className="test-list">
-                  {group.items.map((test) => (
-                    <li key={test.id}>
-                      <button
-                        type="button"
-                        className={test.sessionId === currentSessionId ? 'current-session' : ''}
-                        onClick={() => openTest(test)}
+        <ul className="test-list">
+          {items.map((test) => {
+            const state = testState(test.status),
+              Icon = testIcons[state];
+            return (
+              <li key={test.id}>
+                <button type="button" data-state={state} onClick={() => openTest(test)}>
+                  <Icon size={16} aria-hidden="true" />
+                  <span>
+                    <span title={test.title}>{test.title}</span>
+                    <small>
+                      <span
+                        className={`test-chip ${state}`}
+                        title={t[`assessmentStatus_${test.status}`]}
                       >
-                        <ClipboardCheck size={16} aria-hidden="true" />
-                        <span>
-                          <span title={test.title}>{test.title}</span>
-                          <small>
-                            {t[`assessmentStatus_${test.status}`]} ·{' '}
-                            {date.format(new Date(test.updatedAt))}
-                          </small>
-                          <small title={names.get(test.sessionId)}>
-                            {t.testSessionLabel}: {names.get(test.sessionId) || '—'}
-                          </small>
-                        </span>
-                        <ChevronRight size={13} aria-hidden="true" />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </PanelSection>
-            ),
-        )
+                        {t[`testState_${state}`]}
+                      </span>{' '}
+                      {date.format(new Date(test.updatedAt))}
+                    </small>
+                    <small title={names.get(test.sessionId)}>
+                      {t.testSessionLabel}: {names.get(test.sessionId) || '—'}
+                    </small>
+                  </span>
+                  <ChevronRight size={13} aria-hidden="true" />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
       )}
     </>
   );

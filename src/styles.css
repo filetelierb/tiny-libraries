@@ -7399,8 +7399,7 @@ body:has(.panel-resizer.resizing) {
   flex-shrink: 0;
   border-top: 1px solid var(--border);
 }
-.library-content > .panel-section:first-child,
-.library-content > .tests-review + .panel-section {
+.library-content > .panel-section:first-child {
   border-top: 0;
 }
 .panel-section.grow {
@@ -7532,24 +7531,58 @@ body:has(.panel-resizer.resizing) {
   font-size: var(--font-size-small);
   color: var(--muted-text);
 }
-.test-list button.current-session {
-  box-shadow: inset 2px 0 0 var(--primary);
+.test-list button[data-state='complete'] > svg:first-child {
+  color: var(--chart-4);
 }
-.tests-review {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 0 16px 14px;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 4px;
-}
-.tests-review > .button {
-  align-self: flex-start;
-}
-.tests-review > p {
-  margin: 0;
-  font-size: var(--font-size-small);
+.test-list button[data-state='cancelled'] > svg:first-child {
   color: var(--muted-text);
+}
+.test-list button[data-state='attention'] > svg:first-child {
+  color: var(--danger);
+}
+.test-list button > svg:last-child {
+  flex-shrink: 0;
+  color: var(--muted-text);
+}
+.test-list small:has(.test-chip) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.test-chip {
+  flex-shrink: 0;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  color: var(--on-secondary);
+  background: var(--secondary);
+}
+.test-chip.complete {
+  color: oklch(0.36 0.09 135);
+  background: color-mix(in oklch, var(--chart-4) 22%, transparent);
+}
+.test-chip.cancelled {
+  color: var(--muted-text);
+  background: var(--muted);
+}
+.test-chip.attention {
+  color: var(--danger);
+  background: color-mix(in oklch, var(--danger) 10%, transparent);
+}
+/* Tests tab header: a title and the new-test button on one line, on the panel background. */
+.tests-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 12px 6px 18px;
+}
+.tests-header > h3 {
+  margin: 0;
+  font-size: var(--font-size-control);
+  font-weight: 600;
 }
 
 /* Study panel tool headers: icon tile, title and subtitle above a bordered edge. */
