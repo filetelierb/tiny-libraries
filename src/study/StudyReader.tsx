@@ -19,6 +19,7 @@ export function StudyReader({
   quiz,
   openCards,
   cardTick,
+  chapterSlot,
   ...props
 }: ComponentProps<typeof Viewer> & {
   attempts: Attempt[];
@@ -26,6 +27,8 @@ export function StudyReader({
   quiz: (chapter: StudyChapter, wasPlaying: boolean) => void;
   openCards: (chapterId: string | undefined, dueOnly: boolean) => void;
   cardTick: number;
+  /** The toolbar spot for the chapter button when this reader is the active one. */
+  chapterSlot: HTMLElement | null;
 }) {
   const { source, learning, position = 0, sessionId, t } = props;
   const preferenceKey = `tl:checkpoints:${source.id}:v${source.version}`;
@@ -97,6 +100,7 @@ export function StudyReader({
             quiz={(chapter) => quiz(chapter, playing.current)}
             cards={cards}
             openCards={openCards}
+            slot={chapterSlot}
             t={t}
           />
         )}

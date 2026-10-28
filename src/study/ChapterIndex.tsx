@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Check,
   Layers,
@@ -38,6 +39,7 @@ export function ChapterIndex({
   quiz,
   cards,
   openCards,
+  slot,
   t,
 }: {
   source: Source;
@@ -51,6 +53,8 @@ export function ChapterIndex({
   quiz: (chapter: StudyChapter) => void;
   cards: ReturnType<typeof useFlashcards>;
   openCards: (chapterId: string | undefined, dueOnly: boolean) => void;
+  /** Toolbar spot for the sheet button; without one the button floats over the reader. */
+  slot: HTMLElement | null;
   t: T;
 }) {
   const key = `tl:chapter-index:${source.id}:v${source.version}`;
@@ -66,9 +70,11 @@ export function ChapterIndex({
   const nav = useRef<HTMLElement>(null),
     opener = useRef<HTMLButtonElement>(null),
     sheetRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
+  // Measured before paint so a tight reader never flashes the side column first.
+  useLayoutEffect(() => {
     const reader = nav.current?.closest<HTMLElement>('.reader-study');
     if (!reader) return;
+    setCompact(reader.clientWidth <= SHEET_WIDTH);
     const observer = new ResizeObserver(([entry]) =>
       setCompact(entry.contentRect.width <= SHEET_WIDTH),
     );
@@ -99,29 +105,29 @@ export function ChapterIndex({
   const locations = chapterLocations(learning, source.kind),
     active = currentChapter(locations, position);
   const count = `${learning.synthesis.chapters.length} ${t.chapters.toLowerCase()}`;
-  if (compact)
+  if (compact) {
+    const toggle = (
+      <button
+        ref={opener}
+        type="button"
+        className={`button chapter-sheet-toggle${slot ? '' : ' inline'}`}
+        title={active ? `${active.ordinal}. ${active.chapter.title}` : t.chapterIndex}
+        aria-label={`${t.chapterIndex}: ${count}`}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => setSheet(!sheet)}
+      >
+        <ListTree size={15} />
+        <span>{learning.synthesis.chapters.length}</span>
+      </button>
+    );
     return (
       <nav
         ref={nav}
         aria-label={`${t.chapterIndex}: ${source.name}`}
         className="chapter-index compact"
       >
-        <button
-          ref={opener}
-          type="button"
-          className="button button-ghost button-sm chapter-sheet-toggle"
-          aria-haspopup="dialog"
-          aria-expanded={open}
-          onClick={() => setSheet(!sheet)}
-        >
-          <ListTree size={14} />
-          <span>{count}</span>
-          {active && (
-            <small>
-              {active.ordinal}. {active.chapter.title}
-            </small>
-          )}
-        </button>
+        {slot ? createPortal(toggle, slot) : toggle}
         {open && (
           <>
             <button
@@ -151,6 +157,7 @@ export function ChapterIndex({
         )}
       </nav>
     );
+  }
   return (
     <nav
       ref={nav}

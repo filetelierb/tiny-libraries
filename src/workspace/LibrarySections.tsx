@@ -18,7 +18,7 @@ import type { Source, StudySession } from '../../shared/domain';
 import { api } from '../api';
 import { Button, IconButton, LoadingRow } from '../design/components';
 
-export const libraryTabs = ['library', 'sessions', 'tests'] as const;
+export const libraryTabs = ['library', 'sessions', 'artifacts', 'tests'] as const;
 export type LibraryTab = (typeof libraryTabs)[number];
 const tabKey = 'tl:library-tab';
 
@@ -42,7 +42,12 @@ export function useLibraryTab() {
   return [value, change] as const;
 }
 
-const tabIcons = { library: LibraryBig, sessions: BookOpen, tests: ClipboardCheck };
+const tabIcons = {
+  library: LibraryBig,
+  sessions: BookOpen,
+  artifacts: FileStack,
+  tests: ClipboardCheck,
+};
 
 export function LibraryTabs({
   value,
@@ -65,6 +70,7 @@ export function LibraryTabs({
   const labels: Record<LibraryTab, string> = {
     library: t.library,
     sessions: t.sessionsTab,
+    artifacts: t.artifacts,
     tests: t.tests,
   };
   return (
@@ -202,20 +208,20 @@ export function useLibraryArtifacts(refreshKey: unknown) {
 
 export function ArtifactList({
   files,
-  refreshKey,
+  artifacts,
   sessionId,
   sessions = [],
   open,
   t,
 }: {
   files: Source[];
-  refreshKey: unknown;
+  artifacts: ReturnType<typeof useLibraryArtifacts>;
   sessionId: string;
   sessions?: StudySession[];
   open: (item: LibraryArtifact, file: Source) => void;
   t: T;
 }) {
-  const { items, error, reload } = useLibraryArtifacts(refreshKey);
+  const { items, error, reload } = artifacts;
   const [query, setQuery] = useState(''),
     [allSessions, setAllSessions] = useState(false),
     [limit, setLimit] = useState(ARTIFACT_PAGE);

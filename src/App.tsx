@@ -259,6 +259,8 @@ export function App() {
   const uploadAbort = useRef<AbortController | null>(null);
   const [learningState, setLearning] = useState<PublicLearning | null>(null),
     [jobState, setJob] = useState<(Job & { segments?: Segment[] }) | null>(null),
+    // Where the active reader puts its chapter button, at the start of the file toolbar.
+    [chapterSlot, setChapterSlot] = useState<HTMLDivElement | null>(null),
     [seek, setSeek] = useState<{
       sourceId: string;
       value: number;
@@ -266,7 +268,6 @@ export function App() {
       segment?: Segment;
       heading?: string;
     } | null>(null),
-    [evidence, setEvidence] = useState<{ sourceId: string; segment: Segment } | null>(null),
     [artifact, setArtifact] = useState<string | false>(false),
     /** Source whose artifact is shown beside the cited source after following a citation. */
     [artifactSplit, setArtifactSplit] = useState<string | null>(null),
@@ -570,7 +571,6 @@ export function App() {
   useEffect(() => {
     setLearning(null);
     setJob(null);
-    setEvidence((previous) => (previous?.sourceId === active?.id ? previous : null));
     if (!active) return;
     let stopped = false;
     const load = async () => {
@@ -891,7 +891,6 @@ export function App() {
   /** Citations inside an artifact keep the artifact and open the evidence beside it. */
   function citeFromArtifact(sourceId: string, segment: Segment) {
     setArtifactSplit(sourceId);
-    setEvidence({ sourceId, segment });
     setSeek({ sourceId, value: segment.start ?? segment.page ?? 0, nonce: Date.now(), segment });
     setLeft(false);
     setRight(false);
@@ -905,7 +904,6 @@ export function App() {
       }
       openFile(file, 'retain');
     } else focusPane(sourceId);
-    setEvidence({ sourceId, segment });
     setSeek({
       sourceId,
       value: segment.start ?? segment.page ?? 0,
@@ -952,6 +950,15 @@ export function App() {
               library: catalog.files.filter((f) => sourceState(f, catalog.directories) === 'files')
                 .length,
               sessions: catalog.sessions.length,
+              // Matches the list's default scope: this session's artifacts and unscoped ones.
+              artifacts: (libraryArtifacts.items || []).filter(
+                (item) =>
+                  (!item.sessionId || item.sessionId === session.id) &&
+                  catalog.files.some(
+                    (f) =>
+                      f.id === item.sourceId && sourceState(f, catalog.directories) !== 'trash',
+                  ),
+              ).length,
               tests: `${tests.items.length}${tests.more ? '+' : ''}`,
             }}
           />
@@ -1045,18 +1052,6 @@ export function App() {
                     storageKey="tl:tree:sidebar"
                   />
                 </div>
-              </PanelSection>
-              <PanelSection id="library-artifacts" title={t.artifacts} t={t}>
-                <ArtifactList
-                  files={catalog.files.filter(
-                    (f) => sourceState(f, catalog.directories) !== 'trash',
-                  )}
-                  refreshKey={catalog.files}
-                  sessionId={session.id}
-                  sessions={catalog.sessions}
-                  open={(item, file) => openLibraryArtifact(item, file)}
-                  t={t}
-                />
               </PanelSection>
               {archivedAny && (
                 <PanelSection
@@ -1155,6 +1150,16 @@ export function App() {
                   })}
               </div>
             </PanelSection>
+          )}
+          {libraryTab === 'artifacts' && (
+            <ArtifactList
+              files={catalog.files.filter((f) => sourceState(f, catalog.directories) !== 'trash')}
+              artifacts={libraryArtifacts}
+              sessionId={session.id}
+              sessions={catalog.sessions}
+              open={(item, file) => openLibraryArtifact(item, file)}
+              t={t}
+            />
           )}
           {libraryTab === 'tests' && (
             <TestsList
@@ -1290,6 +1295,7 @@ export function App() {
         ) : (
           <>
             <div className="file-toolbar">
+              <div className="chapter-action" ref={setChapterSlot} />
               {split && (
                 <select
                   className="pane-target"
@@ -1533,6 +1539,7 @@ export function App() {
                     <StudyReader
                       key={`${source.id}:v${source.version}:${material?.createdAt || 'unprepared'}`}
                       attempts={catalog.attempts}
+                      chapterSlot={source.id === active?.id ? chapterSlot : null}
                       navigate={(segment, heading) => citeFrom(source.id, segment, heading)}
                       quiz={(chapter, wasPlaying) => {
                         if (!material) return;
@@ -1605,19 +1612,6 @@ export function App() {
                   );
                   return (
                     <>
-                      {evidence?.sourceId === source.id && (
-                        <section className="evidence-panel" aria-label={t.sources}>
-                          <div>
-                            <strong>
-                              {t.source} · {evidence.segment.id}
-                            </strong>
-                            <IconButton label={t.close} onClick={() => setEvidence(null)}>
-                              <X />
-                            </IconButton>
-                          </div>
-                          <p>{evidence.segment.text}</p>
-                        </section>
-                      )}
                       {artifact === source.id ? (
                         <div
                           className={

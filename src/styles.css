@@ -3251,31 +3251,6 @@ body:has(.panel-resizer.resizing) {
 .generated-artifact .citations {
   margin-bottom: 20px;
 }
-.evidence-panel {
-  flex-shrink: 0;
-  max-height: 190px;
-  overflow: auto;
-  padding: 12px 18px;
-  background: var(--secondary);
-  border-bottom: 1px solid var(--border);
-  font-size: var(--font-size-control);
-}
-.evidence-panel > div {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  color: var(--primary);
-}
-.evidence-panel strong {
-  font-size: var(--font-size-small);
-}
-.evidence-panel p {
-  white-space: pre-wrap;
-  line-height: 1.75;
-  font-size: 13px;
-  margin: 5px 0;
-}
 .glossary-proposal {
   font-size: 13px;
   border: 1px solid var(--border);
@@ -3538,11 +3513,6 @@ body:has(.panel-resizer.resizing) {
   flex: 1;
   min-width: 0;
   min-height: 0;
-}
-.resource-pane > .evidence-panel {
-  flex-shrink: 0;
-  max-height: 150px;
-  overflow: auto;
 }
 .split-resizer {
   display: flex;
@@ -4700,27 +4670,42 @@ body:has(.panel-resizer.resizing) {
   z-index: 9;
 }
 .chapter-index.compact {
-  flex: 0 0 auto;
-  align-items: flex-start;
-  width: 100%;
-  padding: 6px 8px;
-  border-right: 0;
-  border-bottom: 1px solid var(--border);
+  display: contents;
+}
+/* The chapter button floats at the start of the file toolbar, mirroring the expand button. */
+.chapter-action {
+  position: absolute;
+  left: 8px;
+  z-index: 1;
+  display: flex;
+}
+.file-toolbar:has(.pane-target) .chapter-action {
+  position: static;
+}
+.file-toolbar:has(.chapter-action:not(:empty)) .toolbar-actions {
+  max-width: calc(100% - 120px);
 }
 .chapter-sheet-toggle {
-  max-width: 100%;
-  min-width: 0;
-}
-.chapter-sheet-toggle > span {
-  flex-shrink: 0;
-}
-.chapter-sheet-toggle > small {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--muted-text);
+  gap: 5px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in oklch, var(--primary), transparent 75%);
+  border-radius: var(--radius-pill);
+  background: var(--secondary);
+  color: var(--primary);
   font-size: var(--font-size-small);
+  font-weight: 600;
+  box-shadow: 0 4px 10px -4px rgb(0 0 0 / 18%);
+}
+.chapter-sheet-toggle:hover,
+.chapter-sheet-toggle[aria-expanded='true'] {
+  background: color-mix(in oklch, var(--secondary), var(--primary) 12%);
+}
+.chapter-sheet-toggle.inline {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 4;
 }
 .chapter-sheet-mask {
   position: absolute;
@@ -7405,7 +7390,7 @@ body:has(.panel-resizer.resizing) {
 }
 .library-tabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   align-items: stretch;
   flex: 1;
   min-width: 0;
@@ -7554,11 +7539,6 @@ body:has(.panel-resizer.resizing) {
 }
 .panel-section-note.error {
   color: var(--danger);
-}
-.artifact-list {
-  max-height: 28vh;
-  overflow: auto;
-  scrollbar-width: thin;
 }
 .artifact-list,
 .test-list {
