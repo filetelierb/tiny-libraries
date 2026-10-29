@@ -23,6 +23,7 @@
   ],
   "r2_buckets": [{ "binding": "FILES", "bucket_name": "tailored-library-files" }],
   "vars": {
+    "APP_URL": "http://127.0.0.1:9876",
     "MEDIA_BRIDGE_URL": "http://127.0.0.1:9877",
     "MEDIA_BRIDGE_TOKEN": "launcher-required",
   },

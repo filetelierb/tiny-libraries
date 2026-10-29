@@ -28,6 +28,12 @@ import { studySafety as safety } from './meta-safety';
 import { studyNoteInstructions } from '../shared/study-note';
 
 type Message = { role: string; content?: unknown; tool_call_id?: string; tool_calls?: unknown };
+const readOnlyTools = new Set([
+  'read_segments',
+  'read_concepts',
+  'practice_summary',
+  'list_concepts',
+]);
 export type TutorAgentInput = {
   model: string;
   prompt: string;
@@ -662,6 +668,34 @@ export async function createTutorAgent(input: TutorAgentInput, previous?: TutorA
       messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(output) });
       if (++pending.next >= pending.calls.length) delete state.pending;
       return { name: call.function.name, callId: call.id, output };
+    },
+    /** Tool descriptions for an agent host that calls them by name over MCP. */
+    mcpTools() {
+      return tools.map(({ function: tool }) => ({
+        name: tool.name,
+        description: tool.description,
+        inputSchema: tool.parameters,
+        annotations: { readOnlyHint: readOnlyTools.has(tool.name) },
+      }));
+    },
+    /** Runs one call an agent host made during the current model step. */
+    async runTool(
+      name: string,
+      args: unknown,
+      writeBookmark?: BookmarkWriter,
+      writeArtifact?: ArtifactWriter,
+      writeConcept?: ConceptWriter,
+    ) {
+      if (state.pending || state.result)
+        throw new MetaError('This reply is not waiting for its agent.', false);
+      const call = {
+        id: `call_${crypto.randomUUID()}`,
+        type: 'function' as const,
+        function: { name, arguments: JSON.stringify(args ?? {}) },
+      };
+      messages.push({ role: 'assistant', content: null, tool_calls: [call] });
+      state.pending = { calls: [call], next: 0 };
+      return (await this.executeNextTool(writeBookmark, writeArtifact, writeConcept))!;
     },
     steer(id: string, instruction: string) {
       z.string().uuid().parse(id);

@@ -17,6 +17,14 @@ npm ci
 npm start
 ```
 
+The tutor runs as a [Muse Code](https://dev.meta.ai) agent when the `muse` command matching `@muse-code/sdk` (1.4.14) is installed:
+
+```sh
+curl -fsSL https://dev.meta.ai/install.sh | sh
+```
+
+Without it, or for questions with **Web** on, the tutor calls the Meta Model API directly with the same tools.
+
 Open **http://127.0.0.1:9876**. The launcher starts the local runtime and media companion together. Stopping and starting preserves files and study data in `.celld/dev/` and `.local/`. See [local operation and backups](docs/local-operation.md) before moving or resetting data.
 
 Development remains private until the owner chooses to share the repository. Its MIT license describes the intended source distribution; it does not make private GitHub content publicly accessible.

@@ -36,8 +36,42 @@ export type TutorRunnerServices = {
     intent: TurnIntent,
     input: Parameters<ConceptWriter>[0],
   ): Promise<unknown>;
+  /** The tool endpoint for a reply that may run as a Muse Code agent. */
+  muse?(providerId: string): Promise<TutorCompletion['muse']>;
 };
-class ControlCheckpoint extends Error {}
+export class ControlCheckpoint extends Error {}
+
+/** Writes happen only while this turn is still the active, unsteered one. */
+export function turnWriters(
+  journal: TutorJournal,
+  services: TutorRunnerServices,
+  record: TurnRecord,
+  intent: TurnIntent,
+): [BookmarkWriter, ArtifactWriter | undefined, ConceptWriter | undefined] {
+  const guard = async () => {
+    const current = await journal.active();
+    if (!current || current.id !== record.id || current.stopRequested || current.steering.length)
+      throw new ControlCheckpoint();
+  };
+  const artifact = services.artifact?.bind(services),
+    concept = services.concept?.bind(services);
+  return [
+    async (value) => {
+      await guard();
+      return services.bookmark(record, intent, value);
+    },
+    artifact &&
+      (async (value) => {
+        await guard();
+        return artifact(record, intent, value);
+      }),
+    concept &&
+      (async (value) => {
+        await guard();
+        return concept(record, intent, value);
+      }),
+  ];
+}
 
 /** One short durable transition per alarm; the sidecar owns the open model connection. */
 export class TutorRunner {
@@ -183,9 +217,10 @@ export class TutorRunner {
           if (!next) return;
           record = next;
           if (record.stopRequested || record.steering.length) return;
+          const muse = await this.services.muse?.(record.providerId!);
           snapshot = await this.services.start(
             record.providerId!,
-            tutorCompletionSchema.parse(agent.request()),
+            tutorCompletionSchema.parse({ ...agent.request(), ...(muse ? { muse } : {}) }),
           );
         }
         if (
@@ -236,35 +271,7 @@ export class TutorRunner {
           control.steering.length
         )
           return;
-        // Writes happen only while this turn is still the active, unsteered one.
-        const guard = async () => {
-          const current = await this.journal.active();
-          if (
-            !current ||
-            current.id !== record!.id ||
-            current.stopRequested ||
-            current.steering.length
-          )
-            throw new ControlCheckpoint();
-        };
-        const artifact = this.services.artifact?.bind(this.services),
-          concept = this.services.concept?.bind(this.services);
-        await agent.executeNextTool(
-          async (value) => {
-            await guard();
-            return this.services.bookmark(record!, intent, value);
-          },
-          artifact &&
-            (async (value) => {
-              await guard();
-              return artifact(record!, intent, value);
-            }),
-          concept &&
-            (async (value) => {
-              await guard();
-              return concept(record!, intent, value);
-            }),
-        );
+        await agent.executeNextTool(...turnWriters(this.journal, this.services, record, intent));
         const checkpointObject = await this.journal.objects.put(agent.snapshot());
         await this.journal.progress(record, { checkpointObject, toolNames: agent.snapshot().used });
         return;

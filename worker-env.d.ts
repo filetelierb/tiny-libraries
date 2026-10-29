@@ -3,6 +3,7 @@
 interface __BaseEnv_Env {
 	FILES: R2Bucket;
 	ASSETS: Fetcher;
+	APP_URL: "http://127.0.0.1:9876";
 	MEDIA_BRIDGE_URL: "http://127.0.0.1:9877";
 	MEDIA_BRIDGE_TOKEN: string;
 	LIBRARY: DurableObjectNamespace<import("./worker/index").Library>;

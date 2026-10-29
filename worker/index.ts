@@ -921,6 +921,25 @@ export default {
       if (request.method === 'OPTIONS') return new Response(null, { status: 403 });
       if (url.pathname === '/api/health')
         return json({ ok: true, runtime: 'celld', version: '0.1.0' });
+      const toolsMatch = url.pathname.match(
+        /^\/api\/tutor-tools\/([a-f0-9-]{36})\/([a-f0-9]{64})$/,
+      );
+      if (toolsMatch) {
+        // The agent host serving a reply calls the tutor's tools here, as a minimal MCP server.
+        if (request.method !== 'POST') return new Response(null, { status: 405 });
+        const token = request.headers.get('Authorization')?.match(/^Bearer ([a-f0-9]{64})$/)?.[1];
+        if (!token) throw new ApiError('Unauthorized', 401);
+        const body: unknown = await request.json();
+        const conversation = env.TUTOR.getByName(toolsMatch[1]);
+        const replies: unknown[] = [];
+        for (const message of Array.isArray(body) ? body : [body]) {
+          const result = await conversation.tools(toolsMatch[2], token, message);
+          if (!result.ok) throw new ApiError(result.error, result.status);
+          if (result.value) replies.push(result.value);
+        }
+        if (!replies.length) return new Response(null, { status: 202 });
+        return json(Array.isArray(body) ? replies : replies[0]);
+      }
       if (url.pathname === '/api/files' && request.method === 'POST') {
         const name = decodeURIComponent(request.headers.get('X-File-Name') || '');
         const inputFolder = decodeURIComponent(request.headers.get('X-File-Folder') || '');

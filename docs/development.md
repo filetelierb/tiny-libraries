@@ -143,3 +143,16 @@ Verification: unit tests cover review merging and evidence, fill segments and ci
 - **Diagrams in chat.** The flow toolbar wraps: the "Select a node to explore" hint moves under the buttons instead of being squeezed to one letter per line by chat text that breaks anywhere. A left-to-right flowchart that would show below 75 % of its size is redrawn top to bottom for the panel; the expanded view and the source shown underneath keep the original direction.
 
 Verification: unit tests cover cue length, contiguous timing, sentence ends, VTT and SRT numbering, and the flowchart direction rewrite; 284 tests, type checks, formatting and build pass. In the browser, the lecture's original track went from 255 cues of up to 1,850 characters to 720 cues of at most 84, with only the chosen track showing. A five-node left-to-right flowchart in a 240-pixel panel went from a 225 × 49 image to a top-to-bottom drawing at 225 × 359, with the hint on its own line.
+
+### The tutor as a Muse Code agent
+
+Each tutor reply can now run as one Muse Code turn instead of a loop of direct model calls:
+
+- **Host.** The local companion starts a `muse serve` process per reply with Spark or Wonder and the effort chosen for the question (Automatic uses medium). The Meta key reaches that process only through its environment; it runs in its own empty folder and home, with shell, file writes, web tools, delegation, background reminders and automatic updates off. Its tools are limited to the tutor's library tools.
+- **Tools.** The Worker serves the tutor's existing tools to that process as a small MCP endpoint for the reply's current model step, authorised by a token derived from the companion secret. Every call runs against the reply's saved checkpoint, one at a time with the reply's own steps, so a passage counts as citable only once the agent has read it, and bookmarks, artifacts and concepts keep the same limits and stop checks. Read tools are marked read-only; writes are approved only for the library tools.
+- **Reply.** The agent's working remarks stream as progress and are replaced by its final answer, which is saved like any other reply, with citations to what it read and the tools it used. Stop ends the process and keeps the partial text; a steering instruction starts a new agent turn that sees the work already done.
+- **Fallback.** Without a matching `muse` installation, or when Web is on (the agent does not offer Meta's hosted search), the companion uses the direct model stream as before.
+
+The unused code-session routes and the trial agent libraries were removed.
+
+Verification: unit tests cover the agent's input (instructions, conversation, question and images), relayed progress and the final answer, Stop, the fallbacks, and an agent calling the tools during its model step with citations limited to what it read; 289 tests, type checks and build pass. In the browser, Spark answered a question across the course reader, the lecture and the glossary in 21 seconds, citing two book pages and a saved concept, and said plainly that the lecture passages did not cover it.

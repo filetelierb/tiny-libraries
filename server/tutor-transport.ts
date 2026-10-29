@@ -10,6 +10,7 @@ import {
 } from '../shared/tutor-transport';
 import { TutorStream } from './tutor-stream';
 import { TutorResponsesStream, webResponsesRequest } from './tutor-responses';
+import { MuseRejection, type MuseEngine } from './muse';
 
 export class TutorTransportError extends Error {
   constructor(
@@ -20,9 +21,14 @@ export class TutorTransportError extends Error {
   }
 }
 type Saved = TransportSnapshot & { owner: string; preempted?: true };
+/** A Muse Code reply runs its own tools, so only its visible text is relayed. */
+class MuseReply {
+  text = '';
+  readonly toolNames: string[] = [];
+}
 type Active = {
   controller: AbortController;
-  stream: TutorStream | TutorResponsesStream;
+  stream: TutorStream | TutorResponsesStream | MuseReply;
   task?: Promise<void>;
 };
 export type TutorProvider = (url: string, options: RequestInit) => Promise<Response>;
@@ -67,6 +73,7 @@ export class TutorTransport {
     private readonly root: string,
     private readonly provider: TutorProvider = fetch,
     private readonly timeoutMs = 20 * 60 * 1000,
+    private readonly muse?: MuseEngine,
   ) {}
 
   async initialize() {
@@ -187,10 +194,16 @@ export class TutorTransport {
         createdAt: now,
         updatedAt: now,
       };
+      // Web questions use Meta's hosted search, which the agent host does not offer.
+      const agent = !!body.muse && !body.webSearch && !!(await this.muse?.available());
       await this.publish(accepted);
       const active: Active = {
         controller: new AbortController(),
-        stream: body.webSearch ? new TutorResponsesStream() : new TutorStream(),
+        stream: agent
+          ? new MuseReply()
+          : body.webSearch
+            ? new TutorResponsesStream()
+            : new TutorStream(),
       };
       this.active.set(id, active);
       active.task = this.run(id, credential, body, active).catch(() => {
@@ -222,6 +235,33 @@ export class TutorTransport {
     try {
       await this.update(id, active, { status: 'running' });
       if (active.controller.signal.aborted) return;
+      if (active.stream instanceof MuseReply) {
+        const reply = active.stream,
+          { muse } = body;
+        if (!muse || !this.muse) throw new Error('The agent host is unavailable');
+        let pending: Promise<unknown> | undefined;
+        const text = await this.muse.run(id, {
+          credential,
+          body: { ...body, muse },
+          signal: AbortSignal.any([active.controller.signal, AbortSignal.timeout(this.timeoutMs)]),
+          onText: (value) => {
+            reply.text = value.slice(0, 16000);
+            // Progress is saved at most a few times a second; the final save carries the rest.
+            pending ||= new Promise((resolve) => setTimeout(resolve, 250))
+              .then(() => {
+                pending = undefined;
+                return this.update(id, active);
+              })
+              .catch(() => {});
+          },
+        });
+        if (text.length > 16000)
+          throw new Error('Reply exceeds the text limit. Partial text is retained.');
+        reply.text = text;
+        await pending;
+        await this.update(id, active, { status: 'completed', result: { content: text } });
+        return;
+      }
       const response = await this.provider(
         body.webSearch
           ? 'https://api.meta.ai/v1/responses'
@@ -287,7 +327,10 @@ export class TutorTransport {
       }
     } catch (error) {
       await this.update(id, active, {
-        status: error instanceof ProviderRejection ? 'failed' : 'interrupted',
+        status:
+          error instanceof ProviderRejection || error instanceof MuseRejection
+            ? 'failed'
+            : 'interrupted',
         error: (error instanceof Error ? error.message : 'Model stream interrupted')
           .replaceAll(credential, '[redacted]')
           .slice(0, 500),

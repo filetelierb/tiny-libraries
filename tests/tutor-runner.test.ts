@@ -20,6 +20,7 @@ import type {
 } from '../shared/tutor-transport';
 import type { Conversation } from '../shared/conversations';
 import { MemoryStore } from './storage';
+import { tutorMcp } from '../worker/tutor-mcp';
 
 class Storage extends MemoryStore {
   async setAlarm(time: number | Date) {
@@ -72,7 +73,7 @@ const call = (id: string, name: string, args: unknown) => ({
   type: 'function' as const,
   function: { name, arguments: JSON.stringify(args) },
 });
-async function fixture() {
+async function fixture(options: { muse?: boolean } = {}) {
   const storage = new Storage(),
     objects = new Objects();
   const conversation: Conversation = {
@@ -159,6 +160,14 @@ async function fixture() {
       }
       return { id: 'saved-bookmark', label: value.label, location: { quote: value.segment.text } };
     },
+    ...(options.muse
+      ? {
+          muse: async (id: string) => ({
+            url: `http://127.0.0.1:9876/api/tutor-tools/${conversation.id}/${id}`,
+            token: 'a'.repeat(64),
+          }),
+        }
+      : {}),
   };
   const accept = async (value = intent()) =>
     journal.accept(value, await turnInputFingerprint(value.input));
@@ -192,6 +201,7 @@ async function fixture() {
     journal,
     storage,
     objects,
+    services,
     conversation,
     intent,
     accept,
@@ -397,4 +407,63 @@ test('a completed reply stores its study note suggestion apart from the visible 
     category: 'concept',
     body: 'Sample above twice the highest frequency.',
   });
+});
+
+test('an agent host calls the tools during its model step and the answer cites only what it read', async () => {
+  const f = await fixture({ muse: true }),
+    accepted = await f.accept();
+  const running = await f.model();
+  const body = f.accepted[0].body;
+  assert.equal(body.muse?.url.endsWith(`/${running.providerId}`), true);
+  const rpc = (method: string, params?: unknown, providerId = running.providerId!) =>
+    tutorMcp(new TutorJournal(f.storage, f.objects, f.conversation.id), f.services, providerId, {
+      jsonrpc: '2.0',
+      id: 1,
+      method,
+      params: params as never,
+    }) as Promise<{
+      result: {
+        tools?: Array<{ name: string; annotations: unknown }>;
+        content?: Array<{ text: string }>;
+        isError?: boolean;
+      };
+    }>;
+  const listed = (await rpc('tools/list')).result.tools!;
+  assert.deepEqual(listed.find((tool) => tool.name === 'read_segments')?.annotations, {
+    readOnlyHint: true,
+  });
+  assert.deepEqual(listed.find((tool) => tool.name === 'create_bookmark')?.annotations, {
+    readOnlyHint: false,
+  });
+  const read = (
+    await rpc('tools/call', { name: 'read_segments', arguments: { ids: [`${sourceId}:s1`] } })
+  ).result;
+  assert.equal(read.isError, false);
+  assert.match(read.content![0].text, /Sampling frequency/);
+  const saved = (
+    await rpc('tools/call', {
+      name: 'create_bookmark',
+      arguments: { segmentId: `${sourceId}:s1`, label: 'Sampling frequency' },
+    })
+  ).result;
+  assert.equal(saved.isError, false);
+  assert.equal(f.writes(), 1);
+  const other = (
+    await rpc('tools/call', { name: 'read_segments', arguments: { ids: [] } }, 'f'.repeat(64))
+  ).result;
+  assert.equal(other.isError, true);
+  assert.deepEqual((await f.journal.active())!.toolNames, ['read_segments', 'create_bookmark']);
+  f.complete((await f.journal.active())!, {
+    content: `Samples per second [${sourceId}:s1], not [${sourceId}:s9].`,
+  });
+  for (let n = 0; n < 4; n++) await f.step();
+  const done = await f.journal.get(accepted.id);
+  assert.equal(done!.status, 'completed');
+  assert.equal(f.accepted.length, 1, 'the agent host ran the whole reply in one model step');
+  const answer = (await f.journal.history()).messages.at(-1)!;
+  assert.deepEqual(
+    answer.citations!.map((c) => c.id),
+    [`${sourceId}:s1`],
+  );
+  assert.deepEqual(answer.tools, ['read_segments', 'create_bookmark']);
 });

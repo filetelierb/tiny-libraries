@@ -31,6 +31,14 @@ export const tutorCompletionSchema = z
     tools: z.array(z.unknown()).max(40).optional(),
     reasoning_effort: reasoningEffortSchema.exclude(['auto']).optional(),
     webSearch: z.literal(true).optional(),
+    /** The Worker's tool endpoint for this reply, when the tutor may run as a Muse Code agent. */
+    muse: z
+      .object({
+        url: z.string().url().max(500),
+        token: z.string().regex(/^[a-f0-9]{64}$/),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 export type TutorCompletion = z.infer<typeof tutorCompletionSchema>;

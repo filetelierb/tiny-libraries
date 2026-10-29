@@ -17,7 +17,7 @@
     "smoke": "tsx scripts/smoke.ts"
   },
   "dependencies": {
-    "@muse-code/sdk": "1.4.13",
+    "@muse-code/sdk": "^1.4.14",
     "@napi-rs/canvas": "1.0.13",
     "@tiptap/core": "3.32.0",
     "@tiptap/extension-blockquote": "3.32.0",

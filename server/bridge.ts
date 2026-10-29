@@ -4,7 +4,7 @@ import { mkdir, readFile, writeFile, open, rename, stat } from 'node:fs/promises
 import { join } from 'node:path';
 import { MAX_FILE_BYTES, kindSchema } from '../shared/domain';
 import { normalize } from './media';
-import { museStatus, codeSession } from './muse';
+import { museEngine } from './muse';
 import { z } from 'zod';
 import { composeCapture } from './capture-image';
 import { drawingSchema } from '../shared/annotations';
@@ -19,7 +19,12 @@ export async function startBridge(
   tutorProvider?: TutorProvider,
 ) {
   await mkdir(root, { recursive: true, mode: 0o700 });
-  const tutor = new TutorTransport(join(root, 'tutor-requests'), tutorProvider);
+  const tutor = new TutorTransport(
+    join(root, 'tutor-requests'),
+    tutorProvider,
+    undefined,
+    museEngine(join(root, 'muse')),
+  );
   const server = createServer(async (req, res) => {
     const send = (value: unknown, status = 200) => {
       res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
@@ -221,24 +226,6 @@ export async function startBridge(
         );
         res.writeHead(200, { 'Content-Type': 'audio/wav', 'Content-Length': data.length });
         res.end(data);
-        return;
-      }
-      if (url.pathname === '/api/code/status') {
-        send(await museStatus());
-        return;
-      }
-      if (url.pathname === '/api/code/sessions' && req.method === 'POST') {
-        const parts: Buffer[] = [];
-        let bytes = 0;
-        for await (const part of req) {
-          bytes += part.length;
-          if (bytes > 16000) throw new Error('Prompt is too large');
-          parts.push(Buffer.from(part));
-        }
-        const { prompt } = z
-          .object({ prompt: z.string().trim().min(1).max(8000) })
-          .parse(JSON.parse(Buffer.concat(parts).toString()));
-        send(await codeSession(join(root, 'code'), prompt));
         return;
       }
       send({ error: 'Not found' }, 404);

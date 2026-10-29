@@ -5,10 +5,35 @@ import { transportSnapshotSchema } from '../shared/tutor-transport';
 import { z } from 'zod';
 import { TutorJournal, TutorJournalError } from './tutor-journal';
 import { TutorRunner, type TutorRunnerServices } from './tutor-runner';
+import { tutorMcp } from './tutor-mcp';
+
+/** A reply's tool token, derivable only with the bridge secret. */
+async function toolToken(secret: string, conversationId: string, providerId: string) {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const signature = await crypto.subtle.sign(
+    'HMAC',
+    key,
+    new TextEncoder().encode(`tutor-tools:${conversationId}:${providerId}`),
+  );
+  return [...new Uint8Array(signature)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
 
 /** A conversation's queue and recovery alarm have an identity independent of the browser. */
 export class TutorConversation extends DurableObject<Env> {
   private stepping?: Promise<void>;
+  private queue: Promise<unknown> = Promise.resolve();
+  /** Runner steps and agent tool calls take turns, so each sees the latest checkpoint. */
+  private exclusive<T>(run: () => Promise<T>): Promise<T> {
+    const next = this.queue.catch(() => {}).then(run);
+    this.queue = next;
+    return next;
+  }
   private journal() {
     const id = this.ctx.id.name;
     if (!id) throw new Error('A conversation coordinator requires a named identity');
@@ -120,6 +145,21 @@ export class TutorConversation extends DurableObject<Env> {
     }
     return response.json<T>();
   }
+  /** One JSON-RPC message from the agent host serving this conversation's active reply. */
+  async tools(providerId: string, token: string, message: unknown) {
+    const id = this.ctx.id.name!;
+    const expected = await toolToken(this.env.MEDIA_BRIDGE_TOKEN, id, providerId);
+    let difference = expected.length ^ token.length;
+    for (let i = 0; i < expected.length; i++)
+      difference |= expected.charCodeAt(i) ^ (token.charCodeAt(i) || 0);
+    if (difference) return { ok: false as const, error: 'Unauthorized', status: 401 };
+    return {
+      ok: true as const,
+      value: await this.exclusive(() =>
+        tutorMcp(this.journal(), this.services(), providerId, message as never),
+      ),
+    };
+  }
   private services(): TutorRunnerServices {
     const bridge = async (id: string, method = 'GET', body?: unknown, cancel = false) => {
       const key = body ? (await this.library<{ key: string | null }>('/internal/key')).key : null;
@@ -165,13 +205,20 @@ export class TutorConversation extends DurableObject<Env> {
           ...value,
           conversationId: record.conversationId,
         }),
+      muse: async (providerId) => {
+        const id = this.ctx.id.name!;
+        return {
+          url: `${this.env.APP_URL}/api/tutor-tools/${id}/${providerId}`,
+          token: await toolToken(this.env.MEDIA_BRIDGE_TOKEN, id, providerId),
+        };
+      },
     };
   }
   private async run() {
     const journal = this.journal();
     await this.ctx.storage.setAlarm(Date.now() + 15000);
     try {
-      await new TutorRunner(journal, this.services()).step();
+      await this.exclusive(() => new TutorRunner(journal, this.services()).step());
     } finally {
       await journal.schedule();
     }
