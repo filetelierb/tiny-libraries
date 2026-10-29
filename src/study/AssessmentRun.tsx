@@ -379,13 +379,7 @@ export function AssessmentRun({
             disabled={readOnly || busy || !!draft.operation}
             t={t}
           />
-          <AssessmentCitations
-            citations={question.citations}
-            context={detail.context}
-            t={t}
-            navigate={navigate}
-            inspect={inspectEvidence}
-          />
+          {/* Evidence quotes often state the answer, so they appear with feedback after grading. */}
           {readOnly ? (
             <p className="muted">{t.assessmentReadOnly}</p>
           ) : draft.operation ? (

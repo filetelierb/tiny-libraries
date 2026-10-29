@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { fold, type Segment, type Synthesis } from './domain';
+import { type Segment, type Synthesis } from './domain';
+import { conceptKey } from './glossary';
 
 // Long sources are analysed in overlapping windows. Each window owns the segments from
 // `owned` to `end`; the segments from `start` to `owned` repeat the end of the previous
@@ -115,7 +116,7 @@ export function mergeParts(parts: Synthesis[], outline: Outline): Synthesis {
     const next = parts.map((part) => part.glossary[round]).filter(Boolean);
     if (!next.length) break;
     for (const term of next) {
-      const key = fold(term.term),
+      const key = conceptKey(term.term),
         existing = terms.get(key);
       if (existing)
         existing.segmentIds = [...new Set([...existing.segmentIds, ...term.segmentIds])];

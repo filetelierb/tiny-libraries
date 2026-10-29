@@ -204,6 +204,15 @@ export class Library extends DurableObject<Env> {
         );
       if (path === '/internal/key')
         return json({ key: (await this.ctx.storage.get<string>('apiKey')) || null });
+      // Analysis reuses the names already in the glossary instead of coining near-duplicates.
+      if (path === '/internal/glossary-terms')
+        return json({
+          terms: (await glossarySnapshot(this.ctx.storage))
+            .filter((entry) => !entry.mergedInto && !entry.archived)
+            .map((entry) => entry.term)
+            .sort((a, b) => a.localeCompare(b))
+            .slice(0, 400),
+        });
       if (path === '/internal/tutor-artifact' && request.method === 'POST') {
         const value = z
           .object({

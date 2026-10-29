@@ -2,16 +2,10 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } f
 import { z } from 'zod';
 import {
   ArrowUpRight,
-  Crop,
-  Eraser,
   Highlighter,
   MousePointer2,
-  MessageCircle,
   PenLine,
   Type,
-  Square,
-  Grid2X2,
-  Focus,
   Undo2,
   Redo2,
   Trash2,
@@ -21,12 +15,10 @@ import {
 import {
   captureDrawingSchema,
   capturePointFromView,
-  captureRectangle,
   wholeCapture,
   type CaptureDrawing,
   type CaptureObject,
   type CapturePoint,
-  type CaptureRect,
 } from '../../shared/capture-drawing';
 import type { PublishedCapture } from '../../shared/captures';
 import { Button, IconButton, Modal } from '../design/components';
@@ -41,30 +33,13 @@ import {
   transformCaptureObject,
 } from './drawingGeometry';
 
-type Tool =
-  | 'select'
-  | 'highlight'
-  | 'comment'
-  | 'arrow'
-  | 'text'
-  | 'pen'
-  | 'eraser'
-  | 'redact'
-  | 'mosaic'
-  | 'spotlight'
-  | 'crop';
+type Tool = 'select' | 'highlight' | 'text' | 'pen' | 'arrow';
 const toolIcons = {
   select: MousePointer2,
   highlight: Highlighter,
-  comment: MessageCircle,
-  arrow: ArrowUpRight,
   text: Type,
   pen: PenLine,
-  eraser: Eraser,
-  redact: Square,
-  mosaic: Grid2X2,
-  spotlight: Focus,
-  crop: Crop,
+  arrow: ArrowUpRight,
 };
 /** Ten capture swatches, in display order, plus the per-tool defaults. */
 const PALETTE = [
@@ -79,25 +54,19 @@ const PALETTE = [
   '#944df5',
   '#f53894',
 ];
-const DEFAULT_COLOR = '#ff3b30',
-  SPOTLIGHT_DEFAULT_COLOR = '#ffffff';
+const DEFAULT_COLOR = '#ff3b30';
 const initialStyles = () =>
   Object.fromEntries(
-    (Object.keys(toolIcons) as Tool[]).map((name) => [
-      name,
-      { color: name === 'spotlight' ? SPOTLIGHT_DEFAULT_COLOR : DEFAULT_COLOR, width: 3 },
-    ]),
+    (Object.keys(toolIcons) as Tool[]).map((name) => [name, { color: DEFAULT_COLOR, width: 3 }]),
   ) as Record<Tool, { color: string; width: number }>;
 const textEditSchema = z.object({
-  kind: z.enum(['text', 'comment']),
+  kind: z.literal('text'),
   id: z.string().uuid(),
   point: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) }),
   text: z.string().max(2000),
   style: z.enum(['plain', 'sticky', 'bubble']),
   color: z.string().regex(/^#[a-f0-9]{6}$/i),
   fontSize: z.number().min(8).max(512),
-  number: z.number().int().min(1).max(100),
-  size: z.number().min(8).max(256),
 });
 type TextEdit = z.infer<typeof textEditSchema>;
 const workingSchema = z.object({
@@ -179,7 +148,6 @@ function StudioBody({
     // Each tool keeps its own colour and width, as in the reference capture tools.
     [styles, setStyles] = useState(initialStyles),
     [textStyle, setTextStyle] = useState<'plain' | 'sticky' | 'bubble'>('plain'),
-    [shape, setShape] = useState<'rect' | 'stroke'>('rect'),
     [zoom, setZoom] = useState(1),
     [viewport, setViewport] = useState({ width: 800, height: 500 }),
     [revision, setRevision] = useState(0),
@@ -190,8 +158,7 @@ function StudioBody({
     [dirty, setDirty] = useState(false),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
-    [live, setLive] = useState<CaptureObject | null>(null),
-    [liveCrop, setLiveCrop] = useState<CaptureRect | null>(null);
+    [live, setLive] = useState<CaptureObject | null>(null);
   const model = useRef(drawing),
     text = useRef(editing),
     svg = useRef<SVGSVGElement>(null),
@@ -227,18 +194,18 @@ function StudioBody({
       Math.max(0.005, (viewport.height - 32) / cropHeight),
     ),
     scale = fit * zoom;
-  const labels: Record<Tool, string> = {
+  // Older drawings may still hold comment, redaction, mosaic or spotlight objects; they stay
+  // visible, movable and removable even though the toolbar no longer creates them.
+  const labels: Record<Tool | CaptureObject['kind'], string> = {
     select: t.captureSelect,
     highlight: t.captureHighlight,
     comment: t.captureComment,
     arrow: t.captureArrow,
     text: t.captureText,
     pen: t.capturePen,
-    eraser: t.captureEraser,
     redact: t.captureRedact,
     mosaic: t.captureMosaic,
     spotlight: t.captureSpotlight,
-    crop: t.captureCrop,
   };
   useEffect(
     () => () => {
@@ -371,34 +338,23 @@ function StudioBody({
       return true;
     }
     const prior = model.current.objects.find((o) => o.id === edit.id);
-    const object: CaptureObject =
-      edit.kind === 'comment'
+    const object: CaptureObject = {
+      id: edit.id,
+      kind: 'text',
+      point: edit.point,
+      text: edit.text.trim(),
+      color: edit.color,
+      fontSize: edit.fontSize,
+      style: edit.style,
+      ...(edit.style === 'bubble'
         ? {
-            id: edit.id,
-            kind: 'comment',
-            point: edit.point,
-            text: edit.text.trim(),
-            number: edit.number,
-            color: edit.color,
-            size: edit.size,
+            tail:
+              prior?.kind === 'text' && prior.tail
+                ? prior.tail
+                : { x: clamp(edit.point.x + 0.06), y: clamp(edit.point.y + 0.14) },
           }
-        : {
-            id: edit.id,
-            kind: 'text',
-            point: edit.point,
-            text: edit.text.trim(),
-            color: edit.color,
-            fontSize: edit.fontSize,
-            style: edit.style,
-            ...(edit.style === 'bubble'
-              ? {
-                  tail:
-                    prior?.kind === 'text' && prior.tail
-                      ? prior.tail
-                      : { x: clamp(edit.point.x + 0.06), y: clamp(edit.point.y + 0.14) },
-                }
-              : {}),
-          };
+        : {}),
+    };
     text.current = null;
     setEditing(null);
     const accepted = commit({
@@ -416,18 +372,16 @@ function StudioBody({
     return true;
   }
   function openText(object: CaptureObject) {
-    if (object.kind !== 'text' && object.kind !== 'comment') return;
+    if (object.kind !== 'text') return;
     setSelected(object.id);
     editText({
-      kind: object.kind,
+      kind: 'text',
       id: object.id,
       point: object.point,
       text: object.text,
       color: object.color,
-      fontSize: object.kind === 'text' ? object.fontSize : 17,
-      style: object.kind === 'text' ? object.style : 'plain',
-      number: object.kind === 'comment' ? object.number : 1,
-      size: object.kind === 'comment' ? object.size || 11 : 11,
+      fontSize: object.fontSize,
+      style: object.style,
     });
   }
   function point(event: ReactPointerEvent<SVGSVGElement>) {
@@ -457,31 +411,10 @@ function StudioBody({
       id: crypto.randomUUID(),
       points,
       color,
-      width: clamp(
-        width / scale,
-        1,
-        tool === 'highlight' ? 256 : tool === 'pen' || tool === 'arrow' ? 128 : 512,
-      ),
+      width: clamp(width / scale, 1, tool === 'highlight' ? 256 : 128),
     };
     if (tool === 'pen' || tool === 'highlight') return { ...base, kind: tool };
     if (tool === 'arrow') return { ...base, kind: 'arrow', points: [points[0], points.at(-1)!] };
-    if (tool === 'redact' || tool === 'mosaic' || tool === 'spotlight')
-      return {
-        id: base.id,
-        kind: tool,
-        points: shape === 'rect' ? [points[0], points.at(-1)!] : points,
-        width: clamp((width * 5) / scale, 1, 512),
-        shape,
-        ...(tool === 'mosaic'
-          ? { pixelSize: Math.round(clamp(12 / scale, 4, 256)) }
-          : tool === 'spotlight'
-            ? {
-                color,
-                captionFontSize: clamp(17 / scale, 8, 512),
-                borderWidth: clamp(2 / scale, 1, 64),
-              }
-            : {}),
-      } as CaptureObject;
     return null;
   }
   function down(event: ReactPointerEvent<SVGSVGElement>) {
@@ -490,40 +423,20 @@ function StudioBody({
     const p = point(event);
     event.currentTarget.focus();
     event.preventDefault();
-    if (tool === 'text' || tool === 'comment') {
-      const n =
-        Math.max(
-          0,
-          ...model.current.objects.filter((o) => o.kind === 'comment').map((o) => o.number),
-        ) + 1;
-      if (n > 100 && tool === 'comment') {
-        setError(t.captureLimit);
-        return;
-      }
+    if (tool === 'text') {
       editText({
-        kind: tool,
+        kind: 'text',
         id: crypto.randomUUID(),
         point: p,
         text: '',
         color,
         style: textStyle,
         fontSize: clamp(17 / scale, 8, 512),
-        number: n,
-        size: clamp(11 / scale, 8, 256),
       });
       return;
     }
     const selectedObject = model.current.objects.find((o) => o.id === selected),
       target = (event.target as SVGElement).dataset.handle;
-    if (tool === 'eraser') {
-      const object = hit(p);
-      if (object)
-        commit({
-          ...model.current,
-          objects: model.current.objects.filter((o) => o.id !== object.id),
-        });
-      return;
-    }
     const object = tool === 'select' ? (target ? selectedObject : hit(p)) : undefined;
     if (tool === 'select') {
       setSelected(object?.id || null);
@@ -561,8 +474,7 @@ function StudioBody({
         return;
       if (g.points.length >= 1900) g.points = g.points.filter((_, i) => i % 2 === 0);
       g.points.push(p);
-      if (tool === 'crop') setLiveCrop(captureRectangle(g.start, p));
-      else setLive(makeObject(g.points));
+      setLive(makeObject(g.points));
     }
   }
   function up(event: ReactPointerEvent<SVGSVGElement>) {
@@ -571,15 +483,8 @@ function StudioBody({
     const p = point(event);
     gesture.current = null;
     setLive(null);
-    setLiveCrop(null);
     if (event.currentTarget.hasPointerCapture(event.pointerId))
       event.currentTarget.releasePointerCapture(event.pointerId);
-    if (g.mode === 'draw' && tool === 'crop') {
-      const rect = captureRectangle(g.start, p);
-      if (rect.width * space.width * scale >= 3 && rect.height * space.height * scale >= 3)
-        commit({ ...model.current, crop: rect });
-      return;
-    }
     let object: CaptureObject | null = null;
     if (g.mode === 'move' && g.object)
       object = moveCaptureObject(g.object, { x: p.x - g.start.x, y: p.y - g.start.y }, space);
@@ -771,16 +676,6 @@ function StudioBody({
               <option value="bubble">{t.captureBubble}</option>
             </select>
           )}
-          {['redact', 'mosaic', 'spotlight'].includes(tool) && (
-            <select
-              aria-label={t.captureBrush}
-              value={shape}
-              onChange={(e) => setShape(e.target.value as typeof shape)}
-            >
-              <option value="rect">{t.captureRect}</option>
-              <option value="stroke">{t.captureBrush}</option>
-            </select>
-          )}
           {active?.kind === 'text' && (
             <label>
               {t.captureFontSize}
@@ -796,16 +691,7 @@ function StudioBody({
               />
             </label>
           )}
-          {active?.kind === 'spotlight' && (
-            <input
-              aria-label={t.captureCaption}
-              placeholder={t.captureCaption}
-              maxLength={500}
-              value={active.caption || ''}
-              onChange={(e) => patchSelected({ caption: e.target.value })}
-            />
-          )}
-          {active && (active.kind === 'text' || active.kind === 'comment') && (
+          {active?.kind === 'text' && (
             <Button onClick={() => openText(active)}>{t.captureObjectEdit}</Button>
           )}
           {drawing.crop && (
@@ -842,7 +728,6 @@ function StudioBody({
             onPointerCancel={() => {
               gesture.current = null;
               setLive(null);
-              setLiveCrop(null);
             }}
             onDoubleClick={(e) => {
               if (tool === 'select') {
@@ -931,19 +816,6 @@ function StudioBody({
                   fill={live.color}
                 />
               ))}
-            {liveCrop && (
-              <rect
-                x={liveCrop.x * space.width}
-                y={liveCrop.y * space.height}
-                width={liveCrop.width * space.width}
-                height={liveCrop.height * space.height}
-                fill="#007f7822"
-                stroke="#007f78"
-                strokeWidth={2 / scale}
-                strokeDasharray={`${5 / scale} ${3 / scale}`}
-                pointerEvents="none"
-              />
-            )}
             {bounds && (
               <>
                 <rect

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { widgetInstructions } from '../shared/artifact-widgets';
 import type { ConceptSource, Learning, Segment, reviewSummary } from '../shared/domain';
-import { conceptName } from '../shared/glossary';
+import { conceptKey } from '../shared/glossary';
 import {
   conceptCitationId,
   conceptMention,
@@ -534,7 +534,7 @@ export async function createTutorAgent(input: TutorAgentInput, previous?: TutorA
                   (term) =>
                     !concepts.some((c) =>
                       [c.entry.term, ...c.entry.aliases].some(
-                        (name) => conceptName(name) === conceptName(term.term),
+                        (name) => conceptKey(name) === conceptKey(term.term),
                       ),
                     ),
                 )

@@ -8,6 +8,8 @@ import {
   mergeGeneratedConcept,
   orphanConcepts,
   conceptsOnlyIn,
+  conceptAbbreviation,
+  conceptKey,
   type GlossaryEntry,
 } from '../shared/glossary';
 import {
@@ -384,4 +386,117 @@ test('merged names keep resolving after restoring earlier content and merging th
   );
   assert.equal(generated.id, final.id);
   await assert.rejects(saveConcept(store.storage(), input('First name')), /already uses/);
+});
+
+test('concept keys ignore case, punctuation, plurals and a trailing abbreviation only', () => {
+  assert.equal(conceptKey('Linear operations'), conceptKey('linear operation'));
+  assert.equal(
+    conceptKey('discrete Fourier transform (DFT)'),
+    conceptKey('Discrete Fourier Transform'),
+  );
+  assert.equal(conceptKey('Period / wavelength'), conceptKey('period wavelength'));
+  assert.equal(conceptKey('Frequencies'), conceptKey('frequency'));
+  assert.equal(conceptKey('Analysis'), 'analysis');
+  assert.deepEqual(conceptAbbreviation('linear time-invariant (LTI)'), {
+    term: 'linear time-invariant',
+    abbreviation: 'LTI',
+  });
+  assert.equal(conceptAbbreviation('Sampling theorem (WKS)'), null);
+  // A parenthetical that is not an abbreviation still tells two concepts apart.
+  assert.notEqual(conceptKey('Sampling interval (verification)'), conceptKey('sampling interval'));
+  assert.notEqual(conceptKey('power (energy) spectrum'), conceptKey('power spectrum'));
+});
+
+test('generated near-duplicate terms join one concept and keep the abbreviation as an alias', async () => {
+  const store = new MemoryStore(),
+    source = (n: number) => ({
+      sourceId: crypto.randomUUID(),
+      sourceVersion: 1,
+      segmentIds: [`segment-${n}`],
+    });
+  const first = await ingestGeneratedConcept(
+    store.storage(),
+    'Discrete Fourier Transform',
+    'Samples of a spectrum.',
+    source(1),
+  );
+  const second = await ingestGeneratedConcept(
+    store.storage(),
+    'discrete Fourier transform (DFT)',
+    'Samples of a spectrum.',
+    source(2),
+  );
+  assert.equal(second.id, first.id);
+  assert.equal(second.term, 'Discrete Fourier Transform');
+  assert.deepEqual(second.aliases, ['DFT']);
+  assert.equal(second.senses[0].sources.length, 2);
+  assert.equal(
+    (await ingestGeneratedConcept(store.storage(), 'DFT', 'Samples.', source(3))).id,
+    first.id,
+  );
+  const plural = await ingestGeneratedConcept(
+    store.storage(),
+    'Linear operations',
+    'Maps.',
+    source(4),
+  );
+  assert.equal(
+    (await ingestGeneratedConcept(store.storage(), 'linear operation', 'Maps.', source(5))).id,
+    plural.id,
+  );
+  assert.equal((await glossarySnapshot(store.storage())).length, 2);
+});
+
+test('existing near-duplicates merge once into the concept the student added', async () => {
+  const store = new MemoryStore(),
+    legacy = (term: string, origin: Concept['origin'], sources = 1): Concept => ({
+      id: crypto.randomUUID(),
+      term,
+      version: 1,
+      definition: `${term} definition`,
+      reviewed: false,
+      sources: Array.from({ length: sources }, (_, i) => ({
+        sourceId: crypto.randomUUID(),
+        sourceVersion: 1,
+        segmentIds: [`segment-${i}`],
+      })),
+      proposals: [],
+      origin,
+    });
+  const concepts = [
+    legacy('discrete Fourier transform (DFT)', 'analysis', 20),
+    legacy('Discrete Fourier Transform', 'manual'),
+    legacy('Linear operation', 'analysis'),
+    legacy('Linear operations', 'analysis', 2),
+    legacy('Sampling interval (verification)', 'manual'),
+    legacy('sampling interval', 'analysis'),
+  ];
+  for (const concept of concepts) await store.put(`concept:${concept.id}`, concept);
+  await ensureGlossary(store.storage());
+  await ensureGlossary(store.storage());
+  const entries = await glossarySnapshot(store.storage()),
+    live = entries.filter((entry) => !entry.mergedInto);
+  assert.deepEqual(live.map((entry) => entry.term).sort(), [
+    'Discrete Fourier Transform',
+    'Linear operations',
+    'Sampling interval (verification)',
+    'sampling interval',
+  ]);
+  const dft = live.find((entry) => entry.term === 'Discrete Fourier Transform')!;
+  assert.equal(dft.id, concepts[1].id);
+  assert.equal(dft.origin, 'manual');
+  assert.deepEqual(dft.aliases, ['DFT']);
+  assert.equal(dft.sources.length, 21);
+  const forwarder = entries.find((entry) => entry.id === concepts[0].id)!;
+  assert.equal(forwarder.mergedInto, dft.id);
+  assert.equal(
+    (
+      await ingestGeneratedConcept(store.storage(), 'Discrete Fourier transforms', 'x', {
+        sourceId: crypto.randomUUID(),
+        sourceVersion: 1,
+        segmentIds: ['segment-x'],
+      })
+    ).id,
+    dft.id,
+  );
 });

@@ -116,3 +116,11 @@ Verification: unit tests cover windows and overlap, context-only chapters, the o
 ### No focus view
 
 Removed the reader's focus (expand) toggle: it only hid the library panel, which its own toggle already does. The library toggle now always shows, and opening the study panel follows the usual pinning rules.
+
+### Simpler capture editor, review evidence after grading, one concept per name
+
+- **Capture editor.** The toolbar keeps select, highlight, text, pen and arrow. Comment, eraser, redaction, mosaic, spotlight and crop are no longer created; objects of those kinds in earlier drawings still show and can be moved or deleted, and an earlier crop can be reset.
+- **Review.** Questions no longer show their source evidence while you answer, since the quotes often contained the answer. Each question's evidence appears with its feedback in the graded report.
+- **Glossary names.** Concepts are matched by a key that ignores case, accents, punctuation, plural endings and a trailing abbreviation spelled by the preceding initials, so "Linear operations" joins "Linear operation" and "discrete Fourier transform (DFT)" joins "Discrete Fourier Transform", keeping "DFT" as an alias. Existing concepts sharing a key were merged once into the one added by hand or reviewed, else the one with the most evidence; the others became forwarders, as with a manual merge. Analysis now asks for one singular, canonical name per concept and receives the glossary's existing names so it reuses them.
+
+Verification: unit tests cover the key, abbreviations, ingestion of near-duplicate terms and the one-time merge; 275 tests, type checks and build pass. On the local library the glossary went from 89 to 87 concepts (the DFT and linear-operation pairs). Synonyms with different names, such as "Dirac delta" and "Delta function", remain separate and can be merged by hand.

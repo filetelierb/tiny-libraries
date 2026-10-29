@@ -3,6 +3,54 @@ import { fold, type Concept, type ConceptSource } from './domain';
 import { locationSchema } from './annotations';
 
 export const conceptName = (value: string) => fold(value).replace(/\s+/g, ' ');
+const minorWords = new Set([
+  'a',
+  'an',
+  'and',
+  'for',
+  'in',
+  'of',
+  'the',
+  'to',
+  'de',
+  'del',
+  'el',
+  'la',
+  'y',
+]);
+const words = (value: string) =>
+  fold(value)
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean);
+const initials = (list: string[]) => list.map((word) => word[0]).join('');
+/** A trailing abbreviation spelled by the initials before it, as in "discrete Fourier transform (DFT)". */
+export function conceptAbbreviation(value: string) {
+  const match = value.trim().match(/^(.+?)\s*\(([\p{L}\p{N}]{2,12})\)$/u);
+  if (!match) return null;
+  const list = words(match[1]),
+    short = fold(match[2]);
+  return initials(list) === short || initials(list.filter((w) => !minorWords.has(w))) === short
+    ? { term: match[1].trim(), abbreviation: match[2] }
+    : null;
+}
+const singular = (word: string) =>
+  word.length <= 3 || !word.endsWith('s') || /(ss|us|is|ys)$/.test(word)
+    ? word
+    : word.endsWith('ies')
+      ? `${word.slice(0, -3)}y`
+      : word.slice(0, -1);
+/**
+ * The identity two concept names share when they differ only in case, accents, punctuation,
+ * plural endings or a trailing abbreviation: "Linear operations" and "linear operation", or
+ * "Discrete Fourier Transform" and "discrete Fourier transform (DFT)".
+ */
+export function conceptKey(value: string) {
+  return (
+    words(conceptAbbreviation(value)?.term ?? value)
+      .map(singular)
+      .join(' ') || conceptName(value)
+  );
+}
 /** Added by hand in the glossary, saved by the tutor on request, or taken from a prepared file. */
 export const conceptOrigins = ['manual', 'chat', 'analysis'] as const;
 export type ConceptOrigin = (typeof conceptOrigins)[number];
@@ -68,11 +116,11 @@ export type GlossarySummary = {
   match?: 'title' | 'synonym';
 };
 export function uniqueNames(values: string[], term = '') {
-  const seen = new Set<string>([conceptName(term)]);
+  const seen = new Set<string>([conceptKey(term)]);
   return values
     .map((value) => value.trim())
     .filter((value) => {
-      const key = conceptName(value);
+      const key = conceptKey(value);
       if (!key || seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -179,6 +227,7 @@ export function mergeGeneratedConcept(
   definition: string,
   source: ConceptSource,
   origin: ConceptOrigin = 'analysis',
+  aliases: string[] = [],
 ): GlossaryEntry {
   if (!existing)
     return normalizeConcept({
@@ -190,12 +239,14 @@ export function mergeGeneratedConcept(
       sources: [source],
       proposals: [],
       origin,
+      aliases,
     });
   const entry = normalizeConcept(existing),
     target =
       entry.senses.find((sense) => sameDefinition(sense.definition, definition)) || entry.senses[0];
   return normalizeConcept({
     ...entry,
+    aliases: [...entry.aliases, ...aliases],
     senses: entry.senses.map((sense) =>
       sense.id === target.id
         ? { ...sense, sources: uniqueSources([...sense.sources, source]) }
@@ -255,6 +306,12 @@ export function conceptsOnlyIn(
       return files.length > 0 && files.every((id) => removed.has(id));
     });
 }
+/** Names plus the abbreviations they end with, so "discrete Fourier transform (DFT)" also gives "DFT". */
+const withAbbreviations = (names: string[]) =>
+  names.flatMap((name) => {
+    const short = conceptAbbreviation(name)?.abbreviation;
+    return short ? [name, short] : [name];
+  });
 export function mergeGlossaryEntries(target: GlossaryEntry, source: GlossaryEntry): GlossaryEntry {
   const senses = target.senses.map((sense) => ({
     ...sense,
@@ -282,7 +339,10 @@ export function mergeGlossaryEntries(target: GlossaryEntry, source: GlossaryEntr
   }
   return normalizeConcept({
     ...target,
-    aliases: uniqueNames([...target.aliases, source.term, ...source.aliases], target.term),
+    aliases: uniqueNames(
+      [...target.aliases, ...withAbbreviations([source.term, ...source.aliases])],
+      target.term,
+    ),
     senses: senses.map((sense) => ({
       ...sense,
       synonyms: sense.synonyms.filter((id) => id !== target.id && id !== source.id),

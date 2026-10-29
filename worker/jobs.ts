@@ -170,7 +170,11 @@ export class ProcessingJob extends DurableObject<Env> {
         const segments = (await this.ctx.storage.get<Segment[]>('segments'))!,
           normalized = (await this.ctx.storage.get<Normalized>('normalized'))!;
         const windows = synthesisWindows(segments),
-          done = job.completedParts || 0;
+          done = job.completedParts || 0,
+          { terms: known } = await internal<{ terms: string[] }>(
+            this.env,
+            '/internal/glossary-terms',
+          );
         let synthesis: Synthesis | undefined;
         if (windows.length === 1)
           synthesis = await synthesize(
@@ -181,6 +185,7 @@ export class ProcessingJob extends DurableObject<Env> {
             normalized.imageData,
             normalized.visuals,
             bridgedFetch(this.env),
+            known,
           );
         else if (JSON.stringify(segments).length > 1500000)
           throw new MetaError('Source text exceeds the analysis limit', false);
@@ -199,6 +204,7 @@ export class ProcessingJob extends DurableObject<Env> {
                 job.locale,
                 normalized.visuals,
                 bridgedFetch(this.env),
+                known,
               ),
             );
           job = {

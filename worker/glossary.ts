@@ -2,7 +2,9 @@ import { z } from 'zod';
 import type { Concept, ConceptSource, Directory, Learning, Source } from '../shared/domain';
 import { sourceState } from '../shared/directories';
 import {
-  conceptName,
+  conceptAbbreviation,
+  conceptKey,
+  conceptOrigin,
   glossaryInputSchema,
   normalizeConcept,
   summarizeConcept,
@@ -46,7 +48,7 @@ const entryKey = (id: string) => `concept-entry:${id}`;
 const historyKey = (id: string, version: number) =>
   `glossary-history:${id}:${String(version).padStart(10, '0')}`;
 const names = (entry: GlossaryEntry) => [
-  ...new Set([entry.term, ...entry.aliases].map(conceptName)),
+  ...new Set([entry.term, ...entry.aliases].map(conceptKey)),
 ];
 const json = (value: unknown, status = 200) =>
   Response.json(value, { status, headers: { 'Cache-Control': 'no-store' } });
@@ -101,6 +103,10 @@ export async function writeEntry(tx: Store, value: GlossaryEntry, previous?: Glo
   for (const name of names(value)) await tx.put(`concept-name:${name}`, value.id);
 }
 export async function ensureGlossary(storage: GlossaryStorage) {
+  await registerConcepts(storage);
+  await mergeNearDuplicates(storage);
+}
+async function registerConcepts(storage: GlossaryStorage) {
   if (await storage.get('glossary-registry:v1')) return;
   let after: string | undefined;
   for (;;) {
@@ -140,6 +146,119 @@ export async function ensureGlossary(storage: GlossaryStorage) {
     after = [...old.keys()].at(-1);
   }
   await storage.put('glossary-registry:v1', true);
+}
+const originRank = { manual: 0, chat: 1, analysis: 2 };
+/** Folds a concept into another: one revision for the target and a forwarder for the source. */
+async function mergeEntries(
+  tx: Store,
+  source: GlossaryEntry,
+  target: GlossaryEntry,
+  mutationId: string,
+  archived = false,
+  fit = false,
+) {
+  let merged = mergeGlossaryEntries(target, source);
+  // Automatic merges keep the target's evidence first; the rest stays in the forwarder's history.
+  if (fit)
+    merged = normalizeConcept({
+      ...merged,
+      senses: merged.senses
+        .slice(0, 20)
+        .map((sense) => ({ ...sense, sources: sense.sources.slice(0, 30) })),
+    });
+  glossaryInputSchema.parse({ ...merged, mutationId });
+  const next = {
+    ...merged,
+    archived,
+    version: target.version + 1,
+    updatedAt: new Date().toISOString(),
+  };
+  // Transfer names in the same transaction as both revisions.
+  for (const name of names(source)) {
+    if (!(await tx.get(`concept-merge-name:${name}`)))
+      await tx.put(`concept-merge-name:${name}`, source.id);
+    if ((await tx.get(`concept-name:${name}`)) === source.id)
+      await tx.delete(`concept-name:${name}`);
+  }
+  await writeEntry(tx, next, target);
+  const forwarder = {
+    ...source,
+    version: source.version + 1,
+    archived: true,
+    mergedInto: target.id,
+    updatedAt: next.updatedAt,
+  };
+  await tx.put(entryKey(source.id), forwarder);
+  await tx.put(`concept-summary:${source.id}`, summarizeConcept(forwarder));
+  await tx.put(historyKey(source.id, forwarder.version), forwarder);
+  await tx.put(
+    `glossary-revision:${source.id}:${String(forwarder.version).padStart(10, '0')}`,
+    revisionSummary(forwarder),
+  );
+  return next;
+}
+/**
+ * Names are indexed by concept key, so concepts that differ only in case, punctuation, plural or
+ * a trailing abbreviation are one concept. Existing near-duplicates are merged once, keeping the
+ * concept the student added or reviewed, else the one with the most evidence.
+ */
+async function mergeNearDuplicates(storage: GlossaryStorage) {
+  if (await storage.get('glossary-names:v2')) return;
+  await storage.transaction(async (tx) => {
+    for (const prefix of ['concept-name:', 'concept-merge-name:'])
+      for (const [key, id] of await tx.list<string>({ prefix })) {
+        await tx.delete(key);
+        if (prefix === 'concept-merge-name:')
+          await tx.put(`${prefix}${conceptKey(key.slice(prefix.length))}`, id);
+      }
+    const live = [...(await tx.list<GlossaryEntry>({ prefix: 'concept-entry:' })).values()]
+      .filter((entry) => !entry.mergedInto)
+      .map(normalizeConcept)
+      .sort(
+        (a, b) =>
+          originRank[conceptOrigin(a)] - originRank[conceptOrigin(b)] ||
+          Number(b.reviewed) - Number(a.reviewed) ||
+          b.sources.length - a.sources.length ||
+          a.term.localeCompare(b.term),
+      );
+    const parent = live.map((_, i) => i),
+      root = (i: number): number => (parent[i] === i ? i : (parent[i] = root(parent[i]))),
+      byName = new Map<string, number>();
+    live.forEach((entry, i) => {
+      for (const name of names(entry)) {
+        const other = byName.get(name);
+        if (other === undefined) byName.set(name, i);
+        else parent[Math.max(root(i), root(other))] = Math.min(root(i), root(other));
+      }
+    });
+    const claim = async (entry: GlossaryEntry) => {
+      for (const name of names(entry))
+        if (!(await tx.get(`concept-name:${name}`))) await tx.put(`concept-name:${name}`, entry.id);
+    };
+    for (let i = 0; i < live.length; i++) {
+      if (root(i) !== i) continue;
+      let target = live[i];
+      await claim(target);
+      for (let j = i + 1; j < live.length; j++) {
+        if (root(j) !== i) continue;
+        const source = live[j];
+        try {
+          target = await mergeEntries(
+            tx,
+            source,
+            target,
+            crypto.randomUUID(),
+            target.archived && source.archived,
+            true,
+          );
+        } catch (error) {
+          if (!(error instanceof GlossaryError) && !(error instanceof z.ZodError)) throw error;
+          await claim(source);
+        }
+      }
+    }
+  });
+  await storage.put('glossary-names:v2', true);
 }
 export async function glossarySnapshot(storage: GlossaryStorage) {
   await ensureGlossary(storage);
@@ -255,9 +374,17 @@ export async function ingestGeneratedConcept(
 ) {
   await ensureGlossary(storage);
   return storage.transaction(async (tx) => {
-    const id = await tx.get<string>(`concept-name:${conceptName(term)}`);
+    const id = await tx.get<string>(`concept-name:${conceptKey(term)}`);
     const previous = id ? await resolveEntry(tx, id) : undefined;
-    const next = mergeGeneratedConcept(previous, term, definition, source, origin);
+    // "Fourier transform (FT)" keeps its abbreviation as an alias unless another concept owns it.
+    const short = conceptAbbreviation(term)?.abbreviation,
+      shortOwner = short ? await tx.get<string>(`concept-name:${conceptKey(short)}`) : undefined,
+      aliases =
+        short &&
+        (!shortOwner || (previous && (await resolveEntry(tx, shortOwner))?.id === previous.id))
+          ? [short]
+          : [];
+    const next = mergeGeneratedConcept(previous, term, definition, source, origin, aliases);
     if (JSON.stringify(previous) === JSON.stringify(next)) return previous!;
     const value = {
       ...next,
@@ -276,7 +403,7 @@ export async function saveChatConcept(
 ) {
   await ensureGlossary(storage);
   return storage.transaction(async (tx) => {
-    const id = await tx.get<string>(`concept-name:${conceptName(input.term)}`);
+    const id = await tx.get<string>(`concept-name:${conceptKey(input.term)}`);
     const previous = id ? await resolveEntry(tx, id) : undefined;
     let next: GlossaryEntry = previous
       ? normalizeConcept(previous)
@@ -500,36 +627,7 @@ export async function glossaryRoute(
       if (!source || !target) throw new GlossaryError('Concept not found', 404);
       requireVersion(source, input.sourceVersion);
       requireVersion(target, input.targetVersion);
-      const merged = mergeGlossaryEntries(target, source);
-      glossaryInputSchema.parse({ ...merged, mutationId: input.mutationId });
-      const next = {
-        ...merged,
-        archived: false,
-        version: target.version + 1,
-        updatedAt: new Date().toISOString(),
-      };
-      // Transfer names in the same transaction as both revisions.
-      for (const name of names(source)) {
-        if (!(await tx.get(`concept-merge-name:${name}`)))
-          await tx.put(`concept-merge-name:${name}`, source.id);
-        if ((await tx.get(`concept-name:${name}`)) === source.id)
-          await tx.delete(`concept-name:${name}`);
-      }
-      await writeEntry(tx, next, target);
-      const forwarder = {
-        ...source,
-        version: source.version + 1,
-        archived: true,
-        mergedInto: target.id,
-        updatedAt: next.updatedAt,
-      };
-      await tx.put(entryKey(source.id), forwarder);
-      await tx.put(`concept-summary:${source.id}`, summarizeConcept(forwarder));
-      await tx.put(historyKey(source.id, forwarder.version), forwarder);
-      await tx.put(
-        `glossary-revision:${source.id}:${String(forwarder.version).padStart(10, '0')}`,
-        revisionSummary(forwarder),
-      );
+      const next = await mergeEntries(tx, source, target, input.mutationId);
       await recordReceipt(tx, input.mutationId, hash, next);
       return next;
     });

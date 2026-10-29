@@ -178,8 +178,11 @@ async function structured<T extends z.ZodType>(
   if (!content) throw new MetaError('Model did not return structured content', false);
   return schema.parse(JSON.parse(content));
 }
-const guidePrompt = (locale: Locale, chapters: string) =>
-  `Create a concise study guide in ${locale === 'es' ? 'Spanish' : 'English'}. Produce ${chapters} useful chapters and 1–3 questions per chapter, mixing single-choice, true/false and short-answer questions. Single-choice: kind=single, 2–5 choices, one correctIndex, expectedAnswer=null and rubric=null. Short-answer: kind=short, choices=[], correctIndex=null, explicit expectedAnswer and rubric. True/false: kind=boolean, choices=["True","False"], correctIndex 0 when the statement is true and 1 when false, expectedAnswer=null and rubric=null. Include a glossary and an interactive artifact: use a signal specification only when sampling or waves are relevant; otherwise use a meaningful comparison with short rows. Every chapter, question, definition and artifact MUST cite existing segmentIds. Questions need unique IDs, a meaningful concept and supported explanation. Do not cite an image description as literal text. ${widgetInstructions}`;
+// Glossary terms are concepts the student keeps across files, so names stay canonical and reuse existing ones.
+const glossaryInstructions = (known: string[]) =>
+  `Glossary terms name one concept each, in its usual singular form without a trailing abbreviation: "Fourier transform", not "Fourier transforms", "Fourier transform (FT)" or "Fourier transform and its inverse". Never list two terms for the same idea, such as a full name and its abbreviation or two synonyms; choose one. ${known.length ? `The student's glossary already contains these concepts; when a term means the same thing as one of them, use that exact name: ${JSON.stringify(known)}. ` : ''}`;
+const guidePrompt = (locale: Locale, chapters: string, known: string[] = []) =>
+  `Create a concise study guide in ${locale === 'es' ? 'Spanish' : 'English'}. Produce ${chapters} useful chapters and 1–3 questions per chapter, mixing single-choice, true/false and short-answer questions. Single-choice: kind=single, 2–5 choices, one correctIndex, expectedAnswer=null and rubric=null. Short-answer: kind=short, choices=[], correctIndex=null, explicit expectedAnswer and rubric. True/false: kind=boolean, choices=["True","False"], correctIndex 0 when the statement is true and 1 when false, expectedAnswer=null and rubric=null. Include a glossary and an interactive artifact: use a signal specification only when sampling or waves are relevant; otherwise use a meaningful comparison with short rows. Every chapter, question, definition and artifact MUST cite existing segmentIds. Questions need unique IDs, a meaningful concept and supported explanation. Do not cite an image description as literal text. ${glossaryInstructions(known)}${widgetInstructions}`;
 async function studyGuide(
   key: string,
   model: string,
@@ -221,6 +224,7 @@ export async function synthesize(
   imageData?: string,
   visuals?: Array<{ segmentId: string; data: string }>,
   transport: MetaFetch = fetch,
+  known: string[] = [],
 ): Promise<Synthesis> {
   const text = JSON.stringify(segments);
   if (text.length > 1500000) throw new MetaError('Source text exceeds the analysis limit', false);
@@ -231,7 +235,7 @@ export async function synthesize(
   return studyGuide(
     key,
     model,
-    `${guidePrompt(locale, '2–8')} Segments: ${text}`,
+    `${guidePrompt(locale, '2–8', known)} Segments: ${text}`,
     segments,
     images,
     transport,
@@ -248,12 +252,13 @@ export async function synthesizePart(
   locale: Locale,
   visuals: Array<{ segmentId: string; data: string }> = [],
   transport: MetaFetch = fetch,
+  known: string[] = [],
 ): Promise<Synthesis> {
   const context = segments.slice(window.start, window.owned),
     owned = segments.slice(window.owned, window.end),
     available = segments.slice(window.start, window.end),
     ids = new Set(available.map((s) => s.id));
-  const prompt = `${guidePrompt(locale, '2–6')} This is part ${part + 1} of ${parts} of a longer source; cover only this part, and later steps combine the parts. ${context.length ? `Context segments repeat the end of the previous part so you can follow ideas across the boundary; cite them only together with segments of this part. Context: ${JSON.stringify(context)} ` : ''}Segments: ${JSON.stringify(owned)}`;
+  const prompt = `${guidePrompt(locale, '2–6', known)} This is part ${part + 1} of ${parts} of a longer source; cover only this part, and later steps combine the parts. ${context.length ? `Context segments repeat the end of the previous part so you can follow ideas across the boundary; cite them only together with segments of this part. Context: ${JSON.stringify(context)} ` : ''}Segments: ${JSON.stringify(owned)}`;
   const result = await studyGuide(
     key,
     model,
