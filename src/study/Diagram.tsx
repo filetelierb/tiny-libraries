@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Maximize2, Pause, Play } from 'lucide-react';
 import type { T } from '../i18n';
 import { Button, Modal } from '../design/components';
-import { renderDiagram, type DiagramFlow, type DiagramImage } from './diagrams';
+import { renderDiagram, verticalFlowchart, type DiagramFlow, type DiagramImage } from './diagrams';
 
 type FlowStep = { kind: 'node'; id: string } | { kind: 'link'; id: string };
 const FLOW_STEP_MS = 1800;
+// Below this scale a left-to-right flowchart's labels are too small, so it is drawn top to bottom.
+const READABLE_SCALE = 0.75;
 
 /** Walks a flowchart from its first link: each node, then the link leaving it, and so on. */
 export function flowSteps(flow: DiagramFlow): FlowStep[] {
@@ -162,12 +164,42 @@ function FlowExplorer({ image, flow, t }: { image: DiagramImage; flow: DiagramFl
 
 export function Diagram({ source, t }: { source: string; t: T }) {
   const [image, setImage] = useState<DiagramImage | null>(null),
+    [stacked, setStacked] = useState<DiagramImage | null>(null),
     [failed, setFailed] = useState(false),
     [expanded, setExpanded] = useState(false),
-    [zoom, setZoom] = useState(100);
+    [zoom, setZoom] = useState(100),
+    [width, setWidth] = useState(0),
+    figure = useRef<HTMLElement>(null);
+  const vertical = useMemo(() => verticalFlowchart(source), [source]);
+  // The panel's width decides the orientation; the expanded view keeps the source's own.
+  const narrow = !!(vertical && image && width && image.width * READABLE_SCALE > width - 16);
+  useEffect(() => {
+    const element = figure.current;
+    if (!element) return;
+    const observer = new ResizeObserver(() => setWidth(element.clientWidth));
+    setWidth(element.clientWidth);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  useEffect(() => {
+    if (!narrow || !vertical || stacked) return;
+    let disposed = false;
+    // A failed redraw keeps the original drawing.
+    void renderDiagram(vertical).then(
+      (value) => {
+        if (!disposed) setStacked(value);
+      },
+      () => {},
+    );
+    return () => {
+      disposed = true;
+    };
+  }, [narrow, vertical, stacked]);
+  const shown = narrow && stacked ? stacked : image;
   useEffect(() => {
     let disposed = false;
     setImage(null);
+    setStacked(null);
     setFailed(false);
     void renderDiagram(source).then(
       (value) => {
@@ -182,7 +214,7 @@ export function Diagram({ source, t }: { source: string; t: T }) {
     };
   }, [source]);
   return (
-    <figure className="study-diagram">
+    <figure className="study-diagram" ref={figure}>
       <div className="diagram-head">
         <span>{t.diagram}</span>
         {image && (
@@ -199,15 +231,15 @@ export function Diagram({ source, t }: { source: string; t: T }) {
           </button>
         )}
       </div>
-      {image?.flow ? (
-        <FlowExplorer image={image} flow={image.flow} t={t} />
-      ) : image ? (
+      {shown?.flow ? (
+        <FlowExplorer key={shown.url} image={shown} flow={shown.flow} t={t} />
+      ) : shown ? (
         <div className="diagram-scroll" tabIndex={0} role="region" aria-label={t.diagram}>
           <img
-            src={image.url}
+            src={shown.url}
             alt={t.diagramDescription}
-            width={image.width}
-            height={image.height}
+            width={shown.width}
+            height={shown.height}
           />
         </div>
       ) : (

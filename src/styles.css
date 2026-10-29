@@ -5475,14 +5475,22 @@ body:has(.panel-resizer.resizing) {
 }
 .flow-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 2px;
   padding: 4px 6px;
   border-bottom: 1px solid var(--border);
   font-size: var(--font-size-small);
 }
+.flow-toolbar > button {
+  flex: none;
+}
+/* Chat text breaks anywhere; the hint wraps by word and moves under the buttons when narrow. */
 .flow-toolbar > span {
-  margin-left: auto;
+  flex: 1 1 9rem;
+  min-width: 0;
+  text-align: right;
+  overflow-wrap: normal;
   color: var(--muted-text);
 }
 .flow-canvas {

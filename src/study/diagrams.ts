@@ -115,6 +115,14 @@ async function flowOf(
 let engine: Promise<(typeof import('mermaid'))['default']> | undefined;
 let queue: Promise<unknown> = Promise.resolve();
 let sequence = 0;
+const horizontal = /^(\s*(?:%%[^\n]*\n\s*)*)(flowchart|graph)\s+(LR|RL)\b/;
+/** The same flowchart drawn top to bottom, for a panel too narrow to read it left to right. */
+export function verticalFlowchart(source: string) {
+  const match = source.match(horizontal);
+  return match
+    ? source.replace(horizontal, `${match[1]}${match[2]} ${match[3] === 'LR' ? 'TD' : 'BT'}`)
+    : null;
+}
 const cache = new Map<string, Promise<DiagramImage>>();
 
 export function renderDiagram(source: string): Promise<DiagramImage> {

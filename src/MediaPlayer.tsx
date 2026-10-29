@@ -14,6 +14,7 @@ import {
   Bookmark,
 } from 'lucide-react';
 import type { Source, PublicLearning, Bookmark as SavedBookmark } from '../shared/domain';
+import { captionCues } from '../shared/caption-cues';
 import {
   boundedTime,
   chapterRanges,
@@ -169,6 +170,15 @@ export function MediaPlayer({
   useEffect(() => {
     if (seek) changeTime(seek.value);
   }, [seek?.nonce]);
+  // Captions prepared before cues were split hold whole transcribed turns; split them on load.
+  const splitLongCues = (track: TextTrack) => {
+    for (const cue of Array.from(track.cues || []) as VTTCue[]) {
+      const parts = captionCues(cue.text, cue.startTime, cue.endTime);
+      if (parts.length < 2) continue;
+      track.removeCue(cue);
+      for (const part of parts) track.addCue(new VTTCue(part.start, part.end, part.text));
+    }
+  };
   const configureTracks = () => {
     const tracks = media.current?.textTracks;
     if (!tracks) return;
@@ -181,6 +191,7 @@ export function MediaPlayer({
             ? 'hidden'
             : 'showing'
           : 'disabled';
+      if (track.mode !== 'disabled') splitLongCues(track);
       track.oncuechange = () => {
         if (source.kind !== 'audio' || track.id !== preferences.track) return;
         setCaption(
@@ -193,7 +204,15 @@ export function MediaPlayer({
       };
     }
   };
-  useEffect(configureTracks, [preferences.track, source.id]);
+  useEffect(() => {
+    configureTracks();
+    // React does not report a track's load, and cues only exist once it has loaded.
+    const elements = Array.from(media.current?.querySelectorAll('track') || []);
+    for (const element of elements) element.addEventListener('load', configureTracks);
+    return () => {
+      for (const element of elements) element.removeEventListener('load', configureTracks);
+    };
+  }, [preferences.track, source.id]);
   const toggle = async () => {
     if (!media.current) return;
     try {
@@ -482,7 +501,6 @@ export function MediaPlayer({
             kind="subtitles"
             label={track === 'original' ? t.original : t.translated}
             src={`/api/captions/${source.id}/${track}.vtt`}
-            onLoad={configureTracks}
           />
         ))}
       </Tag>

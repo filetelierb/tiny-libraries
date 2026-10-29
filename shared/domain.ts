@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { captionCues } from './caption-cues';
 import { sanitizeWidgets } from './artifact-widgets';
 
 export const localeSchema = z.enum(['en', 'es']);
@@ -440,11 +441,19 @@ export function captionTime(seconds: number, srt = false) {
   return `${String(Math.floor(ms / 3600000)).padStart(2, '0')}:${String(Math.floor(ms / 60000) % 60).padStart(2, '0')}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}${srt ? ',' : '.'}${String(ms % 1000).padStart(3, '0')}`;
 }
 export function captions(segments: Segment[], srt = false) {
-  return `${srt ? '' : 'WEBVTT\n\n'}${segments
+  // A transcribed turn can run for a minute; each becomes short cues that follow the speech.
+  const cues = segments
     .filter((s) => s.start != null && s.end != null)
+    .flatMap((s) =>
+      captionCues(s.text.replace(/-->/g, '→'), s.start!, s.end!).map((cue, i, all) => ({
+        ...cue,
+        id: all.length > 1 ? `${s.id}-${i + 1}` : s.id,
+      })),
+    );
+  return `${srt ? '' : 'WEBVTT\n\n'}${cues
     .map(
-      (s, i) =>
-        `${srt ? i + 1 : s.id}\n${captionTime(s.start!, srt)} --> ${captionTime(s.end!, srt)}\n${s.text.replace(/-->/g, '→').replace(/\n\s*\n/g, '\n')}\n`,
+      (cue, i) =>
+        `${srt ? i + 1 : cue.id}\n${captionTime(cue.start, srt)} --> ${captionTime(cue.end, srt)}\n${cue.text}\n`,
     )
     .join('\n')}`;
 }
