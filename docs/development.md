@@ -213,6 +213,6 @@ The app had become slow and unreliable to start. celld kept every superseded sto
 
 - The app answers within a second of starting; its state lives in `.wrangler/state/` as plain SQLite files and stored objects.
 - The launcher keeps the media companion running and starts the runtime again if it stops unexpectedly, at most five times in ten minutes.
-- No separate runtime installation is needed. Libraries kept under celld stay in `.celld/dev/` and are not read; the owner chose to start with an empty library.
+- No separate runtime installation is needed. The owner chose to start with an empty library, and the old celld data was deleted.
 
 Verification: type checks and 306 tests pass. On `wrangler dev`: uploads of a note and a video, folders, the catalog, video range requests (206 with the requested bytes), a session and a note, and a permanent delete that also removed the stored content all worked; data persisted across a restart; killing the runtime brought it back in a second with the companion still answering. Preparing files and the tutor need the Meta key to be entered again in Settings.

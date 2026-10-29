@@ -43,8 +43,6 @@ Do **not** delete `.wrangler/state` or run a cleanup command if you want to keep
 2. Copy `.wrangler/state/`, `.local/`, and `.dev.vars` to a protected backup. These contain private files and credentials. Keep the Worker name and Durable Object class names stable; they participate in stored-object identity. Browser-only preferences are separate; sessions, notes, positions, saved conversations, interactive parameters and source files are in the Worker's local state.
 3. Restore those directories into the same relative locations in the project before restarting. Keep the `wrangler` version compatible with the stored format.
 
-Libraries kept before the move to `wrangler` remain in `.celld/dev/`; the app no longer reads them, and that folder can be deleted when it is no longer wanted.
-
 The repository alone is not a backup of your library. No user documents, transcripts or keys are pushed to GitHub.
 
 ## Directories and split workspaces
