@@ -1225,7 +1225,7 @@ export default {
         throw new ApiError('Cross-site access rejected', 403);
       if (request.method === 'OPTIONS') return new Response(null, { status: 403 });
       if (url.pathname === '/api/health')
-        return json({ ok: true, runtime: 'celld', version: '0.1.0' });
+        return json({ ok: true, runtime: 'workerd', version: '0.1.0' });
       const toolsMatch = url.pathname.match(
         /^\/api\/tutor-tools\/([a-f0-9-]{36})\/([a-f0-9]{64})$/,
       );

@@ -249,8 +249,8 @@ export class ProcessingJob extends DurableObject<Env> {
       if (!key) throw new MetaError('Add a Meta API key in Settings, then retry.', false);
       const settings = await internal<{ model: string }>(this.env, '/api/settings');
       if (job.stage === 'normalize') {
-        // Let Node stream the immutable original from the loopback API. celld v0.6.3
-        // cannot transfer an R2-owned body stream into outbound fetch here.
+        // Let Node stream the immutable original from the loopback API, so the Worker never
+        // pipes a stored body into an outbound request.
         const response = await this.bridge(`/normalize/${job.id}?kind=${file.kind}`, {
           method: 'POST',
           body: JSON.stringify({ sourceId: file.id, sourceVersion: file.version, mime: file.mime }),

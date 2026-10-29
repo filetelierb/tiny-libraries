@@ -926,7 +926,7 @@ const en = {
   webAutoHint:
     'When your files and glossary do not cover a question, the tutor may send search queries based on it to Meta and lists external sources separately.',
   keyStorage:
-    'The key is stored in local celld data and never returned to the browser. Local data is not encrypted at rest; protect your device and backups.',
+    'The key is stored in the local app data and never returned to the browser. Local data is not encrypted at rest; protect your device and backups.',
   replaceKey: 'Replace key',
   configured: 'Connected',
   notConfigured: 'Not connected',
@@ -2120,7 +2120,7 @@ const es: Dictionary = {
   webAutoHint:
     'Cuando tus archivos y el glosario no cubren una pregunta, el tutor puede enviar a Meta búsquedas basadas en ella y muestra las fuentes externas aparte.',
   keyStorage:
-    'La clave se guarda en los datos locales de celld y nunca se devuelve al navegador. Los datos locales no están cifrados; protege tu dispositivo y copias.',
+    'La clave se guarda en los datos locales de la app y nunca se devuelve al navegador. Los datos locales no están cifrados; protege tu dispositivo y copias.',
   replaceKey: 'Cambiar clave',
   configured: 'Conectado',
   notConfigured: 'Sin conectar',

@@ -10,7 +10,7 @@ Tutor web search is on by default and can be turned off in Settings. When your f
 
 ## Run locally
 
-Install Node.js 22.13+, [celld](https://github.com/denoland/celld), and ffmpeg for audio/video. Then:
+Install Node.js 22.13+ and ffmpeg for audio/video. The local Workers runtime (`wrangler`) comes with `npm ci`. Then:
 
 ```sh
 npm ci
@@ -25,7 +25,7 @@ curl -fsSL https://dev.meta.ai/install.sh | sh
 
 Without it, the tutor calls the Meta Model API directly with the same tools; only questions with **Web** on can then search the web.
 
-Open **http://127.0.0.1:9876**. The launcher starts the local runtime and media companion together. Stopping and starting preserves files and study data in `.celld/dev/` and `.local/`. See [local operation and backups](docs/local-operation.md) before moving or resetting data.
+Open **http://127.0.0.1:9876**. The launcher starts the local runtime and media companion together. It answers within seconds. Stopping and starting preserves files and study data in `.wrangler/state/` and `.local/`. See [local operation and backups](docs/local-operation.md) before moving or resetting data.
 
 Development remains private until the owner chooses to share the repository. Its MIT license describes the intended source distribution; it does not make private GitHub content publicly accessible.
 

@@ -34,7 +34,7 @@ Import a recording and a companion document, study them side by side, navigate e
 
 ## Architecture
 
-React/TypeScript frontend → same-origin celld Worker → local library Durable Object plus per-job Durable Objects and R2 originals/outputs. A loopback-only Node companion performs ffmpeg/PDF work and hosts optional Muse Code SDK sessions. The SDK needs a matching `muse` CLI and is not a speech-to-text SDK or a Workers-native library.
+React/TypeScript frontend → same-origin Cloudflare Worker (run locally by `wrangler`/`workerd`) → local library Durable Object plus per-job Durable Objects and R2 originals/outputs. A loopback-only Node companion performs ffmpeg/PDF work and hosts optional Muse Code SDK sessions. The SDK needs a matching `muse` CLI and is not a speech-to-text SDK or a Workers-native library.
 
 Direct Meta Model API calls handle speech, structured extraction and bounded function tools. Muse Code SDK handles optional code-authoring sessions in a separate workspace with default-denied approvals. Do not run it inside the main library object or give generated programs access to credentials.
 

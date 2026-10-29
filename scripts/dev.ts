@@ -1,7 +1,7 @@
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
+import { connect } from 'node:net';
 import { mkdir, readFile, writeFile, access, chmod } from 'node:fs/promises';
 import { join, delimiter } from 'node:path';
-import { homedir } from 'node:os';
 import { randomBytes } from 'node:crypto';
 import { startBridge } from '../server/bridge';
 
@@ -9,8 +9,8 @@ process.umask(0o077);
 const root = process.cwd(),
   local = join(root, '.local');
 await mkdir(local, { recursive: true, mode: 0o700 });
-await mkdir(join(root, '.celld'), { recursive: true, mode: 0o700 });
-await chmod(join(root, '.celld'), 0o700);
+await mkdir(join(root, '.wrangler'), { recursive: true, mode: 0o700 });
+await chmod(join(root, '.wrangler'), 0o700);
 const tokenFile = join(local, 'bridge-token');
 let token: string;
 try {
@@ -31,52 +31,46 @@ if (!vars.includes(line)) {
   await writeFile(varsFile, `${vars.trim()}\n${line}\n`.trimStart(), { mode: 0o600 });
 }
 await chmod(varsFile, 0o600);
-let binary = process.env.CELLD_BIN || join(homedir(), '.local/bin/celld');
+// The Workers runtime that ships with the project; its local state lives in .wrangler/state.
+const binary = join(root, 'node_modules/.bin/wrangler');
 try {
   await access(binary);
 } catch {
-  binary = 'celld';
+  console.error('Run npm install first: the local Workers runtime is missing.');
+  process.exit(1);
 }
 const bridge = await startBridge(token, join(local, 'processing'));
-const runtime = spawn(
-  binary,
-  [
-    'dev',
-    '--port',
-    '9876',
-    '--watch-ignore',
-    '.local/**',
-    '--watch-ignore',
-    '.local',
-    '--watch-ignore',
-    '.research/**',
-  ],
-  {
-    cwd: root,
-    env: {
-      ...process.env,
-      PATH: [join(root, 'node_modules/.bin'), process.env.PATH].join(delimiter),
-    },
-    stdio: 'inherit',
-    // The dev supervisor handles SIGINT and drains its own child node.
-    detached: process.platform !== 'win32',
-  },
-);
-let stopping = false;
-const stop = () => {
-  if (stopping) return;
-  stopping = true;
-  console.log('Stopping the local runtime; waiting for accepted work and durable storage.');
-  runtime.kill('SIGINT');
-};
-process.on('SIGINT', stop);
-process.on('SIGTERM', stop);
-runtime.on('error', () => {
-  console.error('celld is unavailable. Install it from https://celld.dev and retry.');
-  bridge.close();
-  process.exitCode = 1;
-});
-runtime.on('exit', (code) => {
+const port = 9876;
+const args = [
+  'dev',
+  '--local',
+  '--ip',
+  '127.0.0.1',
+  '--port',
+  String(port),
+  '--show-interactive-dev-session=false',
+];
+// If the runtime stops unexpectedly, the bridge keeps running and the runtime is started again,
+// a bounded number of times.
+const RESTART_WINDOW = 10 * 60 * 1000,
+  RESTART_LIMIT = 5;
+const restarts: number[] = [];
+let runtime: ChildProcess,
+  stopping = false;
+const portFree = () =>
+  new Promise<boolean>((resolve) => {
+    const socket = connect(port, '127.0.0.1');
+    socket.once('connect', () => {
+      socket.destroy();
+      resolve(false);
+    });
+    socket.once('error', () => resolve(true));
+  });
+async function portReleased() {
+  for (let attempt = 0; attempt < 60 && !(await portFree()); attempt++)
+    await new Promise((resolve) => setTimeout(resolve, 500));
+}
+function finish(code: number) {
   void bridge
     .shutdownTutor()
     .catch(() => {
@@ -85,7 +79,52 @@ runtime.on('exit', (code) => {
     })
     .finally(() => {
       bridge.close();
-      process.exitCode ??= stopping ? 0 : (code ?? 1);
+      process.exitCode ??= code;
     });
-});
+}
+function start() {
+  runtime = spawn(binary, args, {
+    cwd: root,
+    env: {
+      ...process.env,
+      PATH: [join(root, 'node_modules/.bin'), process.env.PATH].join(delimiter),
+    },
+    stdio: 'inherit',
+    // The runtime handles SIGINT and finishes its own shutdown.
+    detached: process.platform !== 'win32',
+  });
+  let missing = false;
+  runtime.on('error', () => {
+    missing = true;
+    console.error('The local Workers runtime could not start. Run npm install and retry.');
+    finish(1);
+  });
+  runtime.on('exit', (code) => {
+    if (missing) return;
+    if (stopping) return finish(0);
+    const now = Date.now();
+    restarts.splice(0, restarts.length, ...restarts.filter((time) => now - time < RESTART_WINDOW));
+    if (restarts.length >= RESTART_LIMIT) {
+      console.error(
+        `The local runtime stopped ${RESTART_LIMIT} times in ten minutes; leaving it stopped.`,
+      );
+      return finish(code || 1);
+    }
+    restarts.push(now);
+    console.error(`The local runtime stopped (exit ${code ?? 'signal'}); starting it again.`);
+    void portReleased().then(() => {
+      if (!stopping) start();
+    });
+  });
+}
+const stop = () => {
+  if (stopping) return;
+  stopping = true;
+  console.log('Stopping the local runtime; waiting for accepted work and durable storage.');
+  if (runtime.exitCode === null && runtime.signalCode === null) runtime.kill('SIGINT');
+  else finish(0);
+};
+process.on('SIGINT', stop);
+process.on('SIGTERM', stop);
+start();
 console.log('Tailored Library: http://127.0.0.1:9876 — local files, optional Meta inference.');

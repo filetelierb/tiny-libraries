@@ -206,3 +206,13 @@ The tutor's plain comparisons worked well, so the method is now shared by the ch
 - **Glossary.** Definitions stay one to three sentences, and a concept usually understood against another adds one sentence naming it and the difference. Definitions written while preparing a file name a counterpart only when the file discusses it.
 
 Verification: tests check that the tutor's instructions, artifact plans and chapters carry the method; 306 tests and type checks pass. In the browser, "what is the difference between the Fourier series and the Fourier transform?" was answered with the shared purpose and the single difference (periodic or not), parallel entries for each with their formulas and symbols explained, and a rule with an image (a staircase of frequencies that becomes a ramp as the period grows).
+
+### Local runtime: wrangler instead of celld
+
+The app had become slow and unreliable to start. celld kept every superseded storage epoch by default and rebuilt the library from that history on start: the local state had grown to 2.7 GB (0.9 GB of library history across 49 epochs, 0.85 GB of stored files, 0.33 GB of old deployments), the node often missed its own start-up deadline, and the library then took 10 to 15 minutes to answer. The Worker code uses only standard Workers APIs, so the launcher now runs Cloudflare's local runtime (`wrangler dev`, already a project dependency) instead:
+
+- The app answers within a second of starting; its state lives in `.wrangler/state/` as plain SQLite files and stored objects.
+- The launcher keeps the media companion running and starts the runtime again if it stops unexpectedly, at most five times in ten minutes.
+- No separate runtime installation is needed. Libraries kept under celld stay in `.celld/dev/` and are not read; the owner chose to start with an empty library.
+
+Verification: type checks and 306 tests pass. On `wrangler dev`: uploads of a note and a video, folders, the catalog, video range requests (206 with the requested bytes), a session and a note, and a permanent delete that also removed the stored content all worked; data persisted across a restart; killing the runtime brought it back in a second with the companion still answering. Preparing files and the tutor need the Meta key to be entered again in Settings.
