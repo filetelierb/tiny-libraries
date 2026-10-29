@@ -5,6 +5,7 @@ import { conceptMentionsSchema, tutorCitationSchema, type ConceptMention } from 
 import { attachmentMentionsSchema, type AttachmentMention } from './tutor-attachments';
 import { tutorGenerationSchema } from './tutor-generation';
 import { studyNoteSuggestionSchema } from './study-note';
+import { replyActionSchema } from './tutor-actions';
 
 export const questionContextSchema = z.object({
   sourceId: z.string().uuid(),
@@ -58,6 +59,8 @@ export const chatMessageSchema = z.object({
     )
     .max(2)
     .optional(),
+  /** Library actions the reply took, and those waiting for the student's confirmation. */
+  actions: z.array(replyActionSchema).max(12).optional(),
   requestId: z.string().uuid().optional(),
   requestFingerprint: z
     .string()

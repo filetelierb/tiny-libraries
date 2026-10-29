@@ -1,6 +1,6 @@
 # Tutor tools: assessment and plan
 
-Goal: let the student ask the tutor to manage every record in the library (files, folders, artifacts, annotations, bookmarks, glossary, sessions, tests) with the same safety the UI has. This document records what the tutor can do today, what is missing, and a phased plan. Nothing beyond phase 0 is built yet.
+Goal: let the student ask the tutor to manage every record in the library (files, folders, artifacts, annotations, bookmarks, glossary, sessions, tests) with the same safety the UI has. This document records what the tutor can do today, what is missing, and the plan.
 
 ## Today
 
@@ -17,20 +17,28 @@ The tutor is one agent loop (`worker/tutor-agent.ts`) driven by the durable runn
 | `create_artifact`  | Write | Selected references as sources; generated after the reply; 2 per reply |
 | `save_artifact`    | Write | Explicit request only; a selected source with an artifact; 1 per reply |
 | `save_concept`     | Write | Create, refine, add a meaning or evidence; up to 5 per reply           |
+| `browse_library`   | Read  | Metadata of every folder and file (ids, states, prepared); no contents |
+| `list_notes`       | Read  | Notes or bookmarks of the conversation's study session                 |
+| `manage_files`     | Write | Create folders; rename, move, archive, restore; trash and delete ¹     |
+| `manage_notes`     | Write | Create, edit and delete ¹ notes and bookmarks of the session           |
+| `merge_concepts`   | Write | Merge one concept into another ¹                                       |
+| `start_test`       | Write | A test in the session from prepared files, with the tutor's guidance   |
 
-Writes go through internal Library routes (`/internal/tutor-*`) and run only while the turn is still active and not being steered, so a stopped or redirected reply never writes.
+¹ Proposed only: a card under the reply asks the student to confirm or cancel, and only the click runs it. The library tools share a limit of 12 actions per reply.
+
+Writes go through internal Library routes (`/internal/tutor-*`) and run only while the turn is still active and not being steered, so a stopped or redirected reply never writes. Library actions (`worker/tutor-actions.ts`) call the same routes as the app, so its checks apply unchanged; each is recorded under the reply as a line of its action log, and a retried call returns what the first one did.
 
 ## Gaps by record
 
-| Record                | The tutor can                 | Missing                                                          |
-| --------------------- | ----------------------------- | ---------------------------------------------------------------- |
-| Files and folders     | Read selected references only | List and search, rename, move, archive, restore, delete, prepare |
-| Artifacts             | Create, write a new version   | List, read other versions, restore a version                     |
-| Annotations (notes)   | Nothing                       | List, create, edit, delete                                       |
-| Bookmarks             | Create                        | List, edit, delete                                               |
-| Glossary              | Search, create, refine, add   | Link, merge, archive, delete, unlinked clean-up                  |
-| Sessions and tabs     | Nothing                       | List, open files, rename                                         |
-| Tests, quizzes, cards | Practice statistics           | List, start, read results                                        |
+| Record                | The tutor can                 | Missing                                  |
+| --------------------- | ----------------------------- | ---------------------------------------- |
+| Files and folders     | List, organise, trash, delete | Prepare, upload                          |
+| Artifacts             | Create, write a new version   | Read other versions, restore a version   |
+| Annotations (notes)   | List, create, edit, delete    | Captures and drawings                    |
+| Bookmarks             | List, create, edit, delete    |                                          |
+| Glossary              | Search, create, refine, merge | Link, archive, delete, unlinked clean-up |
+| Sessions and tabs     | Nothing                       | List, open files, rename                 |
+| Tests, quizzes, cards | Statistics, start a test      | List, read results                       |
 
 ## Principles
 

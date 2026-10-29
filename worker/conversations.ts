@@ -194,6 +194,7 @@ async function prepareIntent(
     canSaveArtifact: true,
     canSaveConcept: true,
     canCreateArtifact: true,
+    canManageLibrary: true,
     ...(input.webSearch ? { webSearch: true } : settings.webAuto ? { webAuto: true } : {}),
   };
   const objects = new TutorObjects(

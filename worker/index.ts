@@ -43,6 +43,15 @@ import {
   type TutorArtifactServices,
 } from './tutor-artifacts';
 import { tutorArtifactDocumentSchema, tutorArtifactRequestSchema } from '../shared/tutor-artifacts';
+import {
+  decideTutorAction,
+  readLibrary,
+  requestTutorAction,
+  tutorActionStatus,
+  TutorActionError,
+  type LibraryCall,
+} from './tutor-actions';
+import { tutorActionSchema } from '../shared/tutor-actions';
 import { cardSnapshot, startCardDecks, rateCard, CardError } from './flashcards';
 import { visualKey } from '../shared/artifact-widgets';
 import { artifactStudySnapshot, deleteArtifactStudy, startArtifactStudy } from './artifact-study';
@@ -115,6 +124,21 @@ import {
   sourceState,
 } from '../shared/directories';
 
+/** Stored bytes of permanently deleted files go after their records. */
+async function purgeStoredFiles(env: Env, files: Array<{ id: string; version: number }>) {
+  for (const file of files) {
+    const keys = Array.from(
+      { length: file.version },
+      (_, index) => `original/${file.id}/${index + 1}`,
+    );
+    const captions = await env.FILES.list({ prefix: `captions/${file.id}/` }),
+      visuals = await env.FILES.list({ prefix: `visuals/${file.id}/` });
+    await env.FILES.delete([
+      ...keys,
+      ...[...captions.objects, ...visuals.objects].map((object) => object.key),
+    ]);
+  }
+}
 const json = (value: unknown, status = 200) =>
   Response.json(value, {
     status,
@@ -278,6 +302,34 @@ export class Library extends DurableObject<Env> {
       },
     };
   }
+  /** The library's own routes, for actions the tutor takes as the student would in the app. */
+  private libraryCall(): LibraryCall {
+    return async (method, path, body) => {
+      const response = await this.fetch(
+        new Request(`http://internal${path}`, {
+          method,
+          ...(body === undefined
+            ? {}
+            : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+        }),
+      );
+      const value = await response.json<{
+        error?: string;
+        files?: Array<{ id: string; version: number }>;
+      }>();
+      if (!response.ok)
+        throw new TutorActionError(value.error || 'Library action failed', response.status);
+      if (method === 'DELETE' && value.files) await purgeStoredFiles(this.env, value.files);
+      return value;
+    };
+  }
+  private async conversationSession(conversationId: string) {
+    const conversation = await this.ctx.storage.get<{ sessionId: string }>(
+      `conversation:${conversationId}`,
+    );
+    if (!conversation) throw new ApiError('Conversation not found', 404);
+    return conversation.sessionId;
+  }
   async settings(): Promise<Settings> {
     const key = await this.ctx.storage.get<string>('apiKey');
     return {
@@ -381,6 +433,68 @@ export class Library extends DurableObject<Env> {
               locale: settings.locale,
             },
             this.artifactServices(),
+          ),
+        );
+      }
+      if (
+        (path === '/internal/tutor-action' || path === '/internal/tutor-library') &&
+        request.method === 'POST'
+      ) {
+        const input = z
+          .object({ conversationId: z.string().min(1).max(200) })
+          .passthrough()
+          .parse(await boundedJson(request));
+        const sessionId = await this.conversationSession(input.conversationId);
+        if (path === '/internal/tutor-library')
+          return json(
+            await readLibrary(
+              this.ctx.storage,
+              this.libraryCall(),
+              z
+                .discriminatedUnion('view', [
+                  z.object({ view: z.literal('library'), query: z.string().max(200).optional() }),
+                  z.object({
+                    view: z.literal('notes'),
+                    kind: z.enum(['annotation', 'bookmark']),
+                    sourceId: z.string().uuid().optional(),
+                  }),
+                ])
+                .parse(input),
+              sessionId,
+            ),
+          );
+        const { id, action } = z
+          .object({ id: z.string().uuid(), action: tutorActionSchema })
+          .parse(input);
+        const record = await requestTutorAction(this.ctx.storage, this.libraryCall(), {
+          id,
+          conversationId: input.conversationId,
+          sessionId,
+          action,
+        });
+        return json({
+          id: record.id,
+          op: record.op,
+          subject: record.subject,
+          ...(record.detail ? { detail: record.detail } : {}),
+          status: record.status,
+          ...(record.testId ? { testId: record.testId, sessionId: record.sessionId } : {}),
+        });
+      }
+      const tutorActionMatch = path.match(/^\/api\/tutor-actions\/([a-f0-9-]{36})$/);
+      if (tutorActionMatch && request.method === 'GET')
+        return json(await tutorActionStatus(this.ctx.storage, tutorActionMatch[1]));
+      if (tutorActionMatch && request.method === 'POST') {
+        const { decision } = z
+          .object({ decision: z.enum(['confirm', 'cancel']) })
+          .parse(await boundedJson(request));
+        return json(
+          await decideTutorAction(
+            this.ctx.storage,
+            this.libraryCall(),
+            tutorActionMatch[1],
+            decision,
+            (id) => this.conversationSession(id),
           ),
         );
       }
@@ -1074,6 +1188,7 @@ export class Library extends DurableObject<Env> {
         error instanceof CardError ||
         error instanceof ArtifactRevisionError ||
         error instanceof TutorArtifactError ||
+        error instanceof TutorActionError ||
         error instanceof ReinforcementError ||
         error instanceof AssessmentError ||
         error instanceof TutorJournalError ||
@@ -1322,18 +1437,7 @@ export default {
           directories: number;
         }>();
         // Stored bytes go after the records, so a failure here never leaves a visible file without content.
-        for (const file of removed.files) {
-          const keys = Array.from(
-            { length: file.version },
-            (_, index) => `original/${file.id}/${index + 1}`,
-          );
-          const captions = await env.FILES.list({ prefix: `captions/${file.id}/` }),
-            visuals = await env.FILES.list({ prefix: `visuals/${file.id}/` });
-          await env.FILES.delete([
-            ...keys,
-            ...[...captions.objects, ...visuals.objects].map((object) => object.key),
-          ]);
-        }
+        await purgeStoredFiles(env, removed.files);
         return json(removed);
       }
       return library(env).fetch(request);

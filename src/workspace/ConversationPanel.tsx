@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { SavedTutorMessage } from '../tutor/SavedTutorMessage';
 import { ArtifactProgress } from '../tutor/ArtifactProgress';
+import { ActionLog } from '../tutor/ActionLog';
 import {
   ChevronLeft,
   Search,
@@ -115,6 +116,7 @@ export function ConversationPanel({
   prepareSource,
   createAttachment,
   openFile,
+  openTest,
 }: {
   sessionId: string;
   source: Source | null;
@@ -133,6 +135,7 @@ export function ConversationPanel({
   changed: () => Promise<unknown>;
   cite: (sourceId: string, segment: Segment) => void;
   openFile: (id: string) => void;
+  openTest: (sessionId: string, testId: string) => void;
 }) {
   const selectionKey = `tl:conversation:${sessionId}`;
   const [threads, setThreads] = useState<ConversationDetail[]>([]),
@@ -308,6 +311,7 @@ export function ConversationPanel({
       ) : current ? (
         <ConversationThread
           openFile={openFile}
+          openTest={openTest}
           key={current.id}
           renameRequest={renameRequest}
           conversation={current}
@@ -361,6 +365,7 @@ function ConversationThread({
   openingMessage,
   consumeOpeningMessage,
   openFile,
+  openTest,
 }: {
   conversation: ConversationDetail;
   catalog: Catalog;
@@ -384,6 +389,7 @@ function ConversationThread({
   onError: (message: string) => void;
   cite: (sourceId: string, segment: Segment) => void;
   openFile: (id: string) => void;
+  openTest: (sessionId: string, testId: string) => void;
 }) {
   const [historyPages, setHistoryPages] = useState(new Map<number, ChatMessage>());
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -1227,6 +1233,14 @@ function ConversationThread({
                     ready={() => void changed()}
                   />
                 ))}
+                {message.actions?.length ? (
+                  <ActionLog
+                    actions={message.actions}
+                    t={t}
+                    changed={() => void changed()}
+                    openTest={openTest}
+                  />
+                ) : null}
                 {message.role === 'assistant' && (
                   <div className="message-note">
                     {message.noteSuggestion?.recommended && (

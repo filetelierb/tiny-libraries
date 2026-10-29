@@ -2560,6 +2560,73 @@ body:has(.panel-resizer.resizing) {
   height: 4px;
   accent-color: var(--primary);
 }
+.tutor-actions {
+  display: grid;
+  gap: 6px;
+  max-width: 88%;
+  margin-top: 8px;
+}
+.tutor-action-log {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--font-size-small);
+}
+.tutor-action-log li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tutor-action-log li > svg {
+  flex: none;
+  color: var(--success-strong);
+}
+.tutor-action-log li > span {
+  flex: 1;
+  min-width: 0;
+}
+.tutor-action-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 6px 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.tutor-action-card.pending {
+  border-color: var(--danger);
+}
+.tutor-action-card > svg {
+  flex: none;
+  color: var(--muted-text);
+}
+.tutor-action-card.pending > svg {
+  color: var(--danger);
+}
+.tutor-action-card > div {
+  display: grid;
+  gap: 2px;
+}
+.tutor-action-card strong {
+  font-size: var(--font-size-small);
+}
+.tutor-action-card small {
+  font-size: var(--font-size-2xs);
+  color: var(--muted-text);
+}
+.tutor-action-card small.error {
+  color: var(--danger);
+}
+.tutor-action-buttons {
+  display: flex;
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+  gap: 6px;
+}
 .chat-entry > small {
   display: block;
   max-width: 88%;

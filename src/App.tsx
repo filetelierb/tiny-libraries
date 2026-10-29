@@ -1790,8 +1790,17 @@ export function App() {
               catalog={catalog}
               t={t}
               onError={setError}
-              changed={refresh}
+              changed={async () => {
+                const value = await refresh();
+                // Tutor actions may have changed notes and bookmarks too.
+                setAnnotationTick((tick) => tick + 1);
+                return value;
+              }}
               cite={citeFrom}
+              openTest={(sessionId, testId) => {
+                setAssessmentStart({ sessionId, selection: testId });
+                setAssessmentOpen(true);
+              }}
               openFile={(id) => {
                 const file = catalog.files.find((item) => item.id === id);
                 if (file) openFile(file, 'retain');

@@ -14,6 +14,8 @@ import {
   type BookmarkWriter,
   type ConceptWriter,
   type GlossaryReader,
+  type LibraryActor,
+  type LibraryReader,
 } from './tutor-agent';
 import type { GlossaryEntry } from '../shared/glossary';
 import { TutorJournal } from './tutor-journal';
@@ -46,6 +48,12 @@ export type TutorRunnerServices = {
     intent: TurnIntent,
     input: Parameters<ArtifactGenerator>[0],
   ): ReturnType<ArtifactGenerator>;
+  act?(
+    record: TurnRecord,
+    intent: TurnIntent,
+    input: Parameters<LibraryActor>[0],
+  ): ReturnType<LibraryActor>;
+  look?(record: TurnRecord, query: Parameters<LibraryReader>[0]): Promise<unknown>;
   /** The tool endpoint for a reply that may run as a Muse Code agent. */
   muse?(providerId: string): Promise<TutorCompletion['muse']>;
 };
@@ -63,6 +71,8 @@ export function turnWriters(
   ConceptWriter | undefined,
   GlossaryReader | undefined,
   ArtifactGenerator | undefined,
+  LibraryActor | undefined,
+  LibraryReader | undefined,
 ] {
   const guard = async () => {
     const current = await journal.active();
@@ -71,7 +81,9 @@ export function turnWriters(
   };
   const artifact = services.artifact?.bind(services),
     concept = services.concept?.bind(services),
-    generate = services.generate?.bind(services);
+    generate = services.generate?.bind(services),
+    act = services.act?.bind(services),
+    look = services.look?.bind(services);
   return [
     async (value) => {
       await guard();
@@ -93,6 +105,12 @@ export function turnWriters(
         await guard();
         return generate(record, intent, value);
       }),
+    act &&
+      (async (value) => {
+        await guard();
+        return act(record, intent, value);
+      }),
+    look && ((query) => look(record, query)),
   ];
 }
 
@@ -221,6 +239,7 @@ export class TutorRunner {
           tools: result.tools,
           citations: result.citations,
           ...(result.artifacts ? { artifacts: result.artifacts } : {}),
+          ...(result.actions ? { actions: result.actions } : {}),
           ...(intent.input.webSearch || result.webSearched
             ? { webSearched: result.webSearched === true }
             : {}),

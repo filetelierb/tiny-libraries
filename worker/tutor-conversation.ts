@@ -228,6 +228,18 @@ export class TutorConversation extends DurableObject<Env> {
           model: record.generation.model,
           request,
         }),
+      act: async (record, _intent, { callId, action }) =>
+        this.library('/internal/tutor-action', {
+          // A retried call returns what the first one did.
+          id: await stableId(`${record.id}:r${record.intentRevision}:${callId}`),
+          conversationId: record.conversationId,
+          action,
+        }),
+      look: (record, query) =>
+        this.library('/internal/tutor-library', {
+          ...query,
+          conversationId: record.conversationId,
+        }),
       glossary: async (query) =>
         (
           await this.library<{ entries: GlossaryEntry[] }>('/internal/tutor-glossary-search', {
