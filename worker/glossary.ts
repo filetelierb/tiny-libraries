@@ -13,12 +13,14 @@ import {
   mergeGlossaryEntries,
   orphanConcepts,
   sameSource,
+  uniqueSources,
   conceptOrigins,
   type ConceptOrigin,
   type GlossaryEntry,
   type GlossaryInput,
   type GlossarySummary,
 } from '../shared/glossary';
+import type { ConceptContext, ConceptPlan } from '../shared/glossary-pipeline';
 
 export type GlossaryStore = {
   get<T = unknown>(key: string): Promise<T | undefined>;
@@ -430,33 +432,133 @@ export async function saveChatConcept(
     return value;
   });
 }
+type LearningTerm = Learning['synthesis']['glossary'][number];
+/** One source per cited segment, up to eight, each with its quote and page or time. */
+function termSources(learning: Learning, term: LearningTerm): ConceptSource[] {
+  return term.segmentIds
+    .map((id) => learning.segments.find((s) => s.id === id && s.text.trim()))
+    .filter((s) => !!s)
+    .slice(0, 8)
+    .map((segment) => ({
+      sourceId: learning.sourceId,
+      sourceVersion: learning.sourceVersion,
+      segmentIds: [segment.id],
+      ...(segment.end != null ? { endSeconds: segment.end } : {}),
+      location: {
+        quote: segment.text.slice(0, 2000),
+        ...(segment.page ? { page: segment.page } : {}),
+        ...(segment.start != null ? { seconds: segment.start } : {}),
+      },
+    }));
+}
+/**
+ * Applies a reviewed plan for one term in a single revision. Returns false, changing nothing,
+ * when the concept changed since the plan was made or the new name is already taken; the term
+ * then joins concepts by name instead.
+ */
+async function ingestPlanned(
+  storage: GlossaryStorage,
+  term: LearningTerm,
+  plan: ConceptPlan,
+  sources: ConceptSource[],
+  versions: Map<string, number>,
+) {
+  return storage.transaction(async (tx) => {
+    const free = async (owner?: string) => {
+      const result: string[] = [];
+      for (const alias of plan.aliases) {
+        const id = await tx.get<string>(`concept-name:${conceptKey(alias)}`);
+        if (!id || (owner && (await resolveEntry(tx, id))?.id === owner)) result.push(alias);
+      }
+      return result;
+    };
+    let previous: GlossaryEntry | undefined, next: GlossaryEntry;
+    if (plan.action === 'new') {
+      const name = (plan.term || term.term).slice(0, 200);
+      if (await tx.get(`concept-name:${conceptKey(name)}`)) return false;
+      next = normalizeConcept({
+        id: crypto.randomUUID(),
+        term: name,
+        definition: term.definition.slice(0, 6000),
+        version: 0,
+        reviewed: false,
+        sources,
+        proposals: [],
+        origin: 'analysis',
+        aliases: await free(),
+      });
+    } else {
+      previous = plan.conceptId ? await resolveEntry(tx, plan.conceptId) : undefined;
+      if (
+        !previous ||
+        previous.id !== plan.conceptId ||
+        previous.version !== (versions.get(previous.id) ?? plan.conceptVersion)
+      )
+        return false;
+      const entry = normalizeConcept(previous),
+        target = entry.senses.find((sense) => sense.id === plan.senseId) || entry.senses[0];
+      const senses =
+        plan.action === 'new_sense' && entry.senses.length < 20
+          ? [
+              ...entry.senses,
+              {
+                id: crypto.randomUUID(),
+                label: plan.label || '',
+                definition: plan.definition || term.definition.slice(0, 6000),
+                reviewed: false,
+                synonyms: [],
+                relations: [],
+                sources,
+              },
+            ]
+          : entry.senses.map((sense) =>
+              sense.id === target.id
+                ? {
+                    ...sense,
+                    // A reviewed meaning keeps the student's definition.
+                    ...(plan.action === 'refine' && !sense.reviewed && plan.definition
+                      ? { definition: plan.definition }
+                      : {}),
+                    sources: uniqueSources([...sense.sources, ...sources]).slice(0, 30),
+                  }
+                : sense,
+            );
+      next = normalizeConcept({
+        ...entry,
+        aliases: [...entry.aliases, ...(await free(entry.id))],
+        senses,
+      });
+      if (JSON.stringify(entry) === JSON.stringify(next)) return true;
+    }
+    const value = {
+      ...next,
+      version: previous ? previous.version + 1 : 1,
+      updatedAt: new Date().toISOString(),
+    };
+    glossaryInputSchema.parse({ ...value, mutationId: crypto.randomUUID() });
+    await writeEntry(tx, value, previous);
+    versions.set(value.id, value.version);
+    return true;
+  });
+}
 /** Every glossary term of a prepared file becomes, or links to, a concept once per preparation. */
 export async function ingestLearning(storage: GlossaryStorage, learning: Learning) {
   const marker = `concept-ingested:${learning.sourceId}:${learning.sourceVersion}:${learning.createdAt}`;
   if (await storage.get(marker)) return;
-  for (const term of learning.synthesis?.glossary || []) {
-    const segments = term.segmentIds
-      .map((id) => learning.segments.find((s) => s.id === id && s.text.trim()))
-      .filter((s) => !!s)
-      .slice(0, 8);
-    if (!term.term.trim() || !term.definition.trim() || !segments.length) continue;
+  const terms = learning.synthesis?.glossary || [],
+    plans = learning.concepts?.length === terms.length ? learning.concepts : undefined,
+    versions = new Map<string, number>();
+  for (const [i, term] of terms.entries()) {
+    const sources = termSources(learning, term);
+    if (!term.term.trim() || !term.definition.trim() || !sources.length) continue;
     try {
-      for (const segment of segments)
+      if (plans && (await ingestPlanned(storage, term, plans[i], sources, versions))) continue;
+      for (const source of sources)
         await ingestGeneratedConcept(
           storage,
           term.term.slice(0, 200),
           term.definition.slice(0, 6000),
-          {
-            sourceId: learning.sourceId,
-            sourceVersion: learning.sourceVersion,
-            segmentIds: [segment.id],
-            ...(segment.end != null ? { endSeconds: segment.end } : {}),
-            location: {
-              quote: segment.text.slice(0, 2000),
-              ...(segment.page ? { page: segment.page } : {}),
-              ...(segment.start != null ? { seconds: segment.start } : {}),
-            },
-          },
+          source,
         );
     } catch (error) {
       // One unusable term (a name taken by an alias, an oversized entry) never blocks the rest.
@@ -464,6 +566,72 @@ export async function ingestLearning(storage: GlossaryStorage, learning: Learnin
     }
   }
   await storage.put(marker, true);
+}
+/** Concepts to reconcile a file's terms with, and the concept each term is already named after. */
+export async function conceptIndex(storage: GlossaryStorage, names: string[][]) {
+  const entries = (await glossarySnapshot(storage)).filter((entry) => !entry.mergedInto);
+  const byName: Array<string | null> = [];
+  for (const list of names) {
+    let match: string | null = null;
+    for (const name of list) {
+      const id = await storage.get<string>(`concept-name:${conceptKey(name)}`),
+        entry = id ? await resolveEntry(storage, id) : undefined;
+      if (entry) {
+        match = entry.id;
+        break;
+      }
+    }
+    byName.push(match);
+  }
+  return {
+    index: entries
+      .filter((entry) => !entry.archived)
+      .slice(0, 400)
+      .map((entry) => ({ id: entry.id, term: entry.term, aliases: entry.aliases.slice(0, 6) })),
+    byName,
+  };
+}
+/** Existing concepts with a few quotes from the files that support each meaning. */
+export async function conceptContexts(
+  storage: GlossaryStorage,
+  ids: string[],
+): Promise<ConceptContext[]> {
+  const files = new Map<string, string>(),
+    result: ConceptContext[] = [];
+  const fileName = async (id: string) => {
+    if (!files.has(id))
+      files.set(id, (await storage.get<Source>(`file:${id}`))?.name || 'Deleted file');
+    return files.get(id)!;
+  };
+  for (const id of ids) {
+    const found = await resolveEntry(storage, id);
+    if (!found || found.id !== id) continue;
+    const entry = normalizeConcept(found),
+      senses = [];
+    for (const sense of entry.senses) {
+      const sources = [];
+      for (const source of sense.sources.slice(0, 4))
+        sources.push({
+          file: await fileName(source.sourceId),
+          quote: (source.location?.quote || '').slice(0, 300),
+        });
+      senses.push({
+        id: sense.id,
+        label: sense.label,
+        definition: sense.definition.slice(0, 1500),
+        reviewed: sense.reviewed,
+        sources,
+      });
+    }
+    result.push({
+      id: entry.id,
+      version: entry.version,
+      term: entry.term,
+      aliases: entry.aliases,
+      senses,
+    });
+  }
+  return result;
 }
 /** Files prepared before concepts were created automatically get their terms once. */
 async function ingestPrepared(storage: GlossaryStorage) {

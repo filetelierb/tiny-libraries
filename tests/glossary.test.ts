@@ -21,6 +21,8 @@ import {
   saveChatConcept,
   deleteConcepts,
   saveConcept,
+  conceptIndex,
+  conceptContexts,
 } from '../worker/glossary';
 import type { Concept, Learning } from '../shared/domain';
 import { MemoryStore } from './storage';
@@ -499,4 +501,112 @@ test('existing near-duplicates merge once into the concept the student added', a
     ).id,
     dft.id,
   );
+});
+
+test('reviewed plans attach, refine or add meanings, and fall back to names when a concept changed', async () => {
+  const store = new MemoryStore(),
+    first = crypto.randomUUID(),
+    second = crypto.randomUUID();
+  await store.put(`file:${first}`, { id: first, version: 1, name: 'Lecture 1.pdf' });
+  await store.put(`file:${second}`, { id: second, version: 1, name: 'Reader.pdf' });
+  const learning = (sourceId: string, glossary: Learning['synthesis']['glossary']) =>
+    ({
+      sourceId,
+      sourceVersion: 1,
+      createdAt: new Date().toISOString(),
+      segments: [
+        { id: 's1', text: 'The delta function picks out a value.' },
+        { id: 's2', text: 'The discrete delta is one at zero.' },
+        { id: 's3', text: 'A shah function is a train of deltas.' },
+      ],
+      synthesis: { glossary },
+    }) as unknown as Learning;
+  await ingestLearning(
+    store.storage(),
+    learning(first, [
+      { term: 'Delta function', definition: 'Picks out a value.', segmentIds: ['s1'] },
+      { term: 'Sampling', definition: 'Taking values.', segmentIds: ['s1'] },
+    ]),
+  );
+  const { index, byName } = await conceptIndex(store.storage(), [
+    ['Dirac delta', 'Delta functions'],
+    ['Shah function'],
+  ]);
+  assert.equal(index.length, 2);
+  const delta = index.find((item) => item.term === 'Delta function')!;
+  assert.deepEqual(byName, [delta.id, null]);
+  const [context] = await conceptContexts(store.storage(), [delta.id]);
+  assert.deepEqual(context.senses[0].sources, [
+    { file: 'Lecture 1.pdf', quote: 'The delta function picks out a value.' },
+  ]);
+  const sampling = index.find((item) => item.term === 'Sampling')!;
+  const reader = learning(second, [
+    { term: 'Dirac delta', definition: 'A unit impulse.', segmentIds: ['s1'] },
+    { term: 'Discrete delta', definition: 'One at zero.', segmentIds: ['s2'] },
+    { term: 'Shah function', definition: 'A train of deltas.', segmentIds: ['s3'] },
+    { term: 'Sampling', definition: 'Recording values.', segmentIds: ['s3'] },
+  ]);
+  reader.concepts = [
+    {
+      action: 'refine',
+      conceptId: delta.id,
+      conceptVersion: context.version,
+      senseId: context.senses[0].id,
+      definition: 'A unit impulse that picks out a value.',
+      aliases: ['Dirac delta'],
+    },
+    {
+      action: 'new_sense',
+      conceptId: delta.id,
+      conceptVersion: context.version,
+      definition: 'One at zero and zero elsewhere.',
+      label: 'Discrete',
+      aliases: [],
+    },
+    { action: 'new', aliases: ['III'] },
+    // Planned against a version that no longer exists: joins by name instead.
+    { action: 'attach', conceptId: sampling.id, conceptVersion: 99, aliases: ['Taking samples'] },
+  ];
+  await ingestLearning(store.storage(), reader);
+  const entries = (await glossarySnapshot(store.storage())).filter((e) => !e.mergedInto),
+    updated = entries.find((e) => e.id === delta.id)!;
+  assert.equal(updated.senses[0].definition, 'A unit impulse that picks out a value.');
+  assert.equal(updated.senses[0].sources.length, 2);
+  assert.deepEqual(updated.aliases, ['Dirac delta']);
+  assert.deepEqual(
+    updated.senses.slice(1).map((s) => [s.label, s.definition, s.sources[0].sourceId]),
+    [['Discrete', 'One at zero and zero elsewhere.', second]],
+  );
+  assert.equal(updated.version, context.version + 2);
+  assert.deepEqual(entries.find((e) => e.term === 'Shah function')!.aliases, ['III']);
+  const samplingEntry = entries.find((e) => e.id === sampling.id)!;
+  assert.deepEqual(samplingEntry.aliases, []);
+  assert.equal(samplingEntry.sources.length, 2);
+});
+
+test('a planned refinement never replaces a definition the student reviewed', async () => {
+  const store = new MemoryStore(),
+    sourceId = crypto.randomUUID(),
+    reviewed = await saveConcept(store.storage(), input('Convolution'));
+  const plan = {
+    action: 'refine' as const,
+    conceptId: reviewed.id,
+    conceptVersion: reviewed.version,
+    senseId: reviewed.senses[0].id,
+    definition: 'Rewritten.',
+    aliases: [],
+  };
+  await ingestLearning(store.storage(), {
+    sourceId,
+    sourceVersion: 1,
+    createdAt: new Date().toISOString(),
+    segments: [{ id: 's1', text: 'Convolution smooths.' }],
+    synthesis: {
+      glossary: [{ term: 'Convolution', definition: 'Rewritten.', segmentIds: ['s1'] }],
+    },
+    concepts: [plan],
+  } as unknown as Learning);
+  const [entry] = await glossarySnapshot(store.storage());
+  assert.equal(entry.senses[0].definition, 'Convolution definition');
+  assert.equal(entry.senses[0].sources[0].sourceId, sourceId);
 });

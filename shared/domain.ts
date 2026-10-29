@@ -121,6 +121,8 @@ export type Learning = {
   locale: Locale;
   segments: Segment[];
   synthesis: Synthesis;
+  // How each glossary term joins the library's concepts, decided after checking other files.
+  concepts?: import('./glossary-pipeline').ConceptPlan[];
   createdAt: string;
 };
 export type PublicLearning = Omit<Learning, 'synthesis'> & { synthesis: PublicSynthesis };
@@ -240,7 +242,7 @@ export type Job = {
   sourceVersion: number;
   locale: Locale;
   status: 'queued' | 'running' | 'partial' | 'completed' | 'failed' | 'cancelled';
-  stage: 'normalize' | 'transcribe' | 'translate' | 'synthesize' | 'done';
+  stage: 'normalize' | 'transcribe' | 'translate' | 'synthesize' | 'concepts' | 'done';
   completedChunks: number;
   totalChunks: number;
   // Windows of a long source analysed so far, plus the final merge step.

@@ -85,6 +85,8 @@ import {
   deleteConcepts,
   ingestLearning,
   saveChatConcept,
+  conceptIndex,
+  conceptContexts,
 } from './glossary';
 import { conceptSourceSchema, conceptsOnlyIn, type GlossaryEntry } from '../shared/glossary';
 import {
@@ -204,15 +206,19 @@ export class Library extends DurableObject<Env> {
         );
       if (path === '/internal/key')
         return json({ key: (await this.ctx.storage.get<string>('apiKey')) || null });
-      // Analysis reuses the names already in the glossary instead of coining near-duplicates.
-      if (path === '/internal/glossary-terms')
-        return json({
-          terms: (await glossarySnapshot(this.ctx.storage))
-            .filter((entry) => !entry.mergedInto && !entry.archived)
-            .map((entry) => entry.term)
-            .sort((a, b) => a.localeCompare(b))
-            .slice(0, 400),
-        });
+      // The glossary review reconciles a file's terms with the concepts already kept.
+      if (path === '/internal/glossary-terms' && request.method === 'POST') {
+        const { names } = z
+          .object({ names: z.array(z.array(z.string().max(200)).max(11)).max(80) })
+          .parse(await boundedJson(request));
+        return json(await conceptIndex(this.ctx.storage, names));
+      }
+      if (path === '/internal/glossary-context' && request.method === 'POST') {
+        const { ids } = z
+          .object({ ids: z.array(z.string().uuid()).max(80) })
+          .parse(await boundedJson(request));
+        return json({ concepts: await conceptContexts(this.ctx.storage, ids) });
+      }
       if (path === '/internal/tutor-artifact' && request.method === 'POST') {
         const value = z
           .object({

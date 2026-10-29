@@ -15,9 +15,26 @@ import {
 } from '../shared/domain';
 import { internal } from './index';
 import {
+  GLOSSARY_ROUNDS,
+  applyFill,
+  applyReview,
+  conceptMatches,
+  fillSegments,
+  initialGlossary,
+  planConcepts,
+  type ConceptContext,
+  type ConceptIndexItem,
+  type ConceptPlan,
+  type GlossaryState,
+} from '../shared/glossary-pipeline';
+import {
   MetaError,
   bridgedFetch,
+  decideConcepts,
+  fillGlossary,
+  matchConcepts,
   outlineParts,
+  reviewGlossary,
   synthesize,
   synthesizePart,
   transcribe,
@@ -82,6 +99,141 @@ export class ProcessingJob extends DurableObject<Env> {
       throw new MetaError(data.error || 'Local media processing failed', response.status >= 500);
     }
     return response;
+  }
+  /** Publishes the study record; true when the job was cancelled first. */
+  async publish(
+    file: Source,
+    job: Job,
+    model: string,
+    segments: Segment[],
+    synthesis: Synthesis,
+    concepts?: ConceptPlan[],
+  ) {
+    const normalized = (await this.ctx.storage.get<Normalized>('normalized'))!;
+    // Image widgets show source pictures, which the study record itself does not keep.
+    const pictures = [
+      ...(normalized.imageData ? [{ segmentId: 'image-1', data: normalized.imageData }] : []),
+      ...(normalized.visuals || []),
+    ];
+    for (const segmentId of widgetImages(synthesis.artifact?.explanation || '')) {
+      const match = pictures
+        .find((picture) => picture.segmentId === segmentId)
+        ?.data.match(/^data:(image\/[a-z+]+);base64,(.+)$/);
+      if (match)
+        await this.env.FILES.put(
+          visualKey(file.id, file.version, segmentId),
+          Uint8Array.from(atob(match[2]), (char) => char.charCodeAt(0)),
+          { httpMetadata: { contentType: match[1] } },
+        );
+    }
+    const learning: Learning = {
+      sourceId: file.id,
+      sourceVersion: file.version,
+      model,
+      locale: job.locale,
+      segments,
+      synthesis,
+      ...(concepts ? { concepts } : {}),
+      createdAt: new Date().toISOString(),
+    };
+    // Publish under a stable source version; repeated publication replaces the same record.
+    if ((await this.ctx.storage.get<Job>('job'))?.status === 'cancelled') return true;
+    await internal(this.env, `/internal/learning/${file.id}`, learning);
+    return false;
+  }
+  /**
+   * One checkpointed step of the glossary loop. Returns the next state, or null once the
+   * terms are final and planned (the plan is saved with them).
+   */
+  async glossaryStep(
+    key: string,
+    model: string,
+    locale: Locale,
+    synthesis: Synthesis,
+    segments: Segment[],
+    state: GlossaryState,
+  ): Promise<GlossaryState | null> {
+    const transport = bridgedFetch(this.env);
+    if (!state.terms.length) return null;
+    if (state.phase === 'review') {
+      const review = await reviewGlossary(
+        key,
+        model,
+        state.terms,
+        synthesis,
+        state.round,
+        locale,
+        transport,
+      );
+      const terms = applyReview(state.terms, review);
+      // A review that keeps nothing is ignored rather than emptying the glossary.
+      const kept = terms.length ? terms : state.terms,
+        missing = review.missing.filter((m) => synthesis.chapters[m.chapter]);
+      return missing.length && state.round + 1 < GLOSSARY_ROUNDS
+        ? { ...state, terms: kept, phase: 'fill', missing }
+        : { ...state, terms: kept, phase: 'match', missing: undefined };
+    }
+    if (state.phase === 'fill') {
+      const available = fillSegments(segments, synthesis, state.missing || []);
+      const { terms, added } = available.length
+        ? applyFill(
+            state.terms,
+            await fillGlossary(key, model, state.missing || [], available, locale, transport),
+            available,
+          )
+        : { terms: state.terms, added: 0 };
+      // Nothing new to review ends the loop early.
+      return added
+        ? { round: state.round + 1, terms, phase: 'review' }
+        : { ...state, terms, phase: 'match', missing: undefined };
+    }
+    const names = state.terms.map((term) => [term.term, ...term.aliases]);
+    const { index, byName } = await internal<{
+      index: ConceptIndexItem[];
+      byName: Array<string | null>;
+    }>(this.env, '/internal/glossary-terms', { names });
+    if (state.phase === 'match') {
+      const unnamed = state.terms
+        .map((term, i) => ({
+          term: i,
+          name: term.term,
+          aliases: term.aliases,
+          definition: term.definition.slice(0, 400),
+        }))
+        .filter((term) => !byName[term.term]);
+      const picked =
+        unnamed.length && index.length
+          ? await matchConcepts(key, model, unnamed, index, transport)
+          : { matches: [] };
+      return {
+        ...state,
+        phase: 'decide',
+        matches: conceptMatches(state.terms, byName, picked, index),
+      };
+    }
+    const matches = state.matches || state.terms.map(() => null),
+      ids = [...new Set(matches.filter((id) => id !== null))];
+    const { concepts } = ids.length
+      ? await internal<{ concepts: ConceptContext[] }>(this.env, '/internal/glossary-context', {
+          ids,
+        })
+      : { concepts: [] };
+    const matched = state.terms
+      .map((term, i) => ({
+        term: i,
+        name: term.term,
+        definition: term.definition,
+        conceptId: matches[i]!,
+      }))
+      .filter((term) => term.conceptId && concepts.some((c) => c.id === term.conceptId));
+    const decided = matched.length
+      ? await decideConcepts(key, model, matched, concepts, locale, transport)
+      : { decisions: [] };
+    await this.ctx.storage.put('glossary', {
+      ...state,
+      plan: planConcepts(state.terms, matches, byName, concepts, decided),
+    });
+    return null;
   }
   async alarm() {
     let job = await this.ctx.storage.get<Job>('job');
@@ -170,11 +322,7 @@ export class ProcessingJob extends DurableObject<Env> {
         const segments = (await this.ctx.storage.get<Segment[]>('segments'))!,
           normalized = (await this.ctx.storage.get<Normalized>('normalized'))!;
         const windows = synthesisWindows(segments),
-          done = job.completedParts || 0,
-          { terms: known } = await internal<{ terms: string[] }>(
-            this.env,
-            '/internal/glossary-terms',
-          );
+          done = job.completedParts || 0;
         let synthesis: Synthesis | undefined;
         if (windows.length === 1)
           synthesis = await synthesize(
@@ -185,7 +333,6 @@ export class ProcessingJob extends DurableObject<Env> {
             normalized.imageData,
             normalized.visuals,
             bridgedFetch(this.env),
-            known,
           );
         else if (JSON.stringify(segments).length > 1500000)
           throw new MetaError('Source text exceeds the analysis limit', false);
@@ -204,7 +351,6 @@ export class ProcessingJob extends DurableObject<Env> {
                 job.locale,
                 normalized.visuals,
                 bridgedFetch(this.env),
-                known,
               ),
             );
           job = {
@@ -224,34 +370,56 @@ export class ProcessingJob extends DurableObject<Env> {
           );
         }
         if (synthesis) {
-          // Image widgets show source pictures, which the study record itself does not keep.
-          const pictures = [
-            ...(normalized.imageData ? [{ segmentId: 'image-1', data: normalized.imageData }] : []),
-            ...(normalized.visuals || []),
-          ];
-          for (const segmentId of widgetImages(synthesis.artifact?.explanation || '')) {
-            const match = pictures
-              .find((picture) => picture.segmentId === segmentId)
-              ?.data.match(/^data:(image\/[a-z+]+);base64,(.+)$/);
-            if (match)
-              await this.env.FILES.put(
-                visualKey(file.id, file.version, segmentId),
-                Uint8Array.from(atob(match[2]), (char) => char.charCodeAt(0)),
-                { httpMetadata: { contentType: match[1] } },
-              );
-          }
-          const learning: Learning = {
-            sourceId: file.id,
-            sourceVersion: file.version,
-            model: settings.model,
-            locale: job.locale,
-            segments,
+          await this.ctx.storage.put('synthesis', synthesis);
+          await this.ctx.storage.put<GlossaryState>('glossary', {
+            round: 0,
+            phase: 'review',
+            terms: initialGlossary(synthesis),
+          });
+          job = { ...job, stage: 'concepts', status: 'partial', completedParts: 0, totalParts: 0 };
+        }
+      } else if (job.stage === 'concepts') {
+        const synthesis = (await this.ctx.storage.get<Synthesis>('synthesis'))!,
+          segments = (await this.ctx.storage.get<Segment[]>('segments'))!,
+          state = (await this.ctx.storage.get<GlossaryState>('glossary'))!;
+        let next: GlossaryState | null;
+        try {
+          next = await this.glossaryStep(
+            key,
+            settings.model,
+            job.locale,
             synthesis,
-            createdAt: new Date().toISOString(),
-          };
-          // Publish under a stable source version; repeated publication replaces the same record.
-          if ((await this.ctx.storage.get<Job>('job'))?.status === 'cancelled') return;
-          await internal(this.env, `/internal/learning/${file.id}`, learning);
+            segments,
+            state,
+          );
+        } catch (error) {
+          // The study guide never waits on the glossary: a failed review publishes the terms as they are.
+          if (!(error instanceof MetaError) || error.retryable) throw error;
+          console.error(
+            JSON.stringify({ event: 'glossary_review_failed', message: error.message }),
+          );
+          next = null;
+        }
+        if (next) {
+          await this.ctx.storage.put('glossary', next);
+          job = { ...job, status: 'partial', completedParts: next.round };
+        } else {
+          const finished = await this.ctx.storage.get<GlossaryState & { plan?: ConceptPlan[] }>(
+            'glossary',
+          );
+          // Terms reviewed before a failure are kept; without a plan they join concepts by name.
+          const reviewed = finished?.terms.length
+            ? {
+                ...synthesis,
+                glossary: finished.terms.map(({ term, definition, segmentIds }) => ({
+                  term,
+                  definition,
+                  segmentIds,
+                })),
+              }
+            : synthesis;
+          if (await this.publish(file, job, settings.model, segments, reviewed, finished?.plan))
+            return;
           job = { ...job, stage: 'done', status: 'completed' };
         }
       }
