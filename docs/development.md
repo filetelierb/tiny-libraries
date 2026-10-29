@@ -216,3 +216,16 @@ The app had become slow and unreliable to start. celld kept every superseded sto
 - No separate runtime installation is needed. The owner chose to start with an empty library, and the old celld data was deleted.
 
 Verification: type checks and 306 tests pass. On `wrangler dev`: uploads of a note and a video, folders, the catalog, video range requests (206 with the requested bytes), a session and a note, and a permanent delete that also removed the stored content all worked; data persisted across a restart; killing the runtime brought it back in a second with the companion still answering. Preparing files and the tutor need the Meta key to be entered again in Settings.
+
+### Setting up a test in steps
+
+The test setup was one long form. It is now four steps with a progress bar at the top, so each screen asks one thing:
+
+- **Material.** Studied files and saved evidence, with the same limits as before (40 files; 6 snapshots, 48 images and 12 MB). The other steps unlock once at least one file or snapshot is chosen, and the footer says so until then.
+- **Focus.** What to stress, and earlier reports whose uncertain answers the test should revisit.
+- **Format.** Number of questions as a row of choices, and difficulty as four cards that say what each level changes (how blanks are answered, how many pairs a matching question has).
+- **Review.** A summary of the choices, each with Edit to jump back, the note on what is sent to Meta, and Prepare assessment.
+
+Choices are still saved per session, a follow-up from a report opens directly on Review, and New starts again from Material. The dialog keeps one height so it does not jump between steps.
+
+Verification: type checks and 306 tests pass. In the browser, the steps stay locked with no prepared file; with the check lifted temporarily, Focus, Format (selected count and difficulty highlighted) and Review (summary, Edit links, missing key notice, disabled Prepare) were checked, then the check was restored.

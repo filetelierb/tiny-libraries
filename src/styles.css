@@ -4856,6 +4856,10 @@ body:has(.panel-resizer.resizing) {
   display: flex;
   flex-direction: column;
 }
+/* The setup keeps one height so the dialog does not jump between steps. */
+.modal.assessment-modal:has(.assessment-wizard) {
+  height: min(800px, calc(100dvh - 32px));
+}
 .assessment-modal > .modal-title {
   flex: none;
   margin: 0;
@@ -4878,8 +4882,102 @@ body:has(.panel-resizer.resizing) {
 .assessment-run {
   min-width: 0;
 }
-.assessment-subtitle {
-  margin: 0 0 16px;
+.assessment-wizard {
+  display: grid;
+  gap: 16px;
+}
+.assessment-unfinished {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+.assessment-unfinished p {
+  margin: 0;
+}
+.assessment-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.assessment-steps button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--muted-text);
+  font: inherit;
+  font-size: var(--font-size-control);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 120ms,
+    border-color 120ms;
+}
+.assessment-steps button > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.assessment-steps button:hover:not(:disabled) {
+  background: var(--muted);
+}
+.assessment-steps button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.assessment-steps button[aria-current='step'] {
+  border-color: var(--primary);
+  background: color-mix(in oklch, var(--primary), transparent 92%);
+  color: var(--foreground);
+  font-weight: var(--font-weight-medium);
+}
+.assessment-step-index {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-medium);
+}
+.assessment-steps button[aria-current='step'] .assessment-step-index {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--on-primary);
+}
+.assessment-steps button[data-done] .assessment-step-index {
+  border-color: var(--secondary);
+  background: var(--secondary);
+  color: var(--on-secondary);
+}
+.assessment-step-header {
+  display: grid;
+  gap: 4px;
+}
+.assessment-step-header small {
+  font-size: var(--font-size-small);
+  color: var(--muted-text);
+}
+.assessment-step-header h3 {
+  margin: 0;
+  font-size: var(--font-size-title);
+  font-weight: var(--font-weight-semibold);
+}
+.assessment-step-header p {
+  margin: 0;
   font-size: var(--font-size-control);
   line-height: 1.6;
   color: var(--muted-text);
@@ -4895,11 +4993,7 @@ body:has(.panel-resizer.resizing) {
 .assessment-setup-card > * {
   margin: 0;
 }
-.assessment-setup-card > .button-primary {
-  justify-self: start;
-}
-.assessment-guidance,
-.assessment-config-grid label {
+.assessment-guidance {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -4922,6 +5016,12 @@ body:has(.panel-resizer.resizing) {
 .assessment-field-label {
   font-size: var(--font-size-control);
   font-weight: var(--font-weight-medium);
+}
+.assessment-main .assessment-field-label small,
+.assessment-prior-reports legend small {
+  display: inline;
+  font-weight: var(--font-weight-regular);
+  color: var(--muted-text);
 }
 .assessment-picker-heading {
   display: flex;
@@ -4977,19 +5077,159 @@ body:has(.panel-resizer.resizing) {
   height: 100%;
   padding: 0;
 }
-.assessment-config-grid {
+.assessment-unprepared summary {
+  cursor: pointer;
+  font-size: var(--font-size-control);
+  color: var(--primary);
+}
+.assessment-unprepared .button {
+  display: flex;
+  margin-top: 4px;
+}
+.assessment-choice-group {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.assessment-choice-group legend {
+  padding: 0;
+  margin-bottom: 8px;
+  font-size: var(--font-size-control);
+  font-weight: var(--font-weight-medium);
+}
+.assessment-count-options {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px 24px;
+  gap: 8px;
 }
-.assessment-config-grid label {
-  flex-direction: row;
+.assessment-difficulty-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.assessment-count-option,
+.assessment-difficulty-option {
+  position: relative;
+  cursor: pointer;
+}
+.assessment-count-option input,
+.assessment-difficulty-option input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.assessment-count-option span,
+.assessment-difficulty-option > span {
+  display: block;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--background);
+  transition:
+    background 120ms,
+    border-color 120ms;
+}
+.assessment-count-option span {
+  min-width: 64px;
+  padding: 10px 16px;
+  font-size: var(--font-size-control);
+  font-weight: var(--font-weight-medium);
+  text-align: center;
+}
+.assessment-difficulty-option > span {
+  display: grid;
+  gap: 4px;
+  height: 100%;
+  padding: 12px;
+}
+.assessment-difficulty-option strong {
+  font-size: var(--font-size-control);
+  font-weight: var(--font-weight-medium);
+}
+.assessment-difficulty-option small {
+  font-size: var(--font-size-small);
+  line-height: 1.5;
+  color: var(--muted-text);
+}
+.assessment-count-option:hover span,
+.assessment-difficulty-option:hover > span {
+  background: var(--muted);
+}
+.assessment-count-option input:checked + span,
+.assessment-difficulty-option input:checked + span {
+  border-color: var(--primary);
+  background: color-mix(in oklch, var(--primary), transparent 92%);
+}
+.assessment-count-option input:checked + span {
+  color: var(--primary);
+}
+.assessment-count-option input:focus-visible + span,
+.assessment-difficulty-option input:focus-visible + span {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.assessment-summary {
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--background);
+}
+.assessment-summary > div {
+  display: grid;
+  grid-template-columns: minmax(0, 10rem) minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 4px 16px;
+  padding: 12px 16px;
+  font-size: var(--font-size-control);
+}
+.assessment-summary > div + div {
+  border-top: 1px solid var(--border);
+}
+.assessment-summary dt {
+  color: var(--muted-text);
+}
+.assessment-summary dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.assessment-summary-guidance {
+  white-space: pre-wrap;
+}
+.assessment-summary-guidance small {
+  display: block;
+  margin-top: 4px;
+  font-size: var(--font-size-small);
+  color: var(--muted-text);
+}
+.assessment-summary button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--primary);
+  font: inherit;
+  font-size: var(--font-size-small);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.assessment-wizard-footer {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 8px 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
 }
-.assessment-config-grid select {
-  width: auto;
-  font-weight: var(--font-weight-regular);
+.assessment-wizard-footer small {
+  font-size: var(--font-size-small);
+  color: var(--muted-text);
+}
+.assessment-wizard-footer > .button-primary {
+  margin-left: auto;
 }
 .assessment-prior-reports {
   margin: 0;
@@ -5014,6 +5254,9 @@ body:has(.panel-resizer.resizing) {
 .assessment-prior-reports small {
   font-size: var(--font-size-small);
   color: var(--muted-text);
+}
+.assessment-prior-reports label small {
+  display: block;
 }
 .assessment-history {
   min-width: 0;
@@ -5098,8 +5341,7 @@ body:has(.panel-resizer.resizing) {
   border-bottom: 1px solid var(--border);
   padding-bottom: 15px;
 }
-.assessment-run summary,
-.assessment-main > details > summary {
+.assessment-run summary {
   cursor: pointer;
   color: var(--primary);
 }
@@ -5473,8 +5715,16 @@ body:has(.panel-resizer.resizing) {
   .assessment-match-row {
     grid-template-columns: minmax(0, 1fr);
   }
-  .assessment-config-grid {
-    gap: 12px;
+  .assessment-steps,
+  .assessment-difficulty-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .assessment-summary > div {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .assessment-summary dd {
+    grid-column: 1 / -1;
+    grid-row: 2;
   }
   .assessment-report-score {
     flex-wrap: wrap;
@@ -7131,9 +7381,16 @@ body:has(.panel-resizer.resizing) {
   }
 }
 .assessment-saved-evidence {
-  border-block: 1px solid var(--border);
-  padding-block: 1rem;
-  margin-block: 1rem;
+  display: grid;
+  gap: 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.assessment-saved-evidence > p {
+  margin: 0;
+}
+.assessment-saved-evidence > .button {
+  justify-self: start;
 }
 .assessment-evidence-images {
   display: flex;

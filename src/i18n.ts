@@ -110,8 +110,6 @@ const en = {
   assessmentClose: 'Close assessment',
   assessmentSetup: 'Assessment setup',
   assessmentHistory: 'History',
-  assessmentSetupHint:
-    'Choose studied files, saved evidence, or both, then the kind of review you want. Questions use only this captured selection.',
   assessmentGuidance: 'How would you like to review?',
   optional: 'Optional',
   selectedOf: 'selected of',
@@ -139,6 +137,26 @@ const en = {
   assessmentDisclosure:
     'The selected source excerpts, saved text and images, linked conversation and chosen earlier results will be sent to Meta. Scores are calculated by the app.',
   assessmentPrepare: 'Prepare assessment',
+  assessmentStep_material: 'Material',
+  assessmentStep_focus: 'Focus',
+  assessmentStep_format: 'Format',
+  assessmentStep_review: 'Review',
+  assessmentStepHint_material:
+    'Choose studied files, saved evidence, or both. Questions use only this selection.',
+  assessmentStepHint_focus:
+    'Tell the tutor what to stress, and reuse what earlier reports found uncertain.',
+  assessmentStepHint_format: 'Choose how long and how demanding the review is.',
+  assessmentStepHint_review: 'Check the setup. Nothing is sent to Meta until you prepare it.',
+  assessmentStepProgress: 'Step {n} of {total}',
+  assessmentNext: 'Next',
+  assessmentNeedsMaterial: 'Select at least one file or saved evidence to continue.',
+  assessmentDifficultyHint_mixed: 'A range of easy, medium and hard questions.',
+  assessmentDifficultyHint_easy: 'Answers are chosen from options; matching has three pairs.',
+  assessmentDifficultyHint_medium: 'Blanks use a selector; matching has four pairs.',
+  assessmentDifficultyHint_hard: 'You write the missing term; matching adds distractors.',
+  assessmentNoGuidance: 'No specific focus: a mix of the four question types.',
+  assessmentMoreFiles: 'and {n} more',
+  assessmentNone: 'None',
   assessmentPreparing: 'Preparing assessment…',
   assessmentQuestions: 'questions',
   assessmentQuestionsPrepared: 'questions prepared',
@@ -1291,8 +1309,6 @@ const es: Dictionary = {
   assessmentClose: 'Cerrar repaso',
   assessmentSetup: 'Configurar repaso',
   assessmentHistory: 'Historial',
-  assessmentSetupHint:
-    'Elige archivos estudiados, evidencia guardada o ambos, y después el tipo de repaso. Las preguntas usan solo esta selección.',
   assessmentGuidance: '¿Cómo quieres repasar?',
   optional: 'Opcional',
   selectedOf: 'seleccionados de',
@@ -1320,6 +1336,31 @@ const es: Dictionary = {
   assessmentDisclosure:
     'Los extractos, el texto y las imágenes guardados, la conversación vinculada y los resultados anteriores seleccionados se enviarán a Meta. La aplicación calcula las puntuaciones.',
   assessmentPrepare: 'Preparar repaso',
+  assessmentStep_material: 'Material',
+  assessmentStep_focus: 'Enfoque',
+  assessmentStep_format: 'Formato',
+  assessmentStep_review: 'Revisión',
+  assessmentStepHint_material:
+    'Elige archivos estudiados, evidencia guardada o ambos. Las preguntas usan solo esta selección.',
+  assessmentStepHint_focus:
+    'Indica qué reforzar y reutiliza las dudas que detectaron informes anteriores.',
+  assessmentStepHint_format: 'Elige la extensión y la exigencia del repaso.',
+  assessmentStepHint_review:
+    'Revisa la configuración. No se envía nada a Meta hasta que lo prepares.',
+  assessmentStepProgress: 'Paso {n} de {total}',
+  assessmentNext: 'Siguiente',
+  assessmentNeedsMaterial:
+    'Selecciona al menos un archivo o una evidencia guardada para continuar.',
+  assessmentDifficultyHint_mixed: 'Combina preguntas fáciles, medias y difíciles.',
+  assessmentDifficultyHint_easy:
+    'Las respuestas se eligen entre opciones; los emparejamientos tienen tres pares.',
+  assessmentDifficultyHint_medium:
+    'Los espacios se completan con un selector; los emparejamientos tienen cuatro pares.',
+  assessmentDifficultyHint_hard:
+    'Escribes el término que falta; los emparejamientos añaden distractores.',
+  assessmentNoGuidance: 'Sin enfoque específico: combinación de los cuatro tipos de pregunta.',
+  assessmentMoreFiles: 'y {n} más',
+  assessmentNone: 'Ninguno',
   assessmentPreparing: 'Preparando repaso…',
   assessmentQuestions: 'preguntas',
   assessmentQuestionsPrepared: 'preguntas preparadas',

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { z } from 'zod';
-import { Plus, RefreshCw, Search } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, Plus, RefreshCw, Search } from 'lucide-react';
 import {
   assessmentSetupSchema,
   assessmentCounts,
@@ -32,6 +32,8 @@ const defaultConfig: AssessmentConfig = {
   priorReportIds: [],
 };
 const localConfigSchema = assessmentSetupSchema;
+// The setup is a short wizard; only the material step has a required choice.
+const setupSteps = ['material', 'focus', 'format', 'review'] as const;
 export function AssessmentWorkspace({
   sessionId,
   catalog,
@@ -81,7 +83,8 @@ export function AssessmentWorkspace({
     [evidence, setEvidence] = useState<QuestionAttachment[]>([]),
     [evidenceLoading, setEvidenceLoading] = useState(false),
     [evidencePicker, setEvidencePicker] = useState(false),
-    [inspectedEvidence, setInspectedEvidence] = useState<string | null>(null);
+    [inspectedEvidence, setInspectedEvidence] = useState<string | null>(null),
+    [step, setStep] = useState(0);
   const alive = useRef(true),
     initial = useRef(true),
     creation = useRef<{ fingerprint: string; id: string } | null>(null);
@@ -252,7 +255,16 @@ export function AssessmentWorkspace({
       if (alive.current) setBusy(false);
     }
   }
-  const unfinished = history.find((row) => !['completed', 'cancelled'].includes(row.status));
+  const unfinished = history.find((row) => !['completed', 'cancelled'].includes(row.status)),
+    completed = history.filter((row) => row.status === 'completed'),
+    materialReady =
+      (config.sourceIds.length > 0 || evidenceIds.length > 0) &&
+      !evidenceLoading &&
+      evidenceIds.every((id) => evidence.some((item) => item.id === id)),
+    selectedNames = config.sourceIds.flatMap((id) => {
+      const file = catalog.files.find((file) => file.id === id);
+      return file ? [file.name] : [];
+    });
   return (
     <Modal
       title={t.assessmentTitle}
@@ -292,270 +304,405 @@ export function AssessmentWorkspace({
                     attachmentIds: detail.config.attachmentIds,
                   });
                   creation.current = null;
+                  setStep(setupSteps.length - 1);
                   choose(null);
                 }}
               />
             </>
           ) : (
             <>
-              <p className="assessment-subtitle">{t.assessmentSetupHint}</p>
               {loading ? (
                 <LoadingRow>{t.loading}</LoadingRow>
               ) : (
-                <div className="assessment-setup-card">
+                <div className="assessment-wizard">
                   {unfinished && (
-                    <div className="notice">
+                    <div className="notice assessment-unfinished">
                       <p>{t.assessmentUnfinishedNotice}</p>
                       <Button onClick={() => choose(unfinished.id)}>{t.assessmentResume}</Button>
                     </div>
                   )}
-                  <label className="assessment-guidance">
-                    <span>
-                      {t.assessmentGuidance} <small>{t.optional}</small>
-                    </span>
-                    <textarea
-                      rows={3}
-                      value={config.guidance}
-                      maxLength={4000}
-                      onChange={(e) => update({ ...config, guidance: e.target.value })}
-                      placeholder={t.assessmentGuidanceHint}
-                    />
-                  </label>
-                  <div className="assessment-picker-heading">
-                    <span className="assessment-field-label">{t.assessmentIncludedFiles}</span>
-                    <span className="assessment-picker-actions">
-                      <span>
-                        {config.sourceIds.length} {t.selectedOf} {eligible.size}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => update({ ...config, sourceIds: [...eligible].slice(0, 40) })}
-                      >
-                        {t.assessmentSelectAll}
-                      </button>
-                      <button type="button" onClick={() => update({ ...config, sourceIds: [] })}>
-                        {t.assessmentDeselectAll}
-                      </button>
-                    </span>
-                  </div>
-                  <label className="library-search">
-                    <Search size={14} />
-                    <input
-                      type="search"
-                      aria-label={t.assessmentSearchFiles}
-                      value={query}
-                      onChange={(e) => setQuery(e.target.value)}
-                      placeholder={t.search}
-                    />
-                  </label>
-                  <div className="assessment-file-picker">
-                    <DirectoryTree
-                      mode="filter"
-                      directories={catalog.directories}
-                      files={catalog.files.filter((file) => availableIds.has(file.id))}
-                      actions={actions}
-                      t={t}
-                      query={query}
-                      storageKey="tl:tree:assessments"
-                      selectedFileIds={new Set(config.sourceIds)}
-                      disabledFileIds={
-                        new Set(
-                          options.filter((o) => !eligible.has(o.sourceId)).map((o) => o.sourceId),
-                        )
-                      }
-                      fileStatuses={
-                        new Map(
-                          options
-                            .filter((o) => !eligible.has(o.sourceId))
-                            .map((o) => [
-                              o.sourceId,
-                              o.prepared ? t.assessmentStudyMore : t.assessmentPrepareFirst,
-                            ]),
-                        )
-                      }
-                      fileCounts={new Map(options.map((o) => [o.sourceId, o.noteCount]))}
-                      toggleFile={(file, checked) =>
-                        update({
-                          ...config,
-                          sourceIds: checked
-                            ? config.sourceIds.length < 40
-                              ? [...config.sourceIds, file.id]
-                              : config.sourceIds
-                            : config.sourceIds.filter((id) => id !== file.id),
-                        })
-                      }
-                    />
-                  </div>
-                  <p className="assessment-helper">
-                    {t.assessmentFileLimit}{' '}
-                    <button
-                      type="button"
-                      disabled={busy}
-                      title={t.assessmentRefreshSources}
-                      onClick={() => {
-                        setError('');
-                        void loadOptions().catch((e) => setError((e as Error).message));
-                      }}
-                    >
-                      {t.assessmentRefreshShort}
-                    </button>
-                  </p>
-                  {options.some((o) => !o.prepared) && (
-                    <details>
-                      <summary>{t.assessmentUnpreparedFiles}</summary>
-                      {options
-                        .filter((o) => !o.prepared)
-                        .map((o) => (
-                          <Button
-                            key={o.sourceId}
-                            variant="ghost"
-                            onClick={() => prepareFile(o.sourceId)}
-                          >
-                            {t.assessmentOpenToPrepare}:{' '}
-                            {catalog.files.find((file) => file.id === o.sourceId)?.name}
-                          </Button>
-                        ))}
-                    </details>
-                  )}
+                  <ol className="assessment-steps" aria-label={t.assessmentSetup}>
+                    {setupSteps.map((name, index) => (
+                      <li key={name}>
+                        <button
+                          type="button"
+                          aria-current={step === index ? 'step' : undefined}
+                          data-done={index < step || undefined}
+                          disabled={index > 0 && !materialReady}
+                          onClick={() => setStep(index)}
+                        >
+                          <span className="assessment-step-index" aria-hidden="true">
+                            {index < step ? <Check size={12} /> : index + 1}
+                          </span>
+                          <span>{t[`assessmentStep_${name}`]}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ol>
                   <section
-                    className="assessment-saved-evidence"
-                    aria-label={t.assessmentSavedEvidence}
+                    className="assessment-setup-card"
+                    aria-labelledby="assessment-step-title"
                   >
-                    <h4>
-                      {t.assessmentSavedEvidence} · {evidenceIds.length} / 6
-                    </h4>
-                    <p>
-                      {t.attachmentSelectedImages}: {evidence.flatMap(attachmentImages).length} / 48
-                      ·{' '}
-                      {(
-                        evidence
-                          .flatMap(attachmentImages)
-                          .reduce((sum, image) => sum + image.size, 0) /
-                        1024 /
-                        1024
-                      ).toFixed(2)}{' '}
-                      / 12 MB
-                    </p>
-                    <p className="muted">{t.assessmentEvidenceDisclosure}</p>
-                    {evidenceLoading && <LoadingRow>{t.loading}</LoadingRow>}
-                    {evidenceIds.map((id) => {
-                      const item = evidence.find((item) => item.id === id);
-                      return (
-                        <div className="question-attachment" key={id}>
-                          <Button disabled={!item} onClick={() => setInspectedEvidence(id)}>
-                            {item?.name || t.evidenceUnavailable}
-                            {item && (
-                              <small>
-                                {t.attachmentSelectedImages}: {attachmentImages(item).length}
-                                {item.annotationRevision
-                                  ? ` · ${t.revision} ${item.annotationRevision}`
-                                  : ''}
-                              </small>
-                            )}
-                          </Button>
-                          <Button
-                            aria-label={`${t.remove}: ${item?.name || t.evidenceUnavailable}`}
+                    <header className="assessment-step-header">
+                      <small>
+                        {t.assessmentStepProgress
+                          .replace('{n}', String(step + 1))
+                          .replace('{total}', String(setupSteps.length))}
+                      </small>
+                      <h3 id="assessment-step-title">{t[`assessmentStep_${setupSteps[step]}`]}</h3>
+                      <p>{t[`assessmentStepHint_${setupSteps[step]}`]}</p>
+                    </header>
+                    {setupSteps[step] === 'material' && (
+                      <>
+                        <div className="assessment-picker-heading">
+                          <span className="assessment-field-label">
+                            {t.assessmentIncludedFiles}
+                          </span>
+                          <span className="assessment-picker-actions">
+                            <span>
+                              {config.sourceIds.length} {t.selectedOf} {eligible.size}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                update({ ...config, sourceIds: [...eligible].slice(0, 40) })
+                              }
+                            >
+                              {t.assessmentSelectAll}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => update({ ...config, sourceIds: [] })}
+                            >
+                              {t.assessmentDeselectAll}
+                            </button>
+                          </span>
+                        </div>
+                        <label className="library-search">
+                          <Search size={14} />
+                          <input
+                            type="search"
+                            aria-label={t.assessmentSearchFiles}
+                            value={query}
+                            onChange={(e) => setQuery(e.target.value)}
+                            placeholder={t.search}
+                          />
+                        </label>
+                        <div className="assessment-file-picker">
+                          <DirectoryTree
+                            mode="filter"
+                            directories={catalog.directories}
+                            files={catalog.files.filter((file) => availableIds.has(file.id))}
+                            actions={actions}
+                            t={t}
+                            query={query}
+                            storageKey="tl:tree:assessments"
+                            selectedFileIds={new Set(config.sourceIds)}
+                            disabledFileIds={
+                              new Set(
+                                options
+                                  .filter((o) => !eligible.has(o.sourceId))
+                                  .map((o) => o.sourceId),
+                              )
+                            }
+                            fileStatuses={
+                              new Map(
+                                options
+                                  .filter((o) => !eligible.has(o.sourceId))
+                                  .map((o) => [
+                                    o.sourceId,
+                                    o.prepared ? t.assessmentStudyMore : t.assessmentPrepareFirst,
+                                  ]),
+                              )
+                            }
+                            fileCounts={new Map(options.map((o) => [o.sourceId, o.noteCount]))}
+                            toggleFile={(file, checked) =>
+                              update({
+                                ...config,
+                                sourceIds: checked
+                                  ? config.sourceIds.length < 40
+                                    ? [...config.sourceIds, file.id]
+                                    : config.sourceIds
+                                  : config.sourceIds.filter((id) => id !== file.id),
+                              })
+                            }
+                          />
+                        </div>
+                        <p className="assessment-helper">
+                          {t.assessmentFileLimit}{' '}
+                          <button
+                            type="button"
+                            disabled={busy}
+                            title={t.assessmentRefreshSources}
                             onClick={() => {
-                              const ids = evidenceIds.filter((value) => value !== id);
-                              update({ ...configRef.current, attachmentIds: ids });
-                              setEvidence((old) => old.filter((value) => value.id !== id));
+                              setError('');
+                              void loadOptions().catch((e) => setError((e as Error).message));
                             }}
                           >
-                            {t.remove}
-                          </Button>
-                        </div>
-                      );
-                    })}
-                    <Button
-                      disabled={busy || evidenceLoading || evidenceIds.length >= 6}
-                      onClick={() => setEvidencePicker(true)}
-                    >
-                      {t.assessmentAddEvidence}
-                    </Button>
-                    <p className="muted">{t.assessmentEvidenceLimits}</p>
-                  </section>
-                  <div className="assessment-config-grid">
-                    <label>
-                      {t.assessmentQuestionCount}
-                      <select
-                        value={config.count}
-                        onChange={(e) => update({ ...config, count: Number(e.target.value) })}
-                      >
-                        {assessmentCounts.map((n) => (
-                          <option key={n} value={n}>
-                            {n}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      {t.assessmentDifficulty}
-                      <select
-                        value={config.difficulty}
-                        onChange={(e) =>
-                          update({
-                            ...config,
-                            difficulty: e.target.value as AssessmentConfig['difficulty'],
-                          })
-                        }
-                      >
-                        {difficulties.map((value) => (
-                          <option key={value} value={value}>
-                            {t[`assessmentDifficulty_${value}`]}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-                  {history.some((row) => row.status === 'completed') && (
-                    <fieldset className="assessment-prior-reports">
-                      <legend>{t.assessmentUseReports}</legend>
-                      {history
-                        .filter((row) => row.status === 'completed')
-                        .map((row) => (
-                          <label key={row.id}>
-                            <input
-                              type="checkbox"
-                              checked={config.priorReportIds.includes(row.id)}
-                              disabled={
-                                config.priorReportIds.length >= 10 &&
-                                !config.priorReportIds.includes(row.id)
-                              }
-                              onChange={(e) =>
-                                update({
-                                  ...config,
-                                  priorReportIds: e.target.checked
-                                    ? [...config.priorReportIds, row.id]
-                                    : config.priorReportIds.filter((id) => id !== row.id),
-                                })
-                              }
-                            />
-                            <span>
-                              {row.title}{' '}
-                              <small>· {new Date(row.createdAt).toLocaleString()}</small>
+                            {t.assessmentRefreshShort}
+                          </button>
+                        </p>
+                        {options.some((o) => !o.prepared) && (
+                          <details className="assessment-unprepared">
+                            <summary>{t.assessmentUnpreparedFiles}</summary>
+                            {options
+                              .filter((o) => !o.prepared)
+                              .map((o) => (
+                                <Button
+                                  key={o.sourceId}
+                                  variant="ghost"
+                                  onClick={() => prepareFile(o.sourceId)}
+                                >
+                                  {t.assessmentOpenToPrepare}:{' '}
+                                  {catalog.files.find((file) => file.id === o.sourceId)?.name}
+                                </Button>
+                              ))}
+                          </details>
+                        )}
+                        <section
+                          className="assessment-saved-evidence"
+                          aria-label={t.assessmentSavedEvidence}
+                        >
+                          <div className="assessment-picker-heading">
+                            <span className="assessment-field-label">
+                              {t.assessmentSavedEvidence} <small>{t.optional}</small>
                             </span>
-                          </label>
-                        ))}
-                    </fieldset>
-                  )}
-                  <p className="muted">{t.assessmentDisclosure}</p>
-                  {!catalog.settings.configured && (
-                    <p className="notice">{t.assessmentKeyRequired}</p>
-                  )}
-                  <Button
-                    variant="primary"
-                    disabled={
-                      busy ||
-                      !!unfinished ||
-                      (!config.sourceIds.length && !evidenceIds.length) ||
-                      evidenceLoading ||
-                      evidenceIds.some((id) => !evidence.some((item) => item.id === id)) ||
-                      !catalog.settings.configured
-                    }
-                    onClick={() => void create()}
-                  >
-                    {busy ? t.assessmentPreparing : t.assessmentPrepare}
-                  </Button>
+                            <span className="assessment-picker-actions">
+                              <span>{evidenceIds.length} / 6</span>
+                              <span>
+                                {evidence.flatMap(attachmentImages).length} / 48 ·{' '}
+                                {(
+                                  evidence
+                                    .flatMap(attachmentImages)
+                                    .reduce((sum, image) => sum + image.size, 0) /
+                                  1024 /
+                                  1024
+                                ).toFixed(2)}{' '}
+                                / 12 MB
+                              </span>
+                            </span>
+                          </div>
+                          <p className="muted">{t.assessmentEvidenceDisclosure}</p>
+                          {evidenceLoading && <LoadingRow>{t.loading}</LoadingRow>}
+                          {evidenceIds.map((id) => {
+                            const item = evidence.find((item) => item.id === id);
+                            return (
+                              <div className="question-attachment" key={id}>
+                                <Button disabled={!item} onClick={() => setInspectedEvidence(id)}>
+                                  {item?.name || t.evidenceUnavailable}
+                                  {item && (
+                                    <small>
+                                      {t.attachmentSelectedImages}: {attachmentImages(item).length}
+                                      {item.annotationRevision
+                                        ? ` · ${t.revision} ${item.annotationRevision}`
+                                        : ''}
+                                    </small>
+                                  )}
+                                </Button>
+                                <Button
+                                  aria-label={`${t.remove}: ${item?.name || t.evidenceUnavailable}`}
+                                  onClick={() => {
+                                    const ids = evidenceIds.filter((value) => value !== id);
+                                    update({ ...configRef.current, attachmentIds: ids });
+                                    setEvidence((old) => old.filter((value) => value.id !== id));
+                                  }}
+                                >
+                                  {t.remove}
+                                </Button>
+                              </div>
+                            );
+                          })}
+                          <Button
+                            disabled={busy || evidenceLoading || evidenceIds.length >= 6}
+                            onClick={() => setEvidencePicker(true)}
+                          >
+                            <Plus size={14} />
+                            {t.assessmentAddEvidence}
+                          </Button>
+                          <p className="assessment-helper">{t.assessmentEvidenceLimits}</p>
+                        </section>
+                      </>
+                    )}
+                    {setupSteps[step] === 'focus' && (
+                      <>
+                        <label className="assessment-guidance">
+                          <span>
+                            {t.assessmentGuidance} <small>{t.optional}</small>
+                          </span>
+                          <textarea
+                            rows={4}
+                            value={config.guidance}
+                            maxLength={4000}
+                            onChange={(e) => update({ ...config, guidance: e.target.value })}
+                            placeholder={t.assessmentGuidanceHint}
+                          />
+                        </label>
+                        {completed.length > 0 && (
+                          <fieldset className="assessment-prior-reports">
+                            <legend>
+                              {t.assessmentUseReports} <small>{t.optional}</small>
+                            </legend>
+                            {completed.map((row) => (
+                              <label key={row.id} className="assessment-option-row">
+                                <input
+                                  type="checkbox"
+                                  checked={config.priorReportIds.includes(row.id)}
+                                  disabled={
+                                    config.priorReportIds.length >= 10 &&
+                                    !config.priorReportIds.includes(row.id)
+                                  }
+                                  onChange={(e) =>
+                                    update({
+                                      ...config,
+                                      priorReportIds: e.target.checked
+                                        ? [...config.priorReportIds, row.id]
+                                        : config.priorReportIds.filter((id) => id !== row.id),
+                                    })
+                                  }
+                                />
+                                <span>
+                                  {row.title}
+                                  <small>{new Date(row.createdAt).toLocaleString()}</small>
+                                </span>
+                              </label>
+                            ))}
+                          </fieldset>
+                        )}
+                      </>
+                    )}
+                    {setupSteps[step] === 'format' && (
+                      <>
+                        <fieldset className="assessment-choice-group">
+                          <legend>{t.assessmentQuestionCount}</legend>
+                          <div className="assessment-count-options">
+                            {assessmentCounts.map((n) => (
+                              <label key={n} className="assessment-count-option">
+                                <input
+                                  type="radio"
+                                  name="assessment-count"
+                                  value={n}
+                                  checked={config.count === n}
+                                  onChange={() => update({ ...config, count: n })}
+                                />
+                                <span>{n}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </fieldset>
+                        <fieldset className="assessment-choice-group">
+                          <legend>{t.assessmentDifficulty}</legend>
+                          <div className="assessment-difficulty-options">
+                            {difficulties.map((value) => (
+                              <label key={value} className="assessment-difficulty-option">
+                                <input
+                                  type="radio"
+                                  name="assessment-difficulty"
+                                  value={value}
+                                  checked={config.difficulty === value}
+                                  onChange={() => update({ ...config, difficulty: value })}
+                                />
+                                <span>
+                                  <strong>{t[`assessmentDifficulty_${value}`]}</strong>
+                                  <small>{t[`assessmentDifficultyHint_${value}`]}</small>
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                        </fieldset>
+                      </>
+                    )}
+                    {setupSteps[step] === 'review' && (
+                      <>
+                        <dl className="assessment-summary">
+                          <div>
+                            <dt>{t.assessmentIncludedFiles}</dt>
+                            <dd>
+                              {selectedNames.length
+                                ? `${selectedNames.slice(0, 3).join(', ')}${
+                                    selectedNames.length > 3
+                                      ? ` ${t.assessmentMoreFiles.replace('{n}', String(selectedNames.length - 3))}`
+                                      : ''
+                                  }`
+                                : t.assessmentNone}
+                            </dd>
+                            <button type="button" onClick={() => setStep(0)}>
+                              {t.edit}
+                            </button>
+                          </div>
+                          <div>
+                            <dt>{t.assessmentSavedEvidence}</dt>
+                            <dd>
+                              {evidence.length
+                                ? evidence.map((item) => item.name).join(', ')
+                                : t.assessmentNone}
+                            </dd>
+                            <button type="button" onClick={() => setStep(0)}>
+                              {t.edit}
+                            </button>
+                          </div>
+                          <div>
+                            <dt>{t.assessmentStep_focus}</dt>
+                            <dd className="assessment-summary-guidance">
+                              {config.guidance.trim() || t.assessmentNoGuidance}
+                              {config.priorReportIds.length > 0 && (
+                                <small>
+                                  {t.assessmentUseReports}: {config.priorReportIds.length}
+                                </small>
+                              )}
+                            </dd>
+                            <button type="button" onClick={() => setStep(1)}>
+                              {t.edit}
+                            </button>
+                          </div>
+                          <div>
+                            <dt>{t.assessmentStep_format}</dt>
+                            <dd>
+                              {config.count} {t.assessmentQuestions} ·{' '}
+                              {t[`assessmentDifficulty_${config.difficulty}`]}
+                            </dd>
+                            <button type="button" onClick={() => setStep(2)}>
+                              {t.edit}
+                            </button>
+                          </div>
+                        </dl>
+                        <p className="assessment-helper">{t.assessmentDisclosure}</p>
+                        {!catalog.settings.configured && (
+                          <p className="notice">{t.assessmentKeyRequired}</p>
+                        )}
+                      </>
+                    )}
+                    <footer className="assessment-wizard-footer">
+                      {step > 0 && (
+                        <Button variant="ghost" onClick={() => setStep(step - 1)}>
+                          <ChevronLeft size={14} />
+                          {t.back}
+                        </Button>
+                      )}
+                      {step === 0 && !materialReady && !evidenceLoading && (
+                        <small>{t.assessmentNeedsMaterial}</small>
+                      )}
+                      {step < setupSteps.length - 1 ? (
+                        <Button
+                          variant="primary"
+                          disabled={!materialReady}
+                          onClick={() => setStep(step + 1)}
+                        >
+                          {t.assessmentNext}
+                          <ChevronRight size={14} />
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="primary"
+                          disabled={
+                            busy || !!unfinished || !materialReady || !catalog.settings.configured
+                          }
+                          onClick={() => void create()}
+                        >
+                          {busy ? t.assessmentPreparing : t.assessmentPrepare}
+                        </Button>
+                      )}
+                    </footer>
+                  </section>
                 </div>
               )}
             </>
@@ -601,7 +748,14 @@ export function AssessmentWorkspace({
             </Button>
           </div>
           {selected && (
-            <Button variant="ghost" size="sm" onClick={() => choose(null)}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setStep(0);
+                choose(null);
+              }}
+            >
               <Plus size={14} />
               {t.assessmentNew}
             </Button>
