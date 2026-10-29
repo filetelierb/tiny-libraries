@@ -211,7 +211,7 @@ function operations(
 ) {
   return {
     owner: 'worker-one',
-    settings: { configured: true, locale: 'en' as const, model: 'test' },
+    settings: { configured: true, locale: 'en' as const, model: 'test', webAuto: false },
     start: (p: Promise<void>) => {
       tasks.push(p);
     },

@@ -107,13 +107,14 @@ export type MuseTurnOptions = {
 };
 export type MuseEngine = {
   available(): Promise<boolean>;
-  run(id: string, options: MuseTurnOptions): Promise<string>;
+  run(id: string, options: MuseTurnOptions): Promise<{ text: string; webSearched: boolean }>;
 };
 
 /**
  * Runs one tutor reply as a Muse Code turn in its own host process. The Meta key reaches the
  * host only through its environment; the library tools are the Worker's MCP endpoint for this
- * reply, and shell, file writes, web tools and delegation are off.
+ * reply, plus Meta's hosted web search when the question may use it; shell, file writes, web
+ * fetching and delegation are off.
  */
 export function museEngine(root: string): MuseEngine {
   let checked: { at: number; status: Promise<MuseStatus> } | undefined;
@@ -124,6 +125,8 @@ export function museEngine(root: string): MuseEngine {
       return (await checked.status).available;
     },
     async run(id, { credential, body, signal, onText }) {
+      const web = !!(body.webSearch || body.webAuto);
+      let webSearched = false;
       const workspace = join(root, 'turns', id),
         home = join(root, 'home');
       await mkdir(join(home, '.config'), { recursive: true, mode: 0o700 });
@@ -159,11 +162,11 @@ export function museEngine(root: string): MuseEngine {
             '--disable-request-user-input',
             ...[
               `run.developer_prompt=${toml(developerPrompt)}`,
-              `run.toolset=${toml(toolNames(body).map((name) => `mcp__library__${name}`))}`,
+              `run.toolset=${toml([...toolNames(body).map((name) => `mcp__library__${name}`), ...(web ? ['web_search'] : [])])}`,
               'run.reminder_roster=[]',
               'run.subagent_delegation_mode="off"',
               'run.workflow_trigger_mode="off"',
-              'tools.web_search.mode="off"',
+              `tools.web_search.mode="${web ? 'hosted' : 'off'}"`,
               'tools.web_fetch.enabled=false',
             ].flatMap((setting) => ['-c', setting]),
           ],
@@ -211,6 +214,7 @@ export function museEngine(root: string): MuseEngine {
             for await (const item of turn.items() as AsyncIterable<FoldedItem>) {
               const known = kinds.has(item.itemId);
               kinds.set(item.itemId, String(item.kind));
+              if (item.kind === 'webSearch') webSearched = true;
               const buffered = early.get(item.itemId) || '';
               early.delete(item.itemId);
               if (item.kind !== 'agentMessage') continue;
@@ -253,7 +257,7 @@ export function museEngine(root: string): MuseEngine {
             );
           }
           if (!answer?.trim()) throw new Error('The agent finished without a reply');
-          return answer;
+          return { text: answer, webSearched };
         } catch (error) {
           if (error instanceof MuseRejection || signal.aborted) throw error;
           const detail = stderr.join('').trim().split('\n').at(-1);

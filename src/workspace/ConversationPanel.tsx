@@ -49,7 +49,7 @@ import {
   type TutorDraft,
   type TutorSubmission,
 } from '../tutor/turnDrafts';
-import { TurnProgress, TurnOutbox } from '../tutor/TurnProgress';
+import { TurnProgress, TurnOutbox, tutorToolLabel } from '../tutor/TurnProgress';
 import { Badge, Button, IconButton, Modal, LoadingRow } from '../design/components';
 import type { T } from '../i18n';
 import { DirectoryTree, RESOURCE_DRAG_TYPE, type TreeActions } from './DirectoryTree';
@@ -1243,22 +1243,7 @@ function ConversationThread({
                 {message.tools?.length ? (
                   <small>
                     {t.toolsUsed}:{' '}
-                    {[...new Set(message.tools)]
-                      .map(
-                        (tool) =>
-                          (
-                            ({
-                              read_segments: t.toolReadSegments,
-                              practice_summary: t.toolPracticeSummary,
-                              list_concepts: t.toolListConcepts,
-                              read_concepts: t.toolReadConcepts,
-                              create_bookmark: t.toolCreateBookmark,
-                              save_artifact: t.toolSaveArtifact,
-                              web_search: t.toolWebSearch,
-                            }) as Record<string, string>
-                          )[tool] || t.studyTool,
-                      )
-                      .join(', ')}
+                    {[...new Set(message.tools)].map((tool) => tutorToolLabel(tool, t)).join(', ')}
                   </small>
                 ) : null}
                 {message.generation && (

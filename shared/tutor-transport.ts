@@ -31,6 +31,8 @@ export const tutorCompletionSchema = z
     tools: z.array(z.unknown()).max(40).optional(),
     reasoning_effort: reasoningEffortSchema.exclude(['auto']).optional(),
     webSearch: z.literal(true).optional(),
+    /** The agent may search the web when the library does not cover the question. */
+    webAuto: z.literal(true).optional(),
     /** The Worker's tool endpoint for this reply, when the tutor may run as a Muse Code agent. */
     muse: z
       .object({

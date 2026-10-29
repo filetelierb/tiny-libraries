@@ -2747,6 +2747,7 @@ function SettingsModal({
   const [key, setKey] = useState(''),
     [locale, setLocale] = useState(initial.locale),
     [model, setModel] = useState(initial.model),
+    [webAuto, setWebAuto] = useState(initial.webAuto),
     [pending, setPending] = useState(false),
     [status, setStatus] = useState<'settingsSaved' | 'keyRemoved' | null>(null);
   return (
@@ -2758,7 +2759,7 @@ function SettingsModal({
           e.preventDefault();
           setPending(true);
           try {
-            await save({ locale, model, ...(key.trim() ? { apiKey: key.trim() } : {}) });
+            await save({ locale, model, webAuto, ...(key.trim() ? { apiKey: key.trim() } : {}) });
             setKey('');
             setStatus('settingsSaved');
           } catch (e) {
@@ -2797,6 +2798,17 @@ function SettingsModal({
             </select>
           </label>
         </div>
+        <label className="settings-check">
+          <input
+            type="checkbox"
+            checked={webAuto}
+            onChange={(event) => setWebAuto(event.target.checked)}
+          />
+          <span>
+            {t.webAuto}
+            <small>{t.webAutoHint}</small>
+          </span>
+        </label>
         <p className="credential-notice">{t.keyStorage}</p>
         {status && (
           <p role="status" className="success-text">

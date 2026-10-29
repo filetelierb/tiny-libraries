@@ -36,6 +36,9 @@ export function tutorToolLabel(name: string, t: T) {
         list_concepts: t.toolListConcepts,
         read_concepts: t.toolReadConcepts,
         create_bookmark: t.toolCreateBookmark,
+        save_artifact: t.toolSaveArtifact,
+        search_glossary: t.toolSearchGlossary,
+        save_concept: t.toolSaveConcept,
         web_search: t.toolWebSearch,
       } as Record<string, string>
     )[name] || t.studyTool

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { StudyMarkdown } from '../study/StudyMarkdown';
+import { SenseBasis } from '../glossary/SenseBasis';
 import type { ConceptMention } from '../../shared/tutor-context';
 import type { Catalog, ConceptSource, PublicLearning, Segment } from '../../shared/domain';
 import type { GlossaryEntry } from '../../shared/glossary';
@@ -124,6 +125,7 @@ export function ConceptInspector({
             <div className="glossary-definition">
               <StudyMarkdown t={t}>{sense.definition}</StudyMarkdown>
             </div>
+            <SenseBasis t={t} sense={sense} />
             {!!sense.sources.length && (
               <div>
                 <h5>{t.sourceReferences}</h5>

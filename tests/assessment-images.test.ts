@@ -246,7 +246,7 @@ function operations(
 ) {
   return {
     owner: 'first-runtime',
-    settings: { configured: true, locale: 'en' as const, model: 'test' },
+    settings: { configured: true, locale: 'en' as const, model: 'test', webAuto: false },
     start: (task: Promise<void>) => {
       tasks.push(task);
     },

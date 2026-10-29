@@ -194,8 +194,7 @@ export class TutorTransport {
         createdAt: now,
         updatedAt: now,
       };
-      // Web questions use Meta's hosted search, which the agent host does not offer.
-      const agent = !!body.muse && !body.webSearch && !!(await this.muse?.available());
+      const agent = !!body.muse && !!(await this.muse?.available());
       await this.publish(accepted);
       const active: Active = {
         controller: new AbortController(),
@@ -240,7 +239,7 @@ export class TutorTransport {
           { muse } = body;
         if (!muse || !this.muse) throw new Error('The agent host is unavailable');
         let pending: Promise<unknown> | undefined;
-        const text = await this.muse.run(id, {
+        const { text, webSearched } = await this.muse.run(id, {
           credential,
           body: { ...body, muse },
           signal: AbortSignal.any([active.controller.signal, AbortSignal.timeout(this.timeoutMs)]),
@@ -259,9 +258,14 @@ export class TutorTransport {
           throw new Error('Reply exceeds the text limit. Partial text is retained.');
         reply.text = text;
         await pending;
-        await this.update(id, active, { status: 'completed', result: { content: text } });
+        await this.update(id, active, {
+          status: 'completed',
+          result: { content: text, ...(webSearched ? { webSearched: true } : {}) },
+        });
         return;
       }
+      // Agent-only fields never reach the model API.
+      const { muse: _endpoint, webAuto: _web, ...request } = body;
       const response = await this.provider(
         body.webSearch
           ? 'https://api.meta.ai/v1/responses'
@@ -270,7 +274,7 @@ export class TutorTransport {
           method: 'POST',
           headers: { Authorization: `Bearer ${credential}`, 'Content-Type': 'application/json' },
           body: JSON.stringify(
-            body.webSearch ? webResponsesRequest(body) : { ...body, stream: true },
+            body.webSearch ? webResponsesRequest(request) : { ...request, stream: true },
           ),
           signal: AbortSignal.any([active.controller.signal, AbortSignal.timeout(this.timeoutMs)]),
         },

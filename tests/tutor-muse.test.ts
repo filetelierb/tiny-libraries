@@ -45,7 +45,7 @@ async function waitFor(
 }
 function engine(available = true) {
   const runs: MuseTurnOptions[] = [];
-  let finish!: (text: string) => void;
+  let finish!: (value: { text: string; webSearched: boolean }) => void;
   const value: MuseEngine = {
     available: async () => available,
     run: (_id, options) => {
@@ -56,7 +56,11 @@ function engine(available = true) {
       });
     },
   };
-  return { value, runs, finish: (text: string) => finish(text) };
+  return {
+    value,
+    runs,
+    finish: (text: string, webSearched = false) => finish({ text, webSearched }),
+  };
 }
 
 test('the agent sees the instructions, the conversation, the question and its images', () => {
@@ -89,9 +93,12 @@ test('a reply runs as an agent turn, relays its text and completes with the answ
   assert.equal(host.runs[0].credential, credential);
   host.runs[0].onText('Looking at the figure');
   await waitFor(manager, id, (value) => value.text === 'Looking at the figure');
-  host.finish('It shows aliasing [s1].');
+  host.finish('It shows aliasing [s1] and [a page](https://example.org).', true);
   const done = await waitFor(manager, id, (value) => value.status === 'completed');
-  assert.deepEqual(done.result, { content: 'It shows aliasing [s1].' });
+  assert.deepEqual(done.result, {
+    content: 'It shows aliasing [s1] and [a page](https://example.org).',
+    webSearched: true,
+  });
   assert.deepEqual(done.toolNames, []);
 });
 
@@ -114,19 +121,21 @@ test('Stop ends the agent turn and keeps its partial text', async (t) => {
   assert.equal(host.runs[0].signal.aborted, true);
 });
 
-test('web questions and a missing agent host use the direct model stream', async (t) => {
+test('without an agent host, replies use the direct model stream and its fields only', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'tutor-muse-direct-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   for (const [name, available, body] of [
-    ['unavailable', false, request],
-    ['web', true, { ...request, tools: undefined, webSearch: true as const }],
+    ['unavailable', false, { ...request, webAuto: true as const }],
+    ['web', false, { ...request, tools: undefined, webSearch: true as const }],
   ] as const) {
     const host = engine(available);
-    let called = '';
+    let called = '',
+      sent = '';
     const manager = new TutorTransport(
       join(root, name),
-      async (url) => {
+      async (url, options) => {
         called = url;
+        sent = String(options.body);
         throw new Error('Synthetic offline provider');
       },
       undefined,
@@ -138,6 +147,7 @@ test('web questions and a missing agent host use the direct model stream', async
     await waitFor(manager, id, (value) => value.status === 'interrupted');
     assert.equal(host.runs.length, 0);
     assert.match(called, name === 'web' ? /\/responses$/ : /\/chat\/completions$/);
+    assert.doesNotMatch(sent, /tutor-tools|webAuto/);
     await manager.shutdown();
   }
 });

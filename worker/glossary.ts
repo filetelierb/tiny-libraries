@@ -13,9 +13,12 @@ import {
   mergeGlossaryEntries,
   orphanConcepts,
   sameSource,
+  uniqueNames,
   uniqueSources,
   conceptOrigins,
+  type ConceptLink,
   type ConceptOrigin,
+  type GlossarySense,
   type GlossaryEntry,
   type GlossaryInput,
   type GlossarySummary,
@@ -338,7 +341,11 @@ async function validateInput(tx: Store, input: GlossaryInput, previous?: Glossar
     }
   }
 }
-export async function saveConcept(storage: GlossaryStorage, input: GlossaryInput) {
+export async function saveConcept(
+  storage: GlossaryStorage,
+  input: GlossaryInput,
+  origin: ConceptOrigin = 'manual',
+) {
   await ensureGlossary(storage);
   const hash = await fingerprint(input);
   return storage.transaction(async (tx) => {
@@ -359,7 +366,7 @@ export async function saveConcept(storage: GlossaryStorage, input: GlossaryInput
       reviewed: false,
       sources: [],
       proposals: previous?.proposals || [],
-      origin: previous ? previous.origin : 'manual',
+      origin: previous ? previous.origin : origin,
       updatedAt: new Date().toISOString(),
     });
     await writeEntry(tx, value, previous);
@@ -399,6 +406,121 @@ export async function ingestGeneratedConcept(
   });
 }
 /** A concept the tutor saves at the student's request, with the evidence it cited, if any. */
+/** Concepts whose name, aliases or linked synonyms contain the query, with their meanings. */
+export async function searchConcepts(storage: GlossaryStorage, query: string, limit = 6) {
+  await ensureGlossary(storage);
+  const all = [...(await storage.list<GlossarySummary>({ prefix: 'concept-summary:' })).values()];
+  const found = all.flatMap((summary) => {
+    if (summary.archived || summary.mergedInto) return [];
+    const match = matchConcept(summary, query, all);
+    return match ? [{ summary, rank: match === 'title' ? 0 : 1 }] : [];
+  });
+  found.sort((a, b) => a.rank - b.rank || a.summary.term.length - b.summary.term.length);
+  const entries: GlossaryEntry[] = [];
+  for (const { summary } of found.slice(0, limit)) {
+    const entry = await storage.get<GlossaryEntry>(entryKey(summary.id));
+    if (entry) entries.push(normalizeConcept(entry));
+  }
+  return entries;
+}
+export type TutorConceptChange = {
+  action: 'create' | 'refine' | 'add_sense' | 'add_evidence';
+  mutationId: string;
+  term?: string;
+  conceptId?: string;
+  version?: number;
+  senseId?: string;
+  label?: string;
+  definition?: string;
+  aliases?: string[];
+  sources: ConceptSource[];
+  basis: 'library' | 'web' | 'general';
+  links: ConceptLink[];
+};
+/**
+ * The tutor's glossary edits. A meaning someone reviewed keeps its definition; it can only gain
+ * evidence or a sibling meaning. A name already in the glossary is never created twice.
+ */
+export async function saveTutorConcept(storage: GlossaryStorage, change: TutorConceptChange) {
+  await ensureGlossary(storage);
+  const fail = (message: string, status = 409) => {
+    throw new GlossaryError(message, status);
+  };
+  let previous: GlossaryEntry | undefined;
+  if (change.action === 'create') {
+    const name = change.term?.trim();
+    if (!name || !change.definition) fail('A new concept needs a term and a definition', 400);
+    const existing = await storage.get<string>(`concept-name:${conceptKey(name!)}`);
+    if (existing) {
+      const entry = await resolveEntry(storage, existing);
+      fail(
+        `"${entry?.term || name}" is already in the glossary as ${entry?.id} version ${entry?.version}. Read it with search_glossary, then refine it, add a meaning or add evidence.`,
+      );
+    }
+  } else {
+    previous = change.conceptId
+      ? await storage.get<GlossaryEntry>(entryKey(change.conceptId))
+      : undefined;
+    if (!previous || previous.archived) fail('Concept not found', 404);
+  }
+  const entry = previous ? normalizeConcept(previous) : undefined;
+  const meaning = (definition: string, label = '') => ({
+    id: crypto.randomUUID(),
+    label,
+    definition,
+    reviewed: false,
+    synonyms: [],
+    sources: uniqueSources(change.sources),
+    relations: [],
+    basis: change.basis,
+    ...(change.links.length ? { links: change.links } : {}),
+  });
+  const links = (old: ConceptLink[] = []) => {
+    const merged = [...old, ...change.links].filter(
+      (link, i, all) => all.findIndex((other) => other.url === link.url) === i,
+    );
+    return merged.length ? { links: merged.slice(0, 10) } : {};
+  };
+  let senses: GlossarySense[];
+  if (change.action === 'create') senses = [meaning(change.definition!)];
+  else if (change.action === 'add_sense') {
+    if (!change.definition) fail('A new meaning needs a definition', 400);
+    if (entry!.senses.length >= 20) fail('This concept already has twenty meanings');
+    senses = [...entry!.senses, meaning(change.definition!, change.label?.trim() || '')];
+  } else {
+    const target = entry!.senses.find((s) => s.id === change.senseId);
+    if (!target) fail('Meaning not found; read the concept again', 404);
+    if (change.action === 'refine' && target!.reviewed)
+      fail('A reviewed meaning keeps its definition. Add evidence or a new meaning instead.');
+    if (change.action === 'refine' && !change.definition)
+      fail('A refined meaning needs its new definition', 400);
+    senses = entry!.senses.map((sense) =>
+      sense.id !== target!.id
+        ? sense
+        : {
+            ...sense,
+            ...(change.action === 'refine'
+              ? { definition: change.definition!, basis: change.basis }
+              : {}),
+            sources: uniqueSources([...sense.sources, ...change.sources]).slice(0, 30),
+            ...links(sense.links),
+          },
+    );
+  }
+  const input = glossaryInputSchema.parse({
+    id: entry?.id || crypto.randomUUID(),
+    term: entry?.term || change.term!.trim(),
+    version: entry ? (change.version ?? entry.version) : 0,
+    archived: false,
+    aliases: uniqueNames(
+      [...(entry?.aliases || []), ...(change.aliases || [])],
+      entry?.term || change.term,
+    ).slice(0, 40),
+    senses,
+    mutationId: change.mutationId,
+  });
+  return saveConcept(storage, input, 'chat');
+}
 export async function saveChatConcept(
   storage: GlossaryStorage,
   input: { term: string; definition: string; sources: ConceptSource[] },

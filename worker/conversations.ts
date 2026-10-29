@@ -193,7 +193,7 @@ async function prepareIntent(
     canCreateBookmark: true,
     canSaveArtifact: true,
     canSaveConcept: true,
-    ...(input.webSearch ? { webSearch: true } : {}),
+    ...(input.webSearch ? { webSearch: true } : settings.webAuto ? { webAuto: true } : {}),
   };
   const objects = new TutorObjects(
     {

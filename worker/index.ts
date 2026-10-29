@@ -84,11 +84,17 @@ import {
   GlossaryError,
   deleteConcepts,
   ingestLearning,
-  saveChatConcept,
+  saveTutorConcept,
+  searchConcepts,
   conceptIndex,
   conceptContexts,
 } from './glossary';
-import { conceptSourceSchema, conceptsOnlyIn, type GlossaryEntry } from '../shared/glossary';
+import {
+  conceptLinkSchema,
+  conceptSourceSchema,
+  conceptsOnlyIn,
+  type GlossaryEntry,
+} from '../shared/glossary';
 import {
   changeDirectory,
   ensureDirectories,
@@ -191,6 +197,7 @@ export class Library extends DurableObject<Env> {
       configured: !!key,
       locale: (await this.ctx.storage.get<'en' | 'es'>('locale')) || 'en',
       model: (await this.ctx.storage.get<string>('model')) || 'muse-spark-1.3',
+      webAuto: (await this.ctx.storage.get<boolean>('webAuto')) ?? true,
       ...(key ? { keySuffix: key.slice(-4) } : {}),
     };
   }
@@ -238,15 +245,37 @@ export class Library extends DurableObject<Env> {
         const value = z
           .object({
             conversationId: z.string().min(1).max(200),
-            term: z.string().trim().min(1).max(200),
-            definition: z.string().trim().min(1).max(6000),
+            action: z.enum(['create', 'refine', 'add_sense', 'add_evidence']),
+            mutationId: z.string().uuid(),
+            term: z.string().trim().min(1).max(200).optional(),
+            conceptId: z.string().uuid().optional(),
+            version: z.number().int().nonnegative().optional(),
+            senseId: z.string().min(1).max(100).optional(),
+            label: z.string().trim().max(160).optional(),
+            definition: z.string().trim().min(1).max(6000).optional(),
+            aliases: z.array(z.string().trim().min(1).max(200)).max(10).optional(),
             sources: z.array(conceptSourceSchema).max(8),
+            basis: z.enum(['library', 'web', 'general']),
+            links: z.array(conceptLinkSchema).max(10),
           })
           .parse(await boundedJson(request));
         if (!(await this.ctx.storage.get(`conversation:${value.conversationId}`)))
           throw new ApiError('Conversation not found', 404);
-        const saved = await saveChatConcept(this.ctx.storage, value);
-        return json({ saved: true, id: saved.id, term: saved.term, version: saved.version });
+        const { conversationId: _, ...change } = value;
+        const saved = await saveTutorConcept(this.ctx.storage, change);
+        return json({
+          saved: true,
+          id: saved.id,
+          term: saved.term,
+          version: saved.version,
+          senses: saved.senses.map((sense) => ({ id: sense.id, label: sense.label })),
+        });
+      }
+      if (path === '/internal/tutor-glossary-search' && request.method === 'POST') {
+        const { query } = z
+          .object({ query: z.string().trim().min(1).max(200) })
+          .parse(await boundedJson(request));
+        return json({ entries: await searchConcepts(this.ctx.storage, query) });
       }
       if (path === '/internal/tutor-bookmark' && request.method === 'POST') {
         const value = z
@@ -414,12 +443,14 @@ export class Library extends DurableObject<Env> {
             removeKey: z.boolean().optional(),
             locale: localeSchema.optional(),
             model: z.enum(['muse-spark-1.3', 'muse-wonder-1.0']).optional(),
+            webAuto: z.boolean().optional(),
           })
           .parse(await boundedJson(request));
         if (value.removeKey) await this.ctx.storage.delete('apiKey');
         else if (value.apiKey) await this.ctx.storage.put('apiKey', value.apiKey);
         if (value.locale) await this.ctx.storage.put('locale', value.locale);
         if (value.model) await this.ctx.storage.put('model', value.model);
+        if (value.webAuto !== undefined) await this.ctx.storage.put('webAuto', value.webAuto);
         return json(await this.settings());
       }
       if (path === '/internal/file') {

@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { StudyMarkdown } from '../study/StudyMarkdown';
+import { SenseBasis } from './SenseBasis';
 import {
   Plus,
   ArrowLeft,
@@ -544,6 +545,7 @@ export function GlossaryPanel({
             <div className="glossary-definition">
               <StudyMarkdown t={t}>{sense.definition}</StudyMarkdown>
             </div>
+            <SenseBasis t={t} sense={sense} />
             {!!sense.synonyms.length && (
               <div>
                 <h4>{t.linkedSynonyms}</h4>

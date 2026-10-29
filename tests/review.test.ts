@@ -162,7 +162,7 @@ async function generate(
     { requestId: id, sessionId, sourceId, attemptIds: [attempt.id] },
     {
       owner,
-      settings: { configured: true, locale: 'en', model: 'test' },
+      settings: { configured: true, locale: 'en', model: 'test', webAuto: false },
       generate: callback,
       start: (task) => {
         tasks.push(task);
@@ -181,7 +181,7 @@ test('review scopes include session files and linked conversation sources withou
     sessions: [session],
     attempts: [],
     concepts: [],
-    settings: { configured: false, locale: 'en', model: 'test' },
+    settings: { configured: false, locale: 'en', model: 'test', webAuto: false },
     conversations: [
       {
         id: 'chat',
@@ -264,7 +264,7 @@ test('changed requests, ambiguous results and unversioned evidence cannot start 
         { requestId: id, sessionId, sourceId, attemptIds: [crypto.randomUUID()] },
         {
           owner: 'worker-one',
-          settings: { configured: true, locale: 'en', model: 'test' },
+          settings: { configured: true, locale: 'en', model: 'test', webAuto: false },
           start: () => assert.fail(),
           generate: async () => plan(),
         },
@@ -380,7 +380,7 @@ test('concurrent report requests have one generation owner and cannot duplicate 
   const input = { requestId: id, sessionId, sourceId, attemptIds: [attempt.id] };
   const options = {
     owner: 'worker-one',
-    settings: { configured: true, locale: 'en' as const, model: 'test' },
+    settings: { configured: true, locale: 'en' as const, model: 'test', webAuto: false },
     start: (task: Promise<void>) => {
       tasks.push(task);
     },

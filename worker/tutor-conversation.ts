@@ -6,7 +6,18 @@ import { z } from 'zod';
 import { TutorJournal, TutorJournalError } from './tutor-journal';
 import { TutorRunner, type TutorRunnerServices } from './tutor-runner';
 import { tutorMcp } from './tutor-mcp';
+import { ToolRejection } from './tutor-agent';
+import type { GlossaryEntry } from '../shared/glossary';
 
+/** A UUID-shaped identity derived from a stable name. */
+async function stableId(name: string) {
+  const hex = [
+    ...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(name))),
+  ]
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}
 /** A reply's tool token, derivable only with the bridge secret. */
 async function toolToken(secret: string, conversationId: string, providerId: string) {
   const key = await crypto.subtle.importKey(
@@ -141,7 +152,9 @@ export class TutorConversation extends DurableObject<Env> {
     );
     if (!response.ok) {
       const value = await response.json<{ error?: string }>();
-      throw new Error(value.error || 'Library operation failed');
+      const message = value.error || 'Library operation failed';
+      // Refusals the agent can correct come back to it; anything else interrupts the reply.
+      throw response.status < 500 ? new ToolRejection(message) : new Error(message);
     }
     return response.json<T>();
   }
@@ -200,11 +213,19 @@ export class TutorConversation extends DurableObject<Env> {
           conversationId: record.conversationId,
           requestId: `${record.id}:r${record.intentRevision}`,
         }),
-      concept: (record, _intent, value) =>
+      concept: async (record, _intent, { callId, ...value }) =>
         this.library('/internal/tutor-concept', {
           ...value,
           conversationId: record.conversationId,
+          // A retried call repeats its change instead of applying it twice.
+          mutationId: await stableId(`${record.id}:r${record.intentRevision}:${callId}`),
         }),
+      glossary: async (query) =>
+        (
+          await this.library<{ entries: GlossaryEntry[] }>('/internal/tutor-glossary-search', {
+            query,
+          })
+        ).entries,
       muse: async (providerId) => {
         const id = this.ctx.id.name!;
         return {

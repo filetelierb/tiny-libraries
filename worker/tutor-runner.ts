@@ -12,7 +12,9 @@ import {
   type ArtifactWriter,
   type BookmarkWriter,
   type ConceptWriter,
+  type GlossaryReader,
 } from './tutor-agent';
+import type { GlossaryEntry } from '../shared/glossary';
 import { TutorJournal } from './tutor-journal';
 import { parseTutorAnswer, visibleTutorText } from '../shared/study-note';
 
@@ -36,6 +38,8 @@ export type TutorRunnerServices = {
     intent: TurnIntent,
     input: Parameters<ConceptWriter>[0],
   ): Promise<unknown>;
+  /** Searches the whole glossary. */
+  glossary?(query: string): Promise<GlossaryEntry[]>;
   /** The tool endpoint for a reply that may run as a Muse Code agent. */
   muse?(providerId: string): Promise<TutorCompletion['muse']>;
 };
@@ -47,7 +51,12 @@ export function turnWriters(
   services: TutorRunnerServices,
   record: TurnRecord,
   intent: TurnIntent,
-): [BookmarkWriter, ArtifactWriter | undefined, ConceptWriter | undefined] {
+): [
+  BookmarkWriter,
+  ArtifactWriter | undefined,
+  ConceptWriter | undefined,
+  GlossaryReader | undefined,
+] {
   const guard = async () => {
     const current = await journal.active();
     if (!current || current.id !== record.id || current.stopRequested || current.steering.length)
@@ -70,6 +79,7 @@ export function turnWriters(
         await guard();
         return concept(record, intent, value);
       }),
+    services.glossary?.bind(services),
   ];
 }
 
@@ -197,7 +207,9 @@ export class TutorRunner {
           ...(await this.message(record, result.text)),
           tools: result.tools,
           citations: result.citations,
-          ...(intent.input.webSearch ? { webSearched: result.webSearched === true } : {}),
+          ...(intent.input.webSearch || result.webSearched
+            ? { webSearched: result.webSearched === true }
+            : {}),
         });
         return;
       }

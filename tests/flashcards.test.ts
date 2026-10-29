@@ -77,7 +77,7 @@ async function create(
     { sourceVersion: 1, learningVersion: learning.createdAt, chapterIds: chapters },
     {
       owner,
-      settings: { configured: true, locale: 'en', model: 'test' },
+      settings: { configured: true, locale: 'en', model: 'test', webAuto: false },
       generate,
       start: (task) => {
         tasks.push(task);
@@ -147,7 +147,7 @@ test('duplicate creation does not start a second request and invalid evidence is
   });
   const options = {
     owner: 'worker-one',
-    settings: { configured: true, locale: 'en' as const, model: 'test' },
+    settings: { configured: true, locale: 'en' as const, model: 'test', webAuto: false },
     start: (p: Promise<void>) => {
       tasks.push(p);
     },

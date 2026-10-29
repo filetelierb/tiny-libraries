@@ -350,6 +350,8 @@ const en = {
   conceptAttachmentNotice: 'These saved definitions are included for one question.',
   removeConcept: 'Remove concept',
   toolReadConcepts: 'Read saved concept definitions',
+  toolSearchGlossary: 'Searched the glossary',
+  toolSaveConcept: 'Updated the glossary',
   recoveredCitationNotice: 'Verified against the current prepared source',
   savedSourceCitation: 'Saved source excerpt',
   conceptAnalysisReady: 'Ready',
@@ -917,6 +919,11 @@ const en = {
   explore: 'Explore without AI',
   language: 'Interface language',
   model: 'Analysis model',
+  webAuto: 'Let the tutor search the web',
+  basisWeb: 'Written by the tutor from web pages.',
+  basisGeneral: 'Written by the tutor from general knowledge, not from your files.',
+  webAutoHint:
+    'When your files and glossary do not cover a question, the tutor may send search queries based on it to Meta and lists external sources separately.',
   keyStorage:
     'The key is stored in local celld data and never returned to the browser. Local data is not encrypted at rest; protect your device and backups.',
   replaceKey: 'Replace key',
@@ -1488,6 +1495,8 @@ const es: Dictionary = {
   conceptAttachmentNotice: 'Estas definiciones guardadas se incluyen en una sola pregunta.',
   removeConcept: 'Quitar concepto',
   toolReadConcepts: 'Leer definiciones guardadas',
+  toolSearchGlossary: 'Buscó en el glosario',
+  toolSaveConcept: 'Actualizó el glosario',
   recoveredCitationNotice: 'Verificado con el recurso preparado actual',
   savedSourceCitation: 'Fragmento de fuente guardado',
   conceptAnalysisReady: 'Listo',
@@ -2064,6 +2073,11 @@ const es: Dictionary = {
   explore: 'Explorar sin IA',
   language: 'Idioma de la interfaz',
   model: 'Modelo de análisis',
+  webAuto: 'Permitir que el tutor busque en la web',
+  basisWeb: 'Escrito por el tutor a partir de páginas web.',
+  basisGeneral: 'Escrito por el tutor con conocimiento general, no a partir de tus archivos.',
+  webAutoHint:
+    'Cuando tus archivos y el glosario no cubren una pregunta, el tutor puede enviar a Meta búsquedas basadas en ella y muestra las fuentes externas aparte.',
   keyStorage:
     'La clave se guarda en los datos locales de celld y nunca se devuelve al navegador. Los datos locales no están cifrados; protege tu dispositivo y copias.',
   replaceKey: 'Cambiar clave',

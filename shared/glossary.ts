@@ -65,6 +65,15 @@ export const conceptSourceSchema = z.object({
   endSeconds: z.number().nonnegative().optional(),
 });
 const nameSchema = z.string().trim().min(1).max(200);
+export const conceptLinkSchema = z.object({
+  url: z
+    .string()
+    .url()
+    .max(2000)
+    .refine((url) => url.startsWith('https://'), 'Use an https link'),
+  title: z.string().trim().max(300),
+});
+export type ConceptLink = z.infer<typeof conceptLinkSchema>;
 export const glossarySenseSchema = z.object({
   id: z.string().min(1).max(100),
   label: z.string().trim().max(160),
@@ -78,6 +87,9 @@ export const glossarySenseSchema = z.object({
     )
     .max(30)
     .default([]),
+  /** What a meaning rests on when the tutor wrote it: the library, web pages or general knowledge. */
+  basis: z.enum(['library', 'web', 'general']).optional(),
+  links: z.array(conceptLinkSchema).max(10).optional(),
 });
 export type GlossarySense = z.infer<typeof glossarySenseSchema>;
 export const glossaryInputSchema = z.object({

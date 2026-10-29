@@ -19,6 +19,8 @@ import {
   ingestGeneratedConcept,
   ingestLearning,
   saveChatConcept,
+  saveTutorConcept,
+  searchConcepts,
   deleteConcepts,
   saveConcept,
   conceptIndex,
@@ -609,4 +611,86 @@ test('a planned refinement never replaces a definition the student reviewed', as
   const [entry] = await glossarySnapshot(store.storage());
   assert.equal(entry.senses[0].definition, 'Convolution definition');
   assert.equal(entry.senses[0].sources[0].sourceId, sourceId);
+});
+
+test('the tutor creates, refines and extends concepts without rewriting reviewed meanings', async () => {
+  const store = new MemoryStore(),
+    storage = store.storage();
+  const change = (value: Partial<Parameters<typeof saveTutorConcept>[1]>) =>
+    saveTutorConcept(storage, {
+      action: 'create',
+      mutationId: crypto.randomUUID(),
+      sources: [],
+      basis: 'general',
+      links: [],
+      ...value,
+    });
+  const wavelet = await change({
+    term: 'Wavelet transform',
+    definition: 'Decomposes a signal into shifted and scaled copies of a short wave.',
+    aliases: ['Wavelet'],
+  });
+  assert.equal(wavelet.origin, 'chat');
+  assert.equal(wavelet.senses[0].basis, 'general');
+  await assert.rejects(
+    change({ term: 'wavelet transforms', definition: 'Again.' }),
+    /already in the glossary/,
+  );
+  const refined = await change({
+    action: 'refine',
+    conceptId: wavelet.id,
+    version: wavelet.version,
+    senseId: wavelet.senses[0].id,
+    definition: 'Decomposes a signal into shifted and scaled copies of a mother wavelet.',
+    basis: 'web',
+    links: [{ url: 'https://example.org/wavelets', title: 'Wavelets' }],
+  });
+  assert.equal(refined.version, 2);
+  assert.equal(refined.senses[0].basis, 'web');
+  assert.deepEqual(refined.senses[0].links, [
+    { url: 'https://example.org/wavelets', title: 'Wavelets' },
+  ]);
+  const extended = await change({
+    action: 'add_sense',
+    conceptId: wavelet.id,
+    version: refined.version,
+    label: 'Image compression',
+    definition: 'The basis of compression formats such as JPEG 2000.',
+  });
+  assert.equal(extended.senses.length, 2);
+  assert.deepEqual(
+    (await searchConcepts(storage, 'wavelet')).map((e) => e.id),
+    [wavelet.id],
+  );
+  await assert.rejects(
+    change({
+      action: 'refine',
+      conceptId: wavelet.id,
+      version: 1,
+      senseId: wavelet.senses[0].id,
+      definition: 'Stale.',
+    }),
+    /changed in another window/,
+  );
+  const reviewed = await saveConcept(storage, input('Aliasing'));
+  await assert.rejects(
+    change({
+      action: 'refine',
+      conceptId: reviewed.id,
+      version: reviewed.version,
+      senseId: reviewed.senses[0].id,
+      definition: 'Rewritten.',
+    }),
+    /reviewed meaning keeps its definition/,
+  );
+  const linked = await change({
+    action: 'add_evidence',
+    conceptId: reviewed.id,
+    version: reviewed.version,
+    senseId: reviewed.senses[0].id,
+    basis: 'web',
+    links: [{ url: 'https://example.org/aliasing', title: 'Aliasing' }],
+  });
+  assert.equal(linked.senses[0].definition, 'Aliasing definition');
+  assert.equal(linked.senses[0].links?.length, 1);
 });

@@ -260,7 +260,14 @@ export const jobProgress = (job: Job) =>
     : job.totalChunks > 0
       ? ` · ${job.completedChunks}/${job.totalChunks}`
       : '';
-export type Settings = { configured: boolean; locale: Locale; model: string; keySuffix?: string };
+export type Settings = {
+  configured: boolean;
+  locale: Locale;
+  model: string;
+  /** The tutor may search the web when the library does not cover a question. */
+  webAuto: boolean;
+  keySuffix?: string;
+};
 export type ConceptSource = {
   sourceId: string;
   sourceVersion: number;

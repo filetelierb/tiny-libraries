@@ -6,7 +6,7 @@ A local, open-source workspace that turns your recordings and documents into a l
 
 English is the default interface language; Spanish is available in Settings. Files, sessions, and progress stay on your machine. AI processing sends selected material to Meta Model API. Bring your own Meta API key; add, replace, or remove it in Settings.
 
-Tutor Web search is optional and off by default. Enable **Web** for an individual question to allow Meta to use the question, conversation and selected material in external search queries. The choice turns off after sending; saved questions and explicit retries retain their original permission. Web citations link to external sources and are labelled separately from your library evidence.
+Tutor web search is on by default and can be turned off in Settings. When your files and glossary do not cover a question, the tutor may send search queries based on it to Meta and shows external sources under their own heading, with links. The **Web** button still asks for a web search on an individual question. Web citations link to external sources and are labelled separately from your library evidence.
 
 ## Run locally
 
@@ -23,7 +23,7 @@ The tutor runs as a [Muse Code](https://dev.meta.ai) agent when the `muse` comma
 curl -fsSL https://dev.meta.ai/install.sh | sh
 ```
 
-Without it, or for questions with **Web** on, the tutor calls the Meta Model API directly with the same tools.
+Without it, the tutor calls the Meta Model API directly with the same tools; only questions with **Web** on can then search the web.
 
 Open **http://127.0.0.1:9876**. The launcher starts the local runtime and media companion together. Stopping and starting preserves files and study data in `.celld/dev/` and `.local/`. See [local operation and backups](docs/local-operation.md) before moving or resetting data.
 

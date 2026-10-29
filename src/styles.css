@@ -3146,6 +3146,39 @@ body:has(.panel-resizer.resizing) {
   font-size: var(--font-size-control);
   margin: 0;
 }
+.glossary-basis {
+  margin: 6px 0 10px;
+  font-size: var(--font-size-small, 13px);
+  color: var(--muted-text);
+}
+.glossary-basis p {
+  margin: 0 0 4px;
+  font-style: italic;
+}
+.glossary-basis ul {
+  margin: 0;
+  padding-left: 18px;
+}
+.glossary-basis a {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  overflow-wrap: anywhere;
+}
+.settings-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 14px 0 0;
+}
+.settings-check input {
+  margin-top: 3px;
+}
+.settings-check small {
+  display: block;
+  color: var(--muted-text);
+  margin-top: 2px;
+}
 .destination-summary {
   display: flex;
   align-items: center;
