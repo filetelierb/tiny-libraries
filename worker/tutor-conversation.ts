@@ -220,6 +220,14 @@ export class TutorConversation extends DurableObject<Env> {
           // A retried call repeats its change instead of applying it twice.
           mutationId: await stableId(`${record.id}:r${record.intentRevision}:${callId}`),
         }),
+      generate: async (record, _intent, { callId, request }) =>
+        this.library('/internal/tutor-artifact-job', {
+          // A retried call returns the generation it already started.
+          id: await stableId(`${record.id}:r${record.intentRevision}:${callId}`),
+          conversationId: record.conversationId,
+          model: record.generation.model,
+          request,
+        }),
       glossary: async (query) =>
         (
           await this.library<{ entries: GlossaryEntry[] }>('/internal/tutor-glossary-search', {

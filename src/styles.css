@@ -2521,6 +2521,45 @@ body:has(.panel-resizer.resizing) {
   font-size: var(--font-size-small);
   color: var(--muted-text);
 }
+.tutor-artifact-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 88%;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.tutor-artifact-card > svg {
+  flex: none;
+  color: var(--primary);
+}
+.tutor-artifact-card > div {
+  display: grid;
+  flex: 1;
+  gap: 4px;
+  min-width: 0;
+}
+.tutor-artifact-card strong {
+  overflow: hidden;
+  font-size: var(--font-size-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tutor-artifact-card small {
+  font-size: var(--font-size-2xs);
+  color: var(--muted-text);
+}
+.tutor-artifact-card small.error {
+  color: var(--danger);
+}
+.tutor-artifact-card progress {
+  width: 100%;
+  height: 4px;
+  accent-color: var(--primary);
+}
 .chat-entry > small {
   display: block;
   max-width: 88%;

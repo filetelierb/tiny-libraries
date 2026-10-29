@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { SavedTutorMessage } from '../tutor/SavedTutorMessage';
+import { ArtifactProgress } from '../tutor/ArtifactProgress';
 import {
   ChevronLeft,
   Search,
@@ -113,6 +114,7 @@ export function ConversationPanel({
   openConcept,
   prepareSource,
   createAttachment,
+  openFile,
 }: {
   sessionId: string;
   source: Source | null;
@@ -130,6 +132,7 @@ export function ConversationPanel({
   onError: (message: string) => void;
   changed: () => Promise<unknown>;
   cite: (sourceId: string, segment: Segment) => void;
+  openFile: (id: string) => void;
 }) {
   const selectionKey = `tl:conversation:${sessionId}`;
   const [threads, setThreads] = useState<ConversationDetail[]>([]),
@@ -304,6 +307,7 @@ export function ConversationPanel({
         <LoadingRow>{t.loading}</LoadingRow>
       ) : current ? (
         <ConversationThread
+          openFile={openFile}
           key={current.id}
           renameRequest={renameRequest}
           conversation={current}
@@ -356,6 +360,7 @@ function ConversationThread({
   renameRequest,
   openingMessage,
   consumeOpeningMessage,
+  openFile,
 }: {
   conversation: ConversationDetail;
   catalog: Catalog;
@@ -378,6 +383,7 @@ function ConversationThread({
   receive: (conversation: ConversationDetail, refresh?: boolean) => Promise<void>;
   onError: (message: string) => void;
   cite: (sourceId: string, segment: Segment) => void;
+  openFile: (id: string) => void;
 }) {
   const [historyPages, setHistoryPages] = useState(new Map<number, ChatMessage>());
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -1211,6 +1217,16 @@ function ConversationThread({
                     open={citationAction}
                   />
                 </div>
+                {message.artifacts?.map((item) => (
+                  <ArtifactProgress
+                    key={item.id}
+                    id={item.id}
+                    title={item.title}
+                    t={t}
+                    open={openFile}
+                    ready={() => void changed()}
+                  />
+                ))}
                 {message.role === 'assistant' && (
                   <div className="message-note">
                     {message.noteSuggestion?.recommended && (

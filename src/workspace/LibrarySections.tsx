@@ -179,7 +179,8 @@ export function PanelSection({
 
 export type LibraryArtifact = {
   id: string;
-  origin: 'source' | 'reinforcement';
+  /** Tutor artifacts are library files of their own; sourceId is that file. */
+  origin: 'source' | 'reinforcement' | 'tutor';
   sourceId: string;
   /** Review artifacts belong to the session that created them; source artifacts to the library. */
   sessionId?: string;
@@ -294,7 +295,11 @@ export function ArtifactList({
                   <span>{item.title}</span>
                   <small title={file.name}>
                     {[
-                      item.origin === 'reinforcement' ? t.reviewArtifact : '',
+                      item.origin === 'reinforcement'
+                        ? t.reviewArtifact
+                        : item.origin === 'tutor'
+                          ? t.tutorArtifact
+                          : '',
                       item.revision ? `v${item.revision}` : '',
                       session || '',
                       file.name,

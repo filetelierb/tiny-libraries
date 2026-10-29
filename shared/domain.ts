@@ -4,7 +4,16 @@ import { sanitizeWidgets } from './artifact-widgets';
 
 export const localeSchema = z.enum(['en', 'es']);
 export type Locale = z.infer<typeof localeSchema>;
-export const kindSchema = z.enum(['video', 'audio', 'pdf', 'image', 'markdown', 'text']);
+/** `artifact` files are documents the tutor wrote; they are never uploaded or prepared. */
+export const kindSchema = z.enum([
+  'video',
+  'audio',
+  'pdf',
+  'image',
+  'markdown',
+  'text',
+  'artifact',
+]);
 export type Kind = z.infer<typeof kindSchema>;
 export const sourceSchema = z.object({
   id: z.string().uuid(),
@@ -328,6 +337,7 @@ export function kindFor(name: string): Kind | null {
   if (['png', 'jpg', 'jpeg', 'webp'].includes(ext || '')) return 'image';
   if (ext === 'md') return 'markdown';
   if (['txt', 'csv', 'vtt', 'srt'].includes(ext || '')) return 'text';
+  if (ext === 'artifact') return 'artifact';
   return null;
 }
 export const fold = (value: string) =>

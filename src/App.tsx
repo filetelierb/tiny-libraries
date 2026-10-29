@@ -75,6 +75,7 @@ import { ReviewPanel } from './study/ReviewPanel';
 import { reinforcementLearning } from '../shared/review';
 import { GeneratedArtifact } from './GeneratedArtifact';
 import { ArtifactVersions } from './artifacts/ArtifactVersions';
+import { TutorArtifact } from './artifacts/TutorArtifact';
 import { recordDraft, recoverPositions, settleDrafts } from './workspace/positionDrafts';
 import { cardDue, type DeckView } from '../shared/flashcards';
 import { SignalExplorer } from './SignalExplorer';
@@ -498,6 +499,7 @@ export function App() {
   }
   function openLibraryArtifact(item: LibraryArtifact, file: Source) {
     if (item.origin === 'source') showArtifact(file.id);
+    else if (item.origin === 'tutor') openFile(file, 'retain');
     else {
       // Review artifacts live with their reinforcement in the Review tab.
       setRight(true);
@@ -1497,6 +1499,15 @@ export function App() {
                 t={t}
               >
                 {(source) => {
+                  if (source.kind === 'artifact')
+                    return (
+                      <TutorArtifact
+                        file={source}
+                        files={catalog.files}
+                        t={t}
+                        onCite={(sourceId, segment) => citeFrom(sourceId, segment)}
+                      />
+                    );
                   const material =
                     learning?.sourceId === source.id ? learning : materialCache[source.id];
                   const reader = (
@@ -1781,6 +1792,11 @@ export function App() {
               onError={setError}
               changed={refresh}
               cite={citeFrom}
+              openFile={(id) => {
+                const file = catalog.files.find((item) => item.id === id);
+                if (file) openFile(file, 'retain');
+                else void refresh();
+              }}
               treeActions={treeActions}
               prepareSource={(file) => {
                 openFile(file, 'retain');

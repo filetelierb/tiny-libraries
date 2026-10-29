@@ -6,15 +6,17 @@ Goal: let the student ask the tutor to manage every record in the library (files
 
 The tutor is one agent loop (`worker/tutor-agent.ts`) driven by the durable runner (`worker/tutor-runner.ts`). Each model step can call tools; a reply has at most 20 model calls.
 
-| Tool               | Kind  | Limits                                                                     |
-| ------------------ | ----- | -------------------------------------------------------------------------- |
-| `read_segments`    | Read  | Only the references selected for the question and its attachments          |
-| `read_concepts`    | Read  | Only glossary revisions supplied in the question context                   |
-| `list_concepts`    | Read  | Same context                                                               |
-| `practice_summary` | Read  | Practice statistics of the selected references                             |
-| `create_bookmark`  | Write | Explicit request only; evidence must be available; up to 3 per reply       |
-| `save_artifact`    | Write | Explicit request only; a selected source with an artifact; 1 per reply     |
-| `save_concept`     | Write | Explicit request only; cited evidence must be available; up to 5 per reply |
+| Tool               | Kind  | Limits                                                                 |
+| ------------------ | ----- | ---------------------------------------------------------------------- |
+| `read_segments`    | Read  | Only the references selected for the question and its attachments      |
+| `read_concepts`    | Read  | Only glossary revisions supplied in the question context               |
+| `list_concepts`    | Read  | Same context                                                           |
+| `practice_summary` | Read  | Practice statistics of the selected references                         |
+| `create_bookmark`  | Write | Explicit request only; evidence must be available; up to 3 per reply   |
+| `search_glossary`  | Read  | The whole glossary, by name, alias or synonym                          |
+| `create_artifact`  | Write | Selected references as sources; generated after the reply; 2 per reply |
+| `save_artifact`    | Write | Explicit request only; a selected source with an artifact; 1 per reply |
+| `save_concept`     | Write | Create, refine, add a meaning or evidence; up to 5 per reply           |
 
 Writes go through internal Library routes (`/internal/tutor-*`) and run only while the turn is still active and not being steered, so a stopped or redirected reply never writes.
 
@@ -23,10 +25,10 @@ Writes go through internal Library routes (`/internal/tutor-*`) and run only whi
 | Record                | The tutor can                 | Missing                                                          |
 | --------------------- | ----------------------------- | ---------------------------------------------------------------- |
 | Files and folders     | Read selected references only | List and search, rename, move, archive, restore, delete, prepare |
-| Artifacts             | Save a new version            | List, read other versions, restore a version                     |
+| Artifacts             | Create, write a new version   | List, read other versions, restore a version                     |
 | Annotations (notes)   | Nothing                       | List, create, edit, delete                                       |
 | Bookmarks             | Create                        | List, edit, delete                                               |
-| Glossary              | Read supplied concepts, save  | Search, edit, link, merge, archive, delete, unlinked clean-up    |
+| Glossary              | Search, create, refine, add   | Link, merge, archive, delete, unlinked clean-up                  |
 | Sessions and tabs     | Nothing                       | List, open files, rename                                         |
 | Tests, quizzes, cards | Practice statistics           | List, start, read results                                        |
 

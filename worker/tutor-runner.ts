@@ -9,6 +9,7 @@ import {
   createTutorAgent,
   type TutorAgentInput,
   type TutorAgentCheckpoint,
+  type ArtifactGenerator,
   type ArtifactWriter,
   type BookmarkWriter,
   type ConceptWriter,
@@ -40,6 +41,11 @@ export type TutorRunnerServices = {
   ): Promise<unknown>;
   /** Searches the whole glossary. */
   glossary?(query: string): Promise<GlossaryEntry[]>;
+  generate?(
+    record: TurnRecord,
+    intent: TurnIntent,
+    input: Parameters<ArtifactGenerator>[0],
+  ): ReturnType<ArtifactGenerator>;
   /** The tool endpoint for a reply that may run as a Muse Code agent. */
   muse?(providerId: string): Promise<TutorCompletion['muse']>;
 };
@@ -56,6 +62,7 @@ export function turnWriters(
   ArtifactWriter | undefined,
   ConceptWriter | undefined,
   GlossaryReader | undefined,
+  ArtifactGenerator | undefined,
 ] {
   const guard = async () => {
     const current = await journal.active();
@@ -63,7 +70,8 @@ export function turnWriters(
       throw new ControlCheckpoint();
   };
   const artifact = services.artifact?.bind(services),
-    concept = services.concept?.bind(services);
+    concept = services.concept?.bind(services),
+    generate = services.generate?.bind(services);
   return [
     async (value) => {
       await guard();
@@ -80,6 +88,11 @@ export function turnWriters(
         return concept(record, intent, value);
       }),
     services.glossary?.bind(services),
+    generate &&
+      (async (value) => {
+        await guard();
+        return generate(record, intent, value);
+      }),
   ];
 }
 
@@ -207,6 +220,7 @@ export class TutorRunner {
           ...(await this.message(record, result.text)),
           tools: result.tools,
           citations: result.citations,
+          ...(result.artifacts ? { artifacts: result.artifacts } : {}),
           ...(intent.input.webSearch || result.webSearched
             ? { webSearched: result.webSearched === true }
             : {}),

@@ -32,8 +32,17 @@ import {
   generateReinforcement,
   generateAssessmentBatch,
   analyzeAssessment,
+  planTutorArtifact,
+  writeTutorArtifactChapter,
   MetaError,
 } from './meta';
+import {
+  resumeTutorArtifact,
+  startTutorArtifact,
+  TutorArtifactError,
+  type TutorArtifactServices,
+} from './tutor-artifacts';
+import { tutorArtifactDocumentSchema, tutorArtifactRequestSchema } from '../shared/tutor-artifacts';
 import { cardSnapshot, startCardDecks, rateCard, CardError } from './flashcards';
 import { visualKey } from '../shared/artifact-widgets';
 import { artifactStudySnapshot, deleteArtifactStudy, startArtifactStudy } from './artifact-study';
@@ -191,6 +200,84 @@ export class Library extends DurableObject<Env> {
       if (!known.has(directory.id)) await storage.put(`directory:${directory.id}`, directory);
     return { files, directories };
   }
+  /** Model calls, previous versions and saving for the tutor's artifact generations. */
+  private artifactServices(): TutorArtifactServices {
+    const key = async () => {
+      const value = await this.ctx.storage.get<string>('apiKey');
+      if (!value) throw new TutorArtifactError('Add a Meta API key in Settings', 409);
+      return value;
+    };
+    const previous = async (fileId: string) => {
+      const file = await this.ctx.storage.get<Source>(`file:${fileId}`);
+      const object = file && (await this.env.FILES.get(`original/${file.id}/${file.version}`));
+      return object ? tutorArtifactDocumentSchema.parse(await object.json()) : null;
+    };
+    return {
+      owner: this.executionId,
+      start: (task) => this.ctx.waitUntil(task),
+      plan: async (job, materials, previousMarkdown) =>
+        planTutorArtifact(
+          await key(),
+          job.model,
+          job.locale,
+          job.request,
+          materials,
+          previousMarkdown,
+          bridgedFetch(this.env),
+        ),
+      chapter: async (job, plan, index, materials, repair) =>
+        writeTutorArtifactChapter(
+          await key(),
+          job.model,
+          job.locale,
+          job.request,
+          plan,
+          index,
+          materials,
+          repair,
+          bridgedFetch(this.env),
+        ),
+      previous,
+      save: async (job, document) => {
+        const body = JSON.stringify(document);
+        return this.ctx.storage.transaction(async (storage) => {
+          const snapshot = await this.directorySnapshot(storage);
+          const existing = snapshot.files.find((file) => file.id === job.fileId);
+          // A new artifact whose save was interrupted after writing keeps that first version.
+          if (existing && !job.request.artifactId) return existing.version;
+          const folder = existing?.folder ?? (job.locale === 'es' ? 'Artefactos' : 'Artifacts');
+          if (!existing) {
+            assertWritableDirectory(folder, snapshot.directories);
+            for (const entry of ensureDirectories(snapshot.directories, [folder]))
+              await storage.put(`directory:${entry.id}`, entry);
+          }
+          const name = `${document.title
+            .replace(/[\\/:*?"<>|]+/g, ' ')
+            .trim()
+            .slice(0, 200)}.artifact`;
+          const file: Source = existing
+            ? { ...existing, version: existing.version + 1, size: body.length }
+            : {
+                id: job.fileId,
+                version: 1,
+                name,
+                folder,
+                kind: 'artifact',
+                mime: 'application/json',
+                size: body.length,
+                archived: false,
+                reviewed: false,
+                createdAt: new Date().toISOString(),
+              };
+          await this.env.FILES.put(`original/${file.id}/${file.version}`, body, {
+            httpMetadata: { contentType: 'application/json' },
+          });
+          await storage.put(`file:${file.id}`, file);
+          return file.version;
+        });
+      },
+    };
+  }
   async settings(): Promise<Settings> {
     const key = await this.ctx.storage.get<string>('apiKey');
     return {
@@ -270,6 +357,62 @@ export class Library extends DurableObject<Env> {
           version: saved.version,
           senses: saved.senses.map((sense) => ({ id: sense.id, label: sense.label })),
         });
+      }
+      if (path === '/internal/tutor-artifact-job' && request.method === 'POST') {
+        const value = z
+          .object({
+            id: z.string().uuid(),
+            conversationId: z.string().min(1).max(200),
+            model: z.string().min(1).max(100),
+            request: tutorArtifactRequestSchema,
+          })
+          .parse(await boundedJson(request));
+        const conversation = await this.ctx.storage.get<{ sessionId?: string }>(
+          `conversation:${value.conversationId}`,
+        );
+        if (!conversation) throw new ApiError('Conversation not found', 404);
+        const settings = await this.settings();
+        return json(
+          await startTutorArtifact(
+            this.ctx.storage,
+            {
+              ...value,
+              ...(conversation.sessionId ? { sessionId: conversation.sessionId } : {}),
+              locale: settings.locale,
+            },
+            this.artifactServices(),
+          ),
+        );
+      }
+      const tutorArtifactMatch = path.match(
+        /^\/api\/tutor-artifacts\/([a-f0-9-]{36})(\/retry|\/versions\/(\d+))?$/,
+      );
+      if (tutorArtifactMatch && request.method === 'GET' && !tutorArtifactMatch[2])
+        return json(
+          await resumeTutorArtifact(
+            this.ctx.storage,
+            tutorArtifactMatch[1],
+            this.artifactServices(),
+          ),
+        );
+      if (tutorArtifactMatch?.[2] === '/retry' && request.method === 'POST')
+        return json(
+          await resumeTutorArtifact(
+            this.ctx.storage,
+            tutorArtifactMatch[1],
+            this.artifactServices(),
+            true,
+          ),
+        );
+      if (tutorArtifactMatch?.[3] && request.method === 'GET') {
+        // Any saved version of an artifact file, for its version history.
+        const file = await this.ctx.storage.get<Source>(`file:${tutorArtifactMatch[1]}`);
+        const version = Number(tutorArtifactMatch[3]);
+        if (!file || file.kind !== 'artifact' || version > file.version)
+          throw new ApiError('Artifact version not found', 404);
+        const object = await this.env.FILES.get(`original/${file.id}/${version}`);
+        if (!object) throw new ApiError('Artifact version not found', 404);
+        return json(tutorArtifactDocumentSchema.parse(await object.json()));
       }
       if (path === '/internal/tutor-glossary-search' && request.method === 'POST') {
         const { query } = z
@@ -742,7 +885,7 @@ export class Library extends DurableObject<Env> {
         const records = await this.ctx.storage.list<Learning>({ prefix: 'learning:' });
         const items: Array<{
           id: string;
-          origin: 'source' | 'reinforcement';
+          origin: 'source' | 'reinforcement' | 'tutor';
           sourceId: string;
           sessionId?: string;
           title: string;
@@ -776,6 +919,21 @@ export class Library extends DurableObject<Env> {
               kind: value.plan.artifact.kind,
               revision: 1,
               createdAt: value.createdAt,
+            });
+        // Tutor artifacts are files of their own, listed with their latest version.
+        const { files } = await this.ctx.storage.transaction((storage) =>
+          this.directorySnapshot(storage),
+        );
+        for (const file of files)
+          if (file.kind === 'artifact' && !file.trashed)
+            items.push({
+              id: `tutor:${file.id}`,
+              origin: 'tutor',
+              sourceId: file.id,
+              title: file.name.replace(/\.artifact$/, ''),
+              kind: 'document',
+              revision: file.version,
+              createdAt: file.createdAt,
             });
         items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
         return json(items);
@@ -915,6 +1073,7 @@ export class Library extends DurableObject<Env> {
         error instanceof GlossaryError ||
         error instanceof CardError ||
         error instanceof ArtifactRevisionError ||
+        error instanceof TutorArtifactError ||
         error instanceof ReinforcementError ||
         error instanceof AssessmentError ||
         error instanceof TutorJournalError ||
@@ -981,7 +1140,13 @@ export default {
         });
         const kind = kindFor(name),
           size = Number(request.headers.get('Content-Length'));
-        if (!kind || !name.trim() || name.length > 240 || folder.length > 240)
+        if (
+          !kind ||
+          kind === 'artifact' ||
+          !name.trim() ||
+          name.length > 240 ||
+          folder.length > 240
+        )
           throw new ApiError('Unsupported file or invalid name');
         if (!Number.isSafeInteger(size) || size < 1 || size > MAX_FILE_BYTES)
           throw new ApiError('File must be between 1 byte and 2 GB', 413);
@@ -1073,8 +1238,9 @@ export default {
           env,
           '/api/catalog',
         );
+        // Tutor artifacts are written, not prepared.
         const files = catalog.files.filter(
-          (file) => sourceState(file, catalog.directories) === 'files',
+          (file) => sourceState(file, catalog.directories) === 'files' && file.kind !== 'artifact',
         );
         const prepared = new Set(await internal<string[]>(env, '/internal/prepared'));
         const items = await Promise.all(
@@ -1109,6 +1275,7 @@ export default {
           .parse(await boundedJson(request));
         const file = await internal<Source>(env, `/api/files/${data.sourceId}`),
           { key } = await internal<{ key: string | null }>(env, '/internal/key');
+        if (file.kind === 'artifact') throw new ApiError('Tutor artifacts are not prepared', 400);
         if (!key) throw new ApiError('Add a Meta API key in Settings', 409);
         return startJob(env, file, data.locale);
       }

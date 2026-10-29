@@ -47,6 +47,17 @@ export const chatMessageSchema = z.object({
   webSearched: z.boolean().optional(),
   citations: z.array(tutorCitationSchema).max(40).optional(),
   noteSuggestion: studyNoteSuggestionSchema.optional(),
+  /** Artifacts the reply started; their generation continues after it. */
+  artifacts: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        fileId: z.string().uuid(),
+        title: z.string().max(160).optional(),
+      }),
+    )
+    .max(2)
+    .optional(),
   requestId: z.string().uuid().optional(),
   requestFingerprint: z
     .string()
