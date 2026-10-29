@@ -32,7 +32,8 @@ export type TreeActions = {
   create: (parentPath: string) => void;
   renameDirectory: (directory: Directory) => void;
   archiveDirectory: (directory: Directory, restore: boolean) => void;
-  upload: (directory: Directory) => void;
+  /** Absent where adding files makes no sense, such as the upload destination picker. */
+  upload?: (directory: Directory) => void;
   renameFile: (source: Source) => void;
   archiveFile: (source: Source, restore: boolean) => void;
   /** Deleting is permanent; the confirmation offers archiving instead. */
@@ -239,7 +240,15 @@ export function DirectoryTree({
               icon: <FolderPlus size={16} />,
               run: () => actions.create(directory.path),
             },
-            { label: t.upload, icon: <Upload size={16} />, run: () => actions.upload(directory) },
+            ...(actions.upload
+              ? [
+                  {
+                    label: t.upload,
+                    icon: <Upload size={16} />,
+                    run: () => actions.upload!(directory),
+                  },
+                ]
+              : []),
           ]
         : []),
       {

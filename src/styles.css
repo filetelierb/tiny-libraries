@@ -3146,6 +3146,15 @@ body:has(.panel-resizer.resizing) {
   font-size: var(--font-size-control);
   margin: 0;
 }
+.destination-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.destination-summary .destination-path {
+  flex: 1;
+  min-width: 0;
+}
 .destination-picker .directory-tree {
   max-height: 220px;
 }

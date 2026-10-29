@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { CircleCheck, FileText, LoaderCircle, Search, Upload, X } from 'lucide-react';
+import { CircleCheck, FileText, Folder, LoaderCircle, Search, Upload, X } from 'lucide-react';
 import type { Catalog } from '../../shared/domain';
 import { directoryState } from '../../shared/directories';
 import { Button } from '../design/components';
@@ -39,17 +39,25 @@ export function UploadForm({
     [done, setDone] = useState<Set<File>>(new Set()),
     [query, setQuery] = useState(''),
     [dragging, setDragging] = useState(false),
+    // The tree opens only to choose a destination: when none was given, or on request.
+    [picking, setPicking] = useState(!initialDirectoryId),
     input = useRef<HTMLInputElement>(null);
   const remaining = files.filter((file) => !done.has(file));
-  useEffect(() => setDirectoryId(initialDirectoryId), [initialDirectoryId]);
+  useEffect(() => {
+    setDirectoryId(initialDirectoryId);
+    setPicking(!initialDirectoryId);
+  }, [initialDirectoryId]);
   const selected = catalog.directories.find((directory) => directory.id === directoryId);
   useEffect(() => {
     if (
       directoryId &&
       (!selected || directoryState(selected.path, catalog.directories) !== 'files')
-    )
+    ) {
       setDirectoryId(null);
+      setPicking(true);
+    }
   }, [directoryId, catalog.directories]);
+  const { upload: _, ...pickerActions } = actions;
   return (
     <form
       onSubmit={(event) => {
@@ -62,29 +70,45 @@ export function UploadForm({
     >
       <fieldset className="upload-section destination-picker" disabled={busy}>
         <h3>{t.destination}</h3>
-        <p className="upload-section-hint">{t.destinationHint}</p>
-        <p className="destination-path">{selected?.path || t.libraryRoot}</p>
-        <label className="search-field">
-          <Search size={16} aria-hidden="true" />
-          <input
-            type="search"
-            aria-label={t.searchFolders}
-            placeholder={t.searchFolders}
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </label>
-        <DirectoryTree
-          mode="folder"
-          directories={catalog.directories}
-          files={catalog.files}
-          t={t}
-          query={query}
-          selectedFolderId={directoryId}
-          chooseFolder={(directory) => setDirectoryId(directory?.id || null)}
-          actions={actions}
-          storageKey="tl:tree:upload-picker"
-        />
+        {picking ? (
+          <>
+            <p className="upload-section-hint">{t.destinationHint}</p>
+            <p className="destination-path">{selected?.path || t.libraryRoot}</p>
+            <label className="search-field">
+              <Search size={16} aria-hidden="true" />
+              <input
+                type="search"
+                aria-label={t.searchFolders}
+                placeholder={t.searchFolders}
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </label>
+            <DirectoryTree
+              mode="folder"
+              directories={catalog.directories}
+              files={catalog.files}
+              t={t}
+              query={query}
+              selectedFolderId={directoryId}
+              chooseFolder={(directory) => {
+                setDirectoryId(directory?.id || null);
+                setPicking(false);
+                setQuery('');
+              }}
+              actions={pickerActions}
+              storageKey="tl:tree:upload-picker"
+            />
+          </>
+        ) : (
+          <div className="destination-summary">
+            <Folder size={16} aria-hidden="true" />
+            <p className="destination-path">{selected?.path || t.libraryRoot}</p>
+            <Button size="sm" variant="ghost" onClick={() => setPicking(true)}>
+              {t.changeDestination}
+            </Button>
+          </div>
+        )}
       </fieldset>
       <section
         className={`upload-section upload-files ${dragging ? 'drop-active' : ''}`}

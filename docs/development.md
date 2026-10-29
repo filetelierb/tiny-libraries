@@ -156,3 +156,9 @@ Each tutor reply can now run as one Muse Code turn instead of a loop of direct m
 The unused code-session routes and the trial agent libraries were removed.
 
 Verification: unit tests cover the agent's input (instructions, conversation, question and images), relayed progress and the final answer, Stop, the fallbacks, and an agent calling the tools during its model step with citations limited to what it read; 289 tests, type checks and build pass. In the browser, Spark answered a question across the course reader, the lecture and the glossary in 21 seconds, citing two book pages and a saved concept, and said plainly that the lecture passages did not cover it.
+
+### Upload destination as a path
+
+The Add files dialog shows the destination as a folder path with a Change button. The folder tree opens only when no folder was given (Add files from the library header) or after Change; choosing a folder or the library root closes it again. Opening the dialog from a folder's menu shows that folder directly. Folder menus inside the picker keep creating, renaming, archiving and deleting, but no longer offer Add files.
+
+Verification: type checks, 289 tests and build pass. In the browser, the header's Add files opened the tree, choosing Directory verified/Week 1/Sources closed it to that path, Change reopened it with the folder selected, the picker's folder menu had no Add files, and Add files from the EE261 folder menu opened directly on EE261.
