@@ -196,3 +196,13 @@ The tutor can now act on the library when the student asks, through the same rou
 - **Log.** Each reply lists what it changed under the answer; a started test has an Open test button. A repeated call returns what the first did, actions stop when the reply is stopped or redirected, and refusals from the library (a session with an unfinished test, a folder in the trash) come back to the tutor to explain.
 
 Verification: unit tests cover the Markdown conversion, actions through the library routes with the names shown, proposals confirmed or cancelled once, notes limited to the session, starting a test and the agent's validation of tool calls; 304 tests, type checks and build pass. In the browser with Spark: "create a Repaso folder in EE261, move the study guide there and create an empty Prueba tutor folder" did the three actions and the tree updated; "save a note summarising lambda nu = v in three points and delete the Prueba tutor folder" saved an anchored note with a list and math, and proposed the trash, which ran on Confirm. The first note kept the chat's citation ids, which notes now drop. "Start a 12-question test" in a session that already had an unfinished test was refused by the app, and the tutor said so and what to do.
+
+### One way of explaining comparisons
+
+The tutor's plain comparisons worked well, so the method is now shared by the chat, artifacts and glossary (`shared/explanation-style.ts`):
+
+- **Explanations.** Plain language, purpose before mechanics, every term and symbol defined in words. Concepts that are compared or easily confused get: what they have in common and the single difference that separates them; one entry per concept with the same points in the same order (when it applies, what it shows, what you obtain when you compute or use it); and a short analogy or one-line rule for telling them apart.
+- **Artifacts.** The plan and every chapter follow the same method; a comparison may put the entries in a compare widget and the analogy in an analogy callout.
+- **Glossary.** Definitions stay one to three sentences, and a concept usually understood against another adds one sentence naming it and the difference. Definitions written while preparing a file name a counterpart only when the file discusses it.
+
+Verification: tests check that the tutor's instructions, artifact plans and chapters carry the method; 306 tests and type checks pass. In the browser, "what is the difference between the Fourier series and the Fourier transform?" was answered with the shared purpose and the single difference (periodic or not), parallel entries for each with their formulas and symbols explained, and a rule with an image (a staircase of frequencies that becomes a ramp as the period grows).
