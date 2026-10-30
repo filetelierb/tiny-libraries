@@ -378,3 +378,11 @@ Verification: type checks and 321 tests pass, including that a course must be in
 - After deleting the first project, a project made with `pack: true` had the same 3 chapters, 5 questions and 5 glossary concepts, and the ready deck for its own file, with no preparation job.
 
 The test projects and the temporary course were then deleted. The dialog was not checked in a browser.
+
+### Seeing which files are being prepared
+
+The library follows preparation in the student's language while it is open (`usePreparation`): it reads `GET /api/jobs` every 4 seconds while any job is queued or under way and every 15 seconds otherwise, so jobs started by a course import or from the queue appear on their own. Each file with an unfinished job gets a marker beside its name in the library tree: a spinner while it is prepared (its title gives the step and progress), a clock while queued, an alert when it failed. Above the files, a line names the file under way and its step, or how many are under way, with the counts queued and needing attention; it opens the preparation queue. When a job completes, the catalog reloads so the file's chapters and practice appear.
+
+Jobs are not limited in number: preparing every file of a course starts them all at once (CS223A showed 47 running, 16 of them reading their videos). The wording that promised one file after another was corrected.
+
+Verification: type checks and 321 tests pass; the CS223A import finished with its 47 files, and `GET /api/jobs` reported the running jobs the markers follow. The markers were not checked in a browser.

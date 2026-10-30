@@ -82,6 +82,8 @@ import { cardDue, type DeckView } from '../shared/flashcards';
 import { SignalExplorer } from './SignalExplorer';
 import { PanelResizer, useDrawerFocus, usePanels } from './workspace/Panels';
 import { ProcessingPanel } from './workspace/ProcessingPanel';
+import { usePreparation } from './workspace/usePreparation';
+import { PreparationStrip } from './workspace/PreparationStrip';
 import {
   readWorkspace,
   workspacePatch,
@@ -246,6 +248,8 @@ export function App() {
     setRight(false),
   );
   const [processing, setProcessing] = useState(false);
+  // Files being prepared; a finished one brings its chapters and practice into view.
+  const preparing = usePreparation(locale, () => void refresh().catch(() => {}));
   const [modal, setModal] = useState<'settings' | 'upload' | 'session' | 'rename' | 'split' | null>(
       null,
     ),
@@ -1089,6 +1093,12 @@ export function App() {
                   <SettingsIcon />
                 </IconButton>
               </div>
+              <PreparationStrip
+                jobs={preparing}
+                files={catalog.files}
+                t={t}
+                open={() => setProcessing(true)}
+              />
               <PanelSection
                 id="library-files"
                 title={t.files}
@@ -1110,6 +1120,7 @@ export function App() {
                     chooseFile={openFile}
                     actions={treeActions}
                     storageKey="tl:tree:sidebar"
+                    preparing={preparing}
                   />
                 </div>
               </PanelSection>

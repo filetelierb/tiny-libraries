@@ -379,6 +379,57 @@ hr {
     opacity: 1;
   }
 }
+.preparation-marker {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--primary);
+}
+.preparation-marker.queued {
+  color: var(--muted-text);
+}
+.preparation-marker.failed {
+  color: var(--danger);
+}
+.preparation-strip {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  width: calc(100% - 32px);
+  margin: 0 16px 12px;
+  padding: 9px 11px;
+  border: 1px solid color-mix(in oklch, var(--primary) 30%, var(--border));
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklch, var(--primary) 6%, transparent);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.preparation-strip:hover,
+.preparation-strip:focus-visible {
+  background: color-mix(in oklch, var(--primary) 11%, transparent);
+}
+.preparation-strip > svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--primary);
+}
+.preparation-strip > span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.preparation-strip strong {
+  overflow: hidden;
+  font-size: var(--font-size-control);
+  font-weight: var(--font-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.preparation-strip small {
+  color: var(--muted-text);
+  font-size: var(--font-size-xs);
+}
 .file-row .reviewed-marker {
   color: var(--primary);
   flex-shrink: 0;

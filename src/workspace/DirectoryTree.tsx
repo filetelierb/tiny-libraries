@@ -14,7 +14,7 @@ import {
   Trash2,
   Upload,
 } from 'lucide-react';
-import { fold, type Directory, type Source } from '../../shared/domain';
+import { fold, type Directory, type Job, type Source } from '../../shared/domain';
 import {
   containsPath,
   directoryName,
@@ -26,6 +26,7 @@ import {
 import { ActionMenu, type MenuAction } from '../design/ActionMenu';
 import { Button } from '../design/components';
 import { ResourceIcon } from '../design/ResourceIcon';
+import { PreparationMarker } from './PreparationStrip';
 import type { T } from '../i18n';
 
 export type TreeActions = {
@@ -64,6 +65,7 @@ export function DirectoryTree({
   toggleFile,
   disabledFileIds,
   fileStatuses,
+  preparing,
   editable = true,
 }: {
   directories: Directory[];
@@ -83,6 +85,8 @@ export function DirectoryTree({
   toggleFile?: (file: Source, checked: boolean) => void;
   disabledFileIds?: Set<string>;
   fileStatuses?: Map<string, string>;
+  /** Files being prepared, marked beside their names. */
+  preparing?: Map<string, Job>;
   /** False for choose-only pickers that never create or edit folders. */
   editable?: boolean;
 }) {
@@ -433,6 +437,9 @@ export function DirectoryTree({
                   >
                     {icon}
                     <span>{file.name}</span>
+                    {preparing?.has(file.id) && (
+                      <PreparationMarker job={preparing.get(file.id)!} t={t} />
+                    )}
                     {file.reviewed && (
                       <CircleCheck className="reviewed-marker" size={16} aria-label={t.reviewed}>
                         <title>{t.reviewed}</title>
