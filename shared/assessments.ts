@@ -65,7 +65,8 @@ export const assessmentQuestionSchema = z.object({
     .min(2)
     .max(7),
   correctOptionId: id.nullable(),
-  acceptedAnswers: z.array(z.string().trim().min(1).max(300)).max(8),
+  /** For fill_blank: the option that fills each ____ blank, in order. The rest of the options are distractors. */
+  blankAnswers: z.array(id).max(3),
   prompts: z
     .array(
       z.object({
@@ -82,7 +83,7 @@ export const assessmentQuestionSchema = z.object({
 export type AssessmentQuestion = z.infer<typeof assessmentQuestionSchema>;
 export type PublicAssessmentQuestion = Omit<
   AssessmentQuestion,
-  'correctOptionId' | 'acceptedAnswers' | 'matches' | 'explanation' | 'difficultyReason'
+  'correctOptionId' | 'blankAnswers' | 'matches' | 'explanation' | 'difficultyReason'
 >;
 export const assessmentBatchSchema = z.object({
   title: z.string().trim().min(1).max(240),
@@ -309,7 +310,7 @@ export function validateAssessmentBatch(
         extra = q.options.length - q.prompts.length;
       if (
         q.correctOptionId !== null ||
-        q.acceptedAnswers.length ||
+        q.blankAnswers.length ||
         rows.size !== q.prompts.length ||
         q.prompts.length < 3 ||
         new Set(q.prompts.map((p) => normalizeAssessmentText(p.text))).size !== q.prompts.length ||
@@ -336,10 +337,31 @@ export function validateAssessmentBatch(
             throw new Error('Matching evidence must be included in the question.');
         }),
       );
+    } else if (q.type === 'fill_blank') {
+      const blanks = assessmentBlankCount(q),
+        extra = q.options.length - blanks;
+      if (
+        q.prompts.length ||
+        q.matches.length ||
+        q.correctOptionId !== null ||
+        blanks < 1 ||
+        blanks > 3 ||
+        q.blankAnswers.length !== blanks ||
+        new Set(q.blankAnswers).size !== blanks ||
+        q.blankAnswers.some((answer) => !options.has(answer))
+      )
+        throw new Error('Each ____ blank needs its own word from the word bank.');
+      if (
+        (q.difficulty === 'easy' && (blanks !== 1 || extra !== 3)) ||
+        (q.difficulty === 'medium' && (blanks !== 2 || extra !== 2)) ||
+        (q.difficulty === 'hard' && (blanks < 2 || extra !== 3))
+      )
+        throw new Error('Blanks and distractor words do not match the selected difficulty.');
     } else {
       if (
         q.prompts.length ||
         q.matches.length ||
+        q.blankAnswers.length ||
         !q.correctOptionId ||
         !options.has(q.correctOptionId)
       )
@@ -350,27 +372,6 @@ export function validateAssessmentBatch(
           : q.options.length !== 4
       )
         throw new Error('Use two true/false options or four choice options.');
-      if (q.type === 'fill_blank' && q.prompt.split('____').length !== 2)
-        throw new Error('A fill-blank question needs one ____ blank.');
-      if (
-        q.type === 'fill_blank' &&
-        q.difficulty === 'hard' &&
-        q.options.find((o) => o.id === q.correctOptionId)!.text.length > 300
-      )
-        throw new Error('A written fill-blank solution must fit the answer field.');
-      if (q.type !== 'fill_blank' && q.acceptedAnswers.length)
-        throw new Error('Only fill-blank questions can accept equivalent terms.');
-      if (
-        q.type === 'fill_blank' &&
-        q.acceptedAnswers.some((a) =>
-          q.options.some(
-            (o) =>
-              o.id !== q.correctOptionId &&
-              normalizeAssessmentText(o.text) === normalizeAssessmentText(a),
-          ),
-        )
-      )
-        throw new Error('An accepted term cannot accept a distractor.');
     }
   }
   if (!config.guidance && new Set(value.questions.map((q) => q.type)).size !== 4)
@@ -383,7 +384,7 @@ export function publicAssessmentPlan(plan: AssessmentPlan): PublicAssessmentPlan
     questions: plan.questions.map(
       ({
         correctOptionId: _c,
-        acceptedAnswers: _a,
+        blankAnswers: _b,
         matches: _m,
         explanation: _e,
         difficultyReason: _r,
@@ -404,6 +405,35 @@ export function matchingAssessmentResponse(response: string): Record<string, str
   } catch {
     return {};
   }
+}
+/** Number of ____ blanks in a fill-blank prompt. */
+export function assessmentBlankCount(q: Pick<AssessmentQuestion, 'prompt'>) {
+  return q.prompt.split('____').length - 1;
+}
+/** A fill-blank response is a JSON array with one option ID (or '') per blank. */
+export function blankAssessmentResponse(
+  q: Pick<AssessmentQuestion, 'prompt'>,
+  response: string,
+): string[] {
+  const count = assessmentBlankCount(q);
+  let value: unknown;
+  try {
+    value = JSON.parse(response);
+  } catch {
+    value = null;
+  }
+  const items = Array.isArray(value) ? value : [];
+  return Array.from({ length: count }, (_, i) => (typeof items[i] === 'string' ? items[i] : ''));
+}
+/** Earlier fill-blank questions had one blank answered by correctOptionId. */
+function blankSolution(q: AssessmentQuestion) {
+  return q.blankAnswers?.length ? q.blankAnswers : q.correctOptionId ? [q.correctOptionId] : [];
+}
+function fillBlanks(prompt: string, words: string[]) {
+  return prompt
+    .split('____')
+    .map((part, i) => (i === 0 ? part : `${words[i - 1] ? `[${words[i - 1]}]` : '____'}${part}`))
+    .join('');
 }
 export function validAssessmentResponse(q: PublicAssessmentQuestion, response: string) {
   if (q.type === 'matching') {
@@ -428,8 +458,21 @@ export function validAssessmentResponse(q: PublicAssessmentQuestion, response: s
         entries.filter(([, v]) => v).length
     );
   }
-  if (q.type === 'fill_blank' && q.difficulty === 'hard')
-    return !!response.trim() && response.length <= 300;
+  if (q.type === 'fill_blank') {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(response);
+    } catch {
+      return false;
+    }
+    if (!Array.isArray(parsed) || parsed.length !== assessmentBlankCount(q)) return false;
+    const filled = parsed.filter(Boolean);
+    return (
+      filled.length > 0 &&
+      parsed.every((v) => typeof v === 'string' && (!v || q.options.some((o) => o.id === v))) &&
+      new Set(filled).size === filled.length
+    );
+  }
   return q.options.some((o) => o.id === response);
 }
 export function gradeAssessmentQuestion(
@@ -453,12 +496,11 @@ export function gradeAssessmentQuestion(
           };
         })
       : [];
-  const typed = q.type === 'fill_blank' && q.difficulty === 'hard';
-  const correct = typed
-    ? [expected, ...q.acceptedAnswers].some(
-        (v) => normalizeAssessmentText(v) === normalizeAssessmentText(answer.response),
-      )
-    : answer.response === q.correctOptionId;
+  const blanks = q.type === 'fill_blank',
+    solution = blanks ? blankSolution(q) : [],
+    filled = blanks && !unknown ? blankAssessmentResponse(q, answer.response) : [],
+    word = (optionId: string) => q.options.find((o) => o.id === optionId)?.text || '';
+  const correct = answer.response === q.correctOptionId;
   return {
     questionId: q.id,
     topicId: q.topicId,
@@ -470,19 +512,23 @@ export function gradeAssessmentQuestion(
       ? ''
       : pairs.length
         ? pairs.map((p) => `${p.prompt}: ${p.response}`).join('\n')
-        : typed
-          ? answer.response
+        : blanks
+          ? fillBlanks(q.prompt, filled.map(word))
           : q.options.find((o) => o.id === answer.response)?.text || '',
     score: unknown
       ? 0
       : pairs.length
         ? pairs.filter((p) => p.correct).length / pairs.length
-        : correct
-          ? 1
-          : 0,
+        : blanks
+          ? solution.filter((id, i) => filled[i] === id).length / (solution.length || 1)
+          : correct
+            ? 1
+            : 0,
     correctAnswer: pairs.length
       ? pairs.map((p) => `${p.prompt}: ${p.correctAnswer}`).join('\n')
-      : expected,
+      : blanks
+        ? fillBlanks(q.prompt, solution.map(word))
+        : expected,
     feedback: q.explanation,
     citations: q.citations,
     pairs,

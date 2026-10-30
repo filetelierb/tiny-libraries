@@ -5424,12 +5424,6 @@ body:has(.panel-resizer.resizing) {
   line-height: 1.6;
   margin-bottom: 18px;
 }
-.assessment-fill > label {
-  display: block;
-  font-size: var(--font-size-title);
-  font-weight: var(--font-weight-regular);
-  line-height: 2;
-}
 .assessment-choice > label {
   display: flex;
   flex-direction: row;
@@ -5491,20 +5485,116 @@ body:has(.panel-resizer.resizing) {
   min-width: 0;
 }
 .assessment-fill {
+  display: grid;
+  gap: 16px;
   margin: 18px 0;
 }
-.assessment-fill input,
-.assessment-fill select {
-  display: inline-block;
-  width: auto;
-  max-width: 100%;
-  margin: 0 4px;
-  padding: 4px 8px;
-  border-radius: var(--radius-xs);
-  min-height: auto;
+.assessment-fill > p {
+  margin: 0;
 }
-.assessment-fill input {
-  width: min(18ch, 100%);
+.assessment-fill-sentence {
+  font-size: var(--font-size-title);
+  line-height: 2.4;
+  overflow-wrap: anywhere;
+}
+/* A blank keeps a standard width and grows with the word placed in it. */
+.assessment-blank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 7em;
+  max-width: 100%;
+  min-height: 1.9em;
+  margin: 0 4px;
+  padding: 0 8px;
+  border: 1px dashed var(--input);
+  border-radius: var(--radius-sm);
+  background: var(--background);
+  color: inherit;
+  font: inherit;
+  line-height: 1.4;
+  vertical-align: middle;
+  cursor: pointer;
+  transition:
+    background 120ms,
+    border-color 120ms;
+}
+.assessment-blank:hover:not(:disabled),
+.assessment-blank[aria-pressed='true'],
+.assessment-blank[data-over] {
+  border-color: var(--primary);
+  background: color-mix(in oklch, var(--primary), transparent 92%);
+}
+.assessment-blank.filled {
+  justify-content: space-between;
+  padding: 0 4px 0 10px;
+  border-style: solid;
+  border-color: var(--primary);
+  background: color-mix(in oklch, var(--primary), transparent 90%);
+  color: var(--foreground);
+  cursor: grab;
+}
+.assessment-blank.filled > span {
+  min-width: 0;
+}
+.assessment-blank.filled button {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--muted-text);
+  cursor: pointer;
+}
+.assessment-blank.filled button:hover:not(:disabled) {
+  background: var(--muted);
+  color: var(--foreground);
+}
+.assessment-word-bank {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 56px;
+  padding: 12px;
+  border: 1px dashed transparent;
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--muted) 60%, transparent);
+}
+.assessment-word-bank[data-over] {
+  border-color: var(--primary);
+}
+.assessment-word {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  font-size: var(--font-size-control);
+  cursor: grab;
+  box-shadow: var(--shadow-xs);
+  transition:
+    border-color 120ms,
+    opacity 120ms;
+}
+.assessment-word:hover:not(:disabled) {
+  border-color: var(--primary);
+}
+.assessment-word:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+.assessment-word[data-used] {
+  border-style: dashed;
+  background: transparent;
+  box-shadow: none;
+  color: var(--muted-text);
+  opacity: 0.45;
 }
 .assessment-question-nav {
   display: flex;

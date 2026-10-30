@@ -229,3 +229,13 @@ The test setup was one long form. It is now four steps with a progress bar at th
 Choices are still saved per session, a follow-up from a report opens directly on Review, and New starts again from Material. The dialog keeps one height so it does not jump between steps.
 
 Verification: type checks and 306 tests pass. In the browser, the steps stay locked with no prepared file; with the check lifted temporarily, Focus, Format (selected count and difficulty highlighted) and Review (summary, Edit links, missing key notice, disabled Prepare) were checked, then the check was restored.
+
+### Completing sentences from a word bank
+
+Completing a sentence had three forms: radio choices, a selector in the blank, and, for hard questions, typing a term copied from a list, which asked for the same thing as the selector with more effort. All three are now one interaction:
+
+- **Question.** A sentence or short passage with one to three blanks and a word bank: the right word for each blank plus distractors that fit the sentence but are wrong. Easy has one blank and three distractors, medium two blanks and two distractors, hard two or three blanks and three distractors. The model returns the word for each blank in order (`blankAnswers`), which stays private until grading like other solutions.
+- **Answering.** Clicking a word fills the next empty blank, or the blank clicked first. Words can be dragged onto a blank, between blanks (the two swap) or back to the bank. A filled blank shows the word with an × to send it back. Empty blanks have a standard width and grow with the word placed in them. Used words stay in the bank, dimmed.
+- **Grading.** Each blank counts: two of three right scores two thirds. The report shows the sentence as completed and as it should read, with the placed words in brackets.
+
+Verification: type checks and 307 tests pass, including a new test for blank counts per difficulty, one word per blank, partial answers, partial credit and the solution staying out of the public plan. In the browser, on a sample three-blank question mounted temporarily: clicking a word, choosing a blank and then a word, the ×, and drag events onto a blank, between blanks, back to the bank and onto a filled blank all gave the expected answer; an empty blank measured 126 px and grew to 331 px with a long term.

@@ -231,7 +231,7 @@ function batch(context: AssessmentContext, index = 0): AssessmentBatch {
         { id: 'd', text: 'Blue' },
       ],
       correctOptionId: 'a',
-      acceptedAnswers: [],
+      blankAnswers: [],
       prompts: [],
       matches: [],
       explanation: 'The supplied flattened image supports this observation.',

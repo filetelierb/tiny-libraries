@@ -161,8 +161,9 @@ function batch(index = 0): AssessmentBatch {
                 { id: 'c', text: 'Metres' },
                 { id: 'd', text: 'Colours' },
               ],
-      correctOptionId: type === 'matching' ? null : type === 'true_false' ? 'true' : 'a',
-      acceptedAnswers: type === 'fill_blank' ? ['sample'] : [],
+      correctOptionId:
+        type === 'matching' || type === 'fill_blank' ? null : type === 'true_false' ? 'true' : 'a',
+      blankAnswers: type === 'fill_blank' ? ['a'] : [],
       prompts:
         type === 'matching'
           ? ['one', 'two', 'three'].map((id, j) => ({
@@ -298,8 +299,8 @@ test('assessment preparation freezes journal messages supplied outside the stora
 const response = (q: AssessmentQuestion) =>
   q.type === 'matching'
     ? JSON.stringify(Object.fromEntries(q.matches.map((m) => [m.promptId, m.optionId])))
-    : q.type === 'fill_blank' && q.difficulty === 'hard'
-      ? q.options.find((o) => o.id === q.correctOptionId)!.text
+    : q.type === 'fill_blank'
+      ? JSON.stringify(q.blankAnswers)
       : q.correctOptionId!;
 
 test('assessment configuration and all question shapes enforce counts, difficulty, pairs and literal evidence', () => {
@@ -340,12 +341,77 @@ test('answer validation rejects reused matching choices and grading gives fracti
   assert.equal(grade.score, 1 / 3);
   assert.equal(grade.pairs[0].correct, true);
   assert.equal(gradeAssessmentQuestion(q, { ...answer, confidence: 'unknown' }).score, 0);
-  const fill = { ...batch().questions[2], difficulty: 'hard' as const };
+});
+test('fill-blank questions use a word bank with one word per blank and partial credit', () => {
+  const fill: AssessmentQuestion = {
+    ...batch().questions[2],
+    difficulty: 'medium',
+    prompt: 'Sampling turns a ____ signal into a ____ sequence.',
+    options: [
+      { id: 'a', text: 'continuous' },
+      { id: 'b', text: 'discrete' },
+      { id: 'c', text: 'periodic' },
+      { id: 'd', text: 'random' },
+    ],
+    blankAnswers: ['a', 'b'],
+  };
+  const medium = batch();
+  medium.questions = medium.questions.map((q) =>
+    q.type === 'fill_blank' ? { ...fill, id: q.id, prompt: `${q.id}: ${fill.prompt}` } : q,
+  );
+  medium.questions = medium.questions.map((q) => ({ ...q, difficulty: 'easy' as const }));
+  assert.throws(() => validateAssessmentBatch(medium, context, config), /difficulty/);
+  medium.questions = medium.questions.map((q) =>
+    q.type === 'fill_blank' ? { ...q, difficulty: 'medium' as const } : q,
+  );
   assert.equal(
-    gradeAssessmentQuestion(fill, { ...answer, response: 'SÁMPLE', questionId: fill.id }).score,
+    validateAssessmentBatch(medium, context, { ...config, difficulty: 'mixed' }).questions.length,
+    12,
+  );
+  const reused = structuredClone(medium);
+  reused.questions[2].blankAnswers = ['a', 'a'];
+  assert.throws(
+    () => validateAssessmentBatch(reused, context, { ...config, difficulty: 'mixed' }),
+    /own word/,
+  );
+  const missing = structuredClone(medium);
+  missing.questions[2].blankAnswers = ['a'];
+  assert.throws(
+    () => validateAssessmentBatch(missing, context, { ...config, difficulty: 'mixed' }),
+    /own word/,
+  );
+  assert.equal(
+    publicAssessmentPlan({ ...medium, questions: [fill] }).questions[0].hasOwnProperty(
+      'blankAnswers',
+    ),
+    false,
+  );
+  assert.equal(validAssessmentResponse(fill, JSON.stringify(['a', ''])), true);
+  assert.equal(validAssessmentResponse(fill, JSON.stringify(['a', 'a'])), false);
+  assert.equal(validAssessmentResponse(fill, JSON.stringify(['a'])), false);
+  assert.equal(validAssessmentResponse(fill, JSON.stringify(['', ''])), false);
+  assert.equal(validAssessmentResponse(fill, 'continuous'), false);
+  const answer = {
+    questionId: fill.id,
+    revision: 1,
+    updatedAt: 'today',
+    response: JSON.stringify(['a', 'c']),
+    confidence: 'sure' as const,
+  };
+  const grade = gradeAssessmentQuestion(fill, answer);
+  assert.equal(grade.score, 0.5);
+  assert.equal(
+    grade.responseText,
+    'Sampling turns a [continuous] signal into a [periodic] sequence.',
+  );
+  assert.equal(
+    grade.correctAnswer,
+    'Sampling turns a [continuous] signal into a [discrete] sequence.',
+  );
+  assert.equal(
+    gradeAssessmentQuestion(fill, { ...answer, response: JSON.stringify(['a', 'b']) }).score,
     1,
   );
-  assert.equal(validAssessmentResponse(fill, 'x'.repeat(301)), false);
 });
 test('frozen context excludes unselected notes/conversation and clips whole media cues at studied limits', async () => {
   const store = await setup();
