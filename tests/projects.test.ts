@@ -27,13 +27,9 @@ test('each interaction on the list is recognised with the record it concerns', (
     { kind: 'progress', key: 'f1' },
   ]);
   assert.deepEqual(kinds('PATCH', '/api/files/f1', { name: 'Renamed' }), []);
-  assert.deepEqual(
-    kinds('POST', '/api/attempts', { sourceId: 's', chapterId: 'c2', questionId: 'q' }),
-    [{ kind: 'quiz', key: 's:c2' }],
-  );
-  assert.deepEqual(kinds('POST', '/api/flashcards/d1/review', { cardId: 'c' }), [
-    { kind: 'card', key: 'd1:c' },
-  ]);
+  // Quiz answers and card reviews are reported by the library, which knows their size.
+  assert.deepEqual(kinds('POST', '/api/attempts', { sourceId: 's', questionId: 'q' }), []);
+  assert.deepEqual(kinds('POST', '/api/flashcards/d1/review', { cardId: 'c' }), []);
   assert.deepEqual(kinds('POST', '/api/assessments/t1/answers', { questionId: 'b1:q3' }), [
     { kind: 'test', key: 't1:b1:q3' },
   ]);
@@ -99,4 +95,26 @@ test('levels are relative to the busiest day and streaks tolerate an idle today'
   assert.deepEqual(activityStreaks(days, counts), { current: 3, longest: 3 });
   counts.delete('2026-10-29');
   assert.deepEqual(activityStreaks(days, counts), { current: 0, longest: 2 });
+});
+
+test('a mini quiz or a deck counts once, when all of it is done that day', () => {
+  const quiz = (part: string) => ({ kind: 'quiz' as const, key: 's:c1', part, parts: 3 });
+  let day = scoreActivity({ day: '2026-10-30', total: 0, projects: {} }, 'default', [
+    quiz('q1'),
+    quiz('q2'),
+    quiz('q2'),
+  ]);
+  assert.equal(day.total, 0);
+  day = scoreActivity(day, 'default', [quiz('q3')]);
+  assert.equal(day.total, activityWeights.quiz);
+  day = scoreActivity(day, 'default', [quiz('q1'), quiz('q2'), quiz('q3')]);
+  assert.equal(day.total, activityWeights.quiz);
+  const card = (part: string) => ({ kind: 'deck' as const, key: 'd1', part, parts: 2 });
+  day = scoreActivity(day, 'default', [card('a'), card('a')]);
+  assert.equal(day.total, activityWeights.quiz);
+  day = scoreActivity(day, 'default', [card('b')]);
+  assert.equal(day.total, activityWeights.quiz + activityWeights.deck);
+  assert.deepEqual(day.kinds, { quiz: 1, deck: 1 });
+  const next = scoreActivity({ day: '2026-10-31', total: 0, projects: {} }, 'default', [card('a')]);
+  assert.equal(next.total, 0);
 });

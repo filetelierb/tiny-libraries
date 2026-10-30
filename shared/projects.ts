@@ -25,13 +25,14 @@ export const activityDaySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 /**
  * The interactions the activity graph scores. Each counts once per day for the record it
- * concerns (a file, a quiz, a card, a test question, a note); tutor questions count each time.
+ * concerns (a file, a deck, a quiz, a test question, a note); tutor questions count each time.
+ * A mini quiz or a flashcard deck counts once all its questions or cards are done that day.
  */
-export const activityKinds = ['progress', 'card', 'quiz', 'test', 'note', 'tutor'] as const;
+export const activityKinds = ['progress', 'deck', 'quiz', 'test', 'note', 'tutor'] as const;
 export type ActivityKind = (typeof activityKinds)[number];
 export const activityWeights: Record<ActivityKind, number> = {
   progress: 1,
-  card: 1,
+  deck: 2,
   quiz: 3,
   test: 2,
   note: 2,
@@ -40,6 +41,9 @@ export const activityWeights: Record<ActivityKind, number> = {
 export const activityEventSchema = z.object({
   kind: z.enum(activityKinds),
   key: z.string().min(1).max(300),
+  /** For a quiz or deck: the question or card done, and how many the whole has. */
+  part: z.string().min(1).max(300).optional(),
+  parts: z.number().int().min(1).max(500).optional(),
 });
 export type ActivityEvent = z.infer<typeof activityEventSchema>;
 /** A day's points, in total and per project, and how many interactions of each kind it had. */
@@ -59,14 +63,15 @@ export function localDay(date = new Date()) {
 /** Routes whose interaction is identified by a field of the request body. */
 export const activityBodyRoute = (method: string, path: string) =>
   (method === 'POST' &&
-    /^\/api\/(attempts|flashcards\/[^/]+\/review|assessments\/[^/]+\/answers|glossary\/merge|conversations\/[^/]+\/messages)$/.test(
+    /^\/api\/(assessments\/[^/]+\/answers|glossary\/merge|conversations\/[^/]+\/messages)$/.test(
       path,
     )) ||
   (method === 'PATCH' && /^\/api\/files\/[^/]+$/.test(path));
 
 /**
- * The scored interactions a successful request made. Saved positions are reported by the
- * library itself, which knows which files changed; everything else is read from the route.
+ * The scored interactions a successful request made, read from the route. Saved positions,
+ * quiz answers and card reviews are reported by the library, which knows which files moved and
+ * how many questions or cards make the whole.
  */
 export function classifyActivity(method: string, path: string, body: unknown): ActivityEvent[] {
   const value = (body && typeof body === 'object' ? body : {}) as Record<string, unknown>,
@@ -74,15 +79,6 @@ export function classifyActivity(method: string, path: string, body: unknown): A
   let match: RegExpMatchArray | null;
   if (method === 'PATCH' && (match = path.match(/^\/api\/files\/([^/]+)$/)))
     return value.reviewed === undefined ? [] : [{ kind: 'progress', key: match[1] }];
-  if (method === 'POST' && path === '/api/attempts') {
-    // A mini quiz is a chapter's questions, an artifact's study questions or a reinforcement.
-    const quiz =
-      field('reinforcementId') ||
-      `${field('sourceId')}:${field('chapterId') || (value.artifactStudy ? 'study' : 'quiz')}`;
-    return [{ kind: 'quiz', key: quiz }];
-  }
-  if (method === 'POST' && (match = path.match(/^\/api\/flashcards\/([^/]+)\/review$/)))
-    return [{ kind: 'card', key: `${match[1]}:${field('cardId')}` }];
   if (method === 'POST' && (match = path.match(/^\/api\/assessments\/([^/]+)\/answers$/)))
     return [{ kind: 'test', key: `${match[1]}:${field('questionId')}` }];
   if (
@@ -107,7 +103,8 @@ export function classifyActivity(method: string, path: string, body: unknown): A
 
 /**
  * Adds a request's interactions to its day. An interaction already counted that day for the
- * same record adds nothing; `seen` keeps those identities.
+ * same record adds nothing; `seen` keeps those identities. A quiz or deck also keeps the
+ * questions or cards done that day, and counts when the last one arrives.
  */
 export function scoreActivity(
   current: ActivityDay & { seen?: string[] },
@@ -123,6 +120,11 @@ export function scoreActivity(
   for (const event of events) {
     const identity = `${project}:${event.kind}:${event.key}`;
     if (seen.has(identity)) continue;
+    if (event.part && event.parts) {
+      seen.add(`${identity}#${event.part}`);
+      const done = [...seen].filter((value) => value.startsWith(`${identity}#`)).length;
+      if (done < event.parts) continue;
+    }
     seen.add(identity);
     const weight = activityWeights[event.kind];
     next.total += weight;

@@ -246,3 +246,8 @@ export async function rateCard(
     return review;
   });
 }
+
+/** How many cards a deck has, for counting a complete pass through it. */
+export async function deckSize(storage: GlossaryStorage, deckId: string) {
+  return (await storage.get<StoredDeck>(deckKey(deckId)))?.cards.length || 0;
+}

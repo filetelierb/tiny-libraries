@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { artifactQuestion } from './artifact-study';
+import { artifactStudyKey, type ArtifactStudy } from '../shared/artifact-study';
 import type { Attempt, Directory, Learning, Question, Segment, Source } from '../shared/domain';
 import { sourceState } from '../shared/directories';
 import type { Reinforcement } from '../shared/review';
@@ -214,4 +215,30 @@ export async function recordAttempt(
       if (claim?.owner === owner && claim.fingerprint === fingerprint) await tx.delete(claimKey);
     });
   }
+}
+
+/**
+ * The mini quiz an answer belongs to and how many questions it has, so the activity graph can
+ * count a quiz once all of it has been answered.
+ */
+export async function quizOf(storage: GlossaryStorage, raw: unknown, attempt: Attempt) {
+  const input = attemptInputSchema.parse(raw);
+  if (attempt.reinforcementId) {
+    const record = await storage.get<Reinforcement>(`reinforcement:${attempt.reinforcementId}`);
+    return { key: attempt.reinforcementId, questions: record?.plan?.questions.length || 0 };
+  }
+  if (input.artifactStudy) {
+    const record = await storage.get<ArtifactStudy>(artifactStudyKey(attempt.sourceId));
+    const chapter = record?.chapters.find((item) => item.id === attempt.chapterId);
+    return {
+      key: `${attempt.sourceId}:study:${attempt.chapterId}`,
+      questions: chapter?.questions.length || 0,
+    };
+  }
+  const learning = await storage.get<Learning>(`learning:${attempt.sourceId}`);
+  const chapter = learning?.synthesis.chapters.find((item) => item.id === attempt.chapterId);
+  return {
+    key: `${attempt.sourceId}:${attempt.chapterId}`,
+    questions: chapter?.questions.length || 0,
+  };
 }

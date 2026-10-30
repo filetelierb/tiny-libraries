@@ -52,7 +52,7 @@ import {
   type LibraryCall,
 } from './tutor-actions';
 import { tutorActionSchema } from '../shared/tutor-actions';
-import { cardSnapshot, startCardDecks, rateCard, CardError } from './flashcards';
+import { cardSnapshot, deckSize, startCardDecks, rateCard, CardError } from './flashcards';
 import { visualKey } from '../shared/artifact-widgets';
 import { artifactStudySnapshot, deleteArtifactStudy, startArtifactStudy } from './artifact-study';
 import {
@@ -89,7 +89,7 @@ import { attachmentRoute } from './attachment-route';
 import { AttachmentError } from './tutor-attachments';
 import { captureRoute } from './capture-route';
 import { CaptureError } from './capture-store';
-import { recordAttempt, PracticeError } from './practice';
+import { quizOf, recordAttempt, PracticeError } from './practice';
 import {
   annotationRoute,
   AnnotationError,
@@ -154,6 +154,15 @@ async function purgeStoredFiles(env: Env, files: Array<{ id: string; version: nu
     ]);
   }
 }
+/** A response that reports scored interactions the router cannot see in the request. */
+const withActivity = (value: unknown, status: number, events: ActivityEvent[]) =>
+  Response.json(value, {
+    status,
+    headers: {
+      'Cache-Control': 'no-store',
+      ...(events.length ? { 'X-Activity': encodeURIComponent(JSON.stringify(events)) } : {}),
+    },
+  });
 const json = (value: unknown, status = 200) =>
   Response.json(value, {
     status,
@@ -955,12 +964,11 @@ export class Library extends DurableObject<Env> {
           );
         });
         // The files whose saved position moved count once a day each in the activity graph.
-        return Response.json(value, {
-          headers: {
-            'Cache-Control': 'no-store',
-            ...(progressed.length ? { 'X-Activity-Progress': progressed.join(',') } : {}),
-          },
-        });
+        return withActivity(
+          value,
+          200,
+          progressed.map((key) => ({ kind: 'progress', key })),
+        );
       }
       if (path.startsWith('/api/assessments')) {
         const options = {
@@ -1257,15 +1265,27 @@ export class Library extends DurableObject<Env> {
         );
       }
       const cardReviewMatch = path.match(/^\/api\/flashcards\/([a-f0-9-]+)\/review$/);
-      if (cardReviewMatch && request.method === 'POST')
-        return json(
-          await rateCard(this.ctx.storage, cardReviewMatch[1], await boundedJson(request)),
-          201,
+      if (cardReviewMatch && request.method === 'POST') {
+        const review = await rateCard(
+          this.ctx.storage,
+          cardReviewMatch[1],
+          await boundedJson(request),
         );
+        // A deck counts in the activity graph once all its cards were reviewed that day.
+        return withActivity(review, 201, [
+          {
+            kind: 'deck',
+            key: review.deckId,
+            part: review.cardId,
+            parts: Math.max(1, await deckSize(this.ctx.storage, review.deckId)),
+          },
+        ]);
+      }
       if (path === '/api/attempts' && request.method === 'POST') {
+        const input = await boundedJson(request);
         const attempt = await recordAttempt(
           this.ctx.storage,
-          await boundedJson(request),
+          input,
           this.executionId,
           async (question, answer, segments) => {
             const key = await this.apiKey();
@@ -1280,7 +1300,16 @@ export class Library extends DurableObject<Env> {
             );
           },
         );
-        return json(attempt, 201);
+        // A mini quiz counts in the activity graph once all its questions were answered that day.
+        const quiz = await quizOf(this.ctx.storage, input, attempt);
+        return withActivity(attempt, 201, [
+          {
+            kind: 'quiz',
+            key: quiz.key,
+            part: attempt.questionId,
+            parts: Math.max(1, quiz.questions),
+          },
+        ]);
       }
       const chatMatch = path.match(/^\/api\/assistant\/([a-f0-9-]+)$/);
       if (chatMatch && request.method === 'POST') {
@@ -1380,14 +1409,10 @@ export default {
       : null;
     const response = await serve(request, env, url);
     if (!response.ok) return response;
-    // Scored interactions go to the activity log per local day; files whose saved position
-    // changed are named by the library.
+    // Scored interactions go to the activity log per local day, with those the library reports.
     const events: ActivityEvent[] = [
       ...classifyActivity(request.method, url.pathname, body),
-      ...(response.headers.get('X-Activity-Progress') || '')
-        .split(',')
-        .filter(Boolean)
-        .map((key) => ({ kind: 'progress' as const, key })),
+      ...reportedActivity(response.headers.get('X-Activity')),
     ];
     if (events.length) {
       const day = activityDaySchema.safeParse(request.headers.get('X-Local-Day'));
@@ -1402,6 +1427,17 @@ export default {
     return response;
   },
 } satisfies ExportedHandler<Env>;
+function reportedActivity(header: string | null): ActivityEvent[] {
+  if (!header) return [];
+  try {
+    return z
+      .array(activityEventSchema)
+      .max(50)
+      .parse(JSON.parse(decodeURIComponent(header)));
+  } catch {
+    return [];
+  }
+}
 async function serve(request: Request, env: Env, url: URL): Promise<Response> {
   {
     try {
