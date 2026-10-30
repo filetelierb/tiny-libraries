@@ -357,3 +357,24 @@ Prepared material travels in the course folder, under `.tailored-library/`:
 - Nothing personal is exported: no attempts, card schedules, reviews, notes, conversations, glossary edits or reading progress. Imported files have no preparation job, so they count as prepared in the queue; the subtitle download links, which follow a job, stay hidden while the player still shows the subtitles.
 
 Verification: type checks and 321 tests pass, including the pack commit (an unknown or empty export is refused; only the named export is kept; the pack is not scanned as course files). Through the API, with a temporary folder holding a short note: a project on it adopted the file and queued nothing (no videos); after preparing it and generating a deck of 3 cards, the export wrote `learning.json` and `cards.json` with the manifest; a project created on a copy of the folder with `pack: true` reported `imported: 1`. That project had the same 2 chapters and 4 questions, the same 6 glossary concepts, the deck ready with 3 cards for its own file id, and the queue listed the file as prepared with no job. Both test projects were then deleted. Videos with subtitles and pictures were not prepared for this check. `GET /api/courses` listed EE261 and CS223A from the disk. The dialog could not be checked in the automated browser.
+
+### One library folder again; courses are copied into it
+
+Projects no longer keep their files in a folder of their own: every project stores its files in the library's data folder, as before, and the folder choice and folder browser are gone from **New project**. The companion's `/disk` routes, the per-file `path` and the project `folder` are removed with them; the tests for that code went with it.
+
+**From a course** stays, now as a copy. The project records the `course` it was made from. `POST /api/projects` with `course` checks the course against the companion's listing, refuses a second project from the same course (409), and starts the import in the new project's library; if that cannot start, the project is removed again. The library lists the course's files, one key each, and copies them in an alarm, one file per run, into object storage with the folder and name they have in the course. A companion that is not answering (the app restarting) postpones the copy by 30 seconds; a file the course no longer has is skipped. Once all are copied, the prepared material is imported if it was asked for, and `prepare` (`none`, `videos` or `all`) queues the files still unprepared. The home page shows the progress on the project's card and refreshes while a copy runs.
+
+The companion's course routes moved to `/courses/*` (`list`, `scan`, `file`, `pack`, `pack/commit`) and accept only folders inside `COURSES_DIR`, which the launcher now also hands to the companion. Prepared material is matched by the file's place in the library, which mirrors its path in the course. `npm run courses -- import` makes the project through the API; with `--project`, it uploads copies as before.
+
+CS223A on the external disk was rearranged into the layout the SEE downloader writes. The course page saved with it was parsed with the same parser, and each file was moved to the place that page gives it, matched by its download URL: `Handouts/`, `Assignments/` and `Lectures/Lecture NN/` with the video and its transcript. Then `course.json` and `SOURCE.md` were written. The six solution PDFs the page links answer 404 and are not part of it. The earlier download records were kept in a hidden `.download/` folder. All 46 files kept the sizes they were downloaded with.
+
+Verification: type checks and 321 tests pass, including that a course must be inside the courses folder. Through the API, with a temporary course holding `Lectures/Lecture 01/Fourier notes.md`:
+
+- A folder outside the courses folder was refused (404).
+- A project from the course copied the note into `Lectures/Lecture 01` with its type, and its content read back.
+- A second project from the same course was refused (409).
+- With `prepare: all`, the note was queued and prepared; a deck of 3 cards was generated.
+- Saving the prepared material wrote it beside the course, and the course listing then reported it.
+- After deleting the first project, a project made with `pack: true` had the same 3 chapters, 5 questions and 5 glossary concepts, and the ready deck for its own file, with no preparation job.
+
+The test projects and the temporary course were then deleted. The dialog was not checked in a browser.

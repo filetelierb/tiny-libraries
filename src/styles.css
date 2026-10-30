@@ -10483,8 +10483,7 @@ body:has(.panel-resizer.resizing) {
   display: grid;
   gap: 16px;
 }
-.new-project > label,
-.new-project-folder > label {
+.new-project > label {
   display: grid;
   gap: 8px;
   font-size: var(--font-size-control);
@@ -10533,6 +10532,17 @@ body:has(.panel-resizer.resizing) {
 .new-project-choice svg {
   vertical-align: -2px;
   color: var(--primary);
+}
+.new-project-prepare {
+  display: grid;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: var(--font-size-control);
+}
+.new-project-prepare small {
+  color: var(--muted-text);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
 }
 .new-project-start {
   display: grid;
@@ -10600,73 +10610,7 @@ body:has(.panel-resizer.resizing) {
   color: var(--muted-text);
   font-size: var(--font-size-xs);
 }
-.new-project-folder {
-  display: grid;
-  gap: 12px;
-}
-.new-project-path {
-  display: flex;
-  gap: 8px;
-}
-.new-project-path input {
-  flex: 1;
-  min-width: 0;
-  font-family: var(--font-mono);
-  font-size: var(--font-size-xs);
-}
-.folder-browser {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-}
-.folder-browser-heading {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--border);
-  font-size: var(--font-size-xs);
-}
-.folder-browser-heading strong {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  direction: rtl;
-  text-align: left;
-}
-.folder-browser ul {
-  max-height: 220px;
-  margin: 0;
-  padding: 4px;
-  overflow-y: auto;
-  list-style: none;
-}
-.folder-browser li.muted {
-  padding: 8px;
-  font-size: var(--font-size-xs);
-}
-.folder-browser li button {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 6px 8px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: none;
-  color: inherit;
-  font: inherit;
-  font-size: var(--font-size-control);
-  text-align: left;
-  cursor: pointer;
-}
-.folder-browser li button:hover,
-.folder-browser li button:focus-visible {
-  background: color-mix(in oklch, var(--primary) 8%, transparent);
-}
-.home-project-folder {
+.home-project-course {
   display: flex;
   align-items: center;
   gap: 4px;

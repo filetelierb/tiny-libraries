@@ -1,15 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import {
-  BookOpen,
-  Check,
-  FolderOpen,
-  FolderSync,
-  PackageOpen,
-  Pencil,
-  Plus,
-  Trash2,
-  X,
-} from 'lucide-react';
+import { BookOpen, Check, GraduationCap, PackageOpen, Pencil, Plus, Trash2, X } from 'lucide-react';
 import {
   heatmapStart,
   localDay,
@@ -64,6 +54,21 @@ export function HomePage() {
       loadActivity(),
     ]).catch((e) => setError((e as Error).message));
   }, []);
+  // A course still being copied updates its card until it is done.
+  const copying = !!projects?.some(
+    (project) => project.importing && project.importing.status !== 'failed',
+  );
+  useEffect(() => {
+    if (!copying) return;
+    const timer = setInterval(
+      () =>
+        void api<ProjectSummary[]>('/projects')
+          .then(setProjects)
+          .catch(() => {}),
+      3000,
+    );
+    return () => clearInterval(timer);
+  }, [copying]);
   async function remove() {
     if (!deleting || confirmation.trim() !== deleting.name.trim() || busy) return;
     setBusy(true);
@@ -78,31 +83,7 @@ export function HomePage() {
       setBusy(false);
     }
   }
-  /** Adds the files that appeared in a project's folder since they were last listed. */
-  async function scan(project: ProjectSummary) {
-    if (busy) return;
-    setBusy(true);
-    setNotice('');
-    try {
-      const { added } = await api<{ added: unknown[] }>(
-        '/files/scan',
-        'POST',
-        {},
-        {
-          'X-Project': project.id,
-        },
-      );
-      setNotice(
-        t.scannedFolder.replace('{n}', String(added.length)).replace('{name}', project.name),
-      );
-      setProjects(await api<ProjectSummary[]>('/projects'));
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-  /** Saves the project's prepared material in its folder, for projects made from it later. */
+  /** Saves the project's prepared material beside its course, for projects made from it later. */
   async function exportPack(project: ProjectSummary) {
     if (busy) return;
     setBusy(true);
@@ -216,10 +197,21 @@ export function HomePage() {
                         {plural(project.files, t.projectFile, t.projectFiles)} ·{' '}
                         {plural(project.sessions, t.projectSession, t.projectSessions)}
                       </span>
-                      {project.folder && (
-                        <span className="home-project-folder" title={project.folder}>
-                          <FolderOpen size={12} aria-hidden="true" />
-                          {project.folder}
+                      {project.course && (
+                        <span className="home-project-course" title={project.course}>
+                          <GraduationCap size={12} aria-hidden="true" />
+                          {project.importing
+                            ? project.importing.status === 'failed'
+                              ? t.courseImportFailed.replace(
+                                  '{error}',
+                                  project.importing.error || '',
+                                )
+                              : project.importing.status === 'importing'
+                                ? t.courseImportFinishing
+                                : t.courseImportCopying
+                                    .replace('{done}', String(project.importing.done))
+                                    .replace('{total}', String(project.importing.total))
+                            : project.course.split('/').pop()}
                         </span>
                       )}
                       <small>
@@ -232,16 +224,7 @@ export function HomePage() {
                       </small>
                     </a>
                     <div className="home-project-tools">
-                      {project.folder && (
-                        <IconButton
-                          label={t.scanProjectFolder}
-                          disabled={busy}
-                          onClick={() => void scan(project)}
-                        >
-                          <FolderSync size={14} />
-                        </IconButton>
-                      )}
-                      {project.folder && (
+                      {project.course && !project.importing && (
                         <IconButton
                           label={t.exportPack}
                           disabled={busy}
@@ -319,11 +302,7 @@ export function HomePage() {
                   plural(deleting.sessions, t.projectSession, t.projectSessions),
                 )}
             </p>
-            {deleting.folder && (
-              <p className="muted">
-                {t.deleteProjectFolderKept.replace('{folder}', deleting.folder)}
-              </p>
-            )}
+            {deleting.course && <p className="muted">{t.deleteProjectCourseKept}</p>}
             <label>
               <span>{t.deleteProjectConfirm.replace('{name}', deleting.name)}</span>
               <input

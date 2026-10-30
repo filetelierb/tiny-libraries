@@ -27,8 +27,6 @@ export const sourceSchema = z.object({
   trashed: z.boolean().optional(),
   reviewed: z.boolean(),
   createdAt: z.string(),
-  /** Where the original is in the project's own folder, when the project keeps files there. */
-  path: z.string().min(1).max(1024).optional(),
 });
 export type Source = z.infer<typeof sourceSchema>;
 export const directorySchema = z.object({
@@ -312,8 +310,6 @@ export type Catalog = {
   concepts: Concept[];
   conversations: import('./conversations').Conversation[];
   settings: Settings;
-  /** The folder where this project keeps its files as ordinary files, if it has one. */
-  folder?: string | null;
 };
 /** Full-length lecture recordings commonly reach about 1 GB. */
 export const MAX_FILE_BYTES = 2 * 1024 * 1024 * 1024;

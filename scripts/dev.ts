@@ -55,7 +55,7 @@ try {
 }
 if (data.folder) console.log(`Library data: ${data.folder}`);
 const config = await readConfig(root);
-const bridge = await startBridge(token, data.processing);
+const bridge = await startBridge(token, data.processing, undefined, undefined, config.coursesDir);
 const port = 9876;
 const args = [
   'dev',

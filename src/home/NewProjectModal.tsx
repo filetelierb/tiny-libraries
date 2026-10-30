@@ -1,12 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { BookOpen, ChevronLeft, Folder, HardDrive, Sparkles } from 'lucide-react';
+import { BookOpen, Sparkles } from 'lucide-react';
 import type { ProjectSummary } from '../../shared/projects';
 import { api } from '../api';
 import { Button, Modal } from '../design/components';
 import type { Locale } from '../../shared/domain';
 import type { T } from '../i18n';
 
-type Listing = { path: string | null; parent: string | null; folders: string[] };
 type Course = {
   path: string;
   title: string;
@@ -19,62 +18,6 @@ type Course = {
 };
 const size = (bytes: number) =>
   bytes >= 1e9 ? `${(bytes / 1e9).toFixed(1)} GB` : `${Math.max(1, Math.round(bytes / 1e6))} MB`;
-const nameOf = (path: string) => path.split('/').filter(Boolean).pop() || path;
-
-/** Sub-folders of a folder on this computer, starting from the home folder and the disks. */
-function FolderBrowser({ t, choose }: { t: T; choose: (path: string) => void }) {
-  const [listing, setListing] = useState<Listing | null>(null),
-    [error, setError] = useState('');
-  const open = (path?: string) =>
-    api<Listing>(`/folders${path ? `?path=${encodeURIComponent(path)}` : ''}`)
-      .then((value) => {
-        setListing(value);
-        setError('');
-      })
-      .catch((e) => setError((e as Error).message));
-  useEffect(() => {
-    void open();
-  }, []);
-  return (
-    <div className="folder-browser">
-      <div className="folder-browser-heading">
-        {listing?.path ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => void open(listing.parent || undefined)}
-            aria-label={t.folderUp}
-          >
-            <ChevronLeft size={14} />
-          </Button>
-        ) : null}
-        <strong title={listing?.path || undefined}>{listing?.path || t.folderPlaces}</strong>
-        {listing?.path && (
-          <Button size="sm" onClick={() => choose(listing.path!)}>
-            {t.useThisFolder}
-          </Button>
-        )}
-      </div>
-      {error && (
-        <p role="alert" className="notice">
-          {error}
-        </p>
-      )}
-      <ul>
-        {listing?.folders.map((path) => (
-          <li key={path}>
-            <button type="button" onClick={() => void open(path)}>
-              {listing.path ? <Folder size={14} /> : <HardDrive size={14} />}
-              <span>{listing.path ? nameOf(path) : path}</span>
-            </button>
-          </li>
-        ))}
-        {listing && !listing.folders.length && <li className="muted">{t.noSubfolders}</li>}
-      </ul>
-    </div>
-  );
-}
-
 /** The downloaded courses to start a project from, with what each one holds. */
 function CourseList({
   t,
@@ -124,7 +67,7 @@ function CourseList({
               </small>
               <small>
                 {course.project
-                  ? t.courseAlreadyProject
+                  ? t.courseAlreadyProject.replace('{name}', course.project)
                   : course.pack
                     ? t.coursePrepared.replace('{n}', String(course.pack.files))
                     : t.courseNotPrepared}
@@ -138,9 +81,8 @@ function CourseList({
 }
 
 /**
- * Names a new project and chooses where its files go: the library's own storage, or a folder
- * on this computer, such as one on an external disk, where they are kept as ordinary files.
- * A project can also start from a downloaded course, with or without its prepared material.
+ * Names a new project, which starts empty or from a downloaded course: the course's files are
+ * copied into the library in their folders, with or without the material prepared for them.
  */
 export function NewProjectModal({
   t,
@@ -156,17 +98,11 @@ export function NewProjectModal({
   const [start, setStart] = useState<'empty' | 'course'>('empty'),
     [course, setCourse] = useState<Course | null>(null),
     [withPack, setWithPack] = useState(false),
-    [prepareNow, setPrepareNow] = useState(false),
+    [prepare, setPrepare] = useState<'none' | 'videos' | 'all'>('none'),
     [name, setName] = useState(''),
-    [storage, setStorage] = useState<'library' | 'folder'>('library'),
-    [folder, setFolder] = useState(''),
-    [browsing, setBrowsing] = useState(false),
-    [adopt, setAdopt] = useState(true),
     [busy, setBusy] = useState(false),
     [error, setError] = useState('');
-  const ready =
-    !!name.trim() &&
-    (start === 'course' ? !!course : storage === 'library' || folder.trim().startsWith('/'));
+  const ready = !!name.trim() && (start === 'empty' || !!course);
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!ready || busy) return;
@@ -180,13 +116,12 @@ export function NewProjectModal({
           start === 'course'
             ? {
                 name,
-                folder: course!.path,
-                adopt: true,
+                course: course!.path,
                 pack: withPack,
-                prepare: !withPack && prepareNow ? 'videos' : 'none',
+                prepare: withPack ? 'none' : prepare,
                 locale,
               }
-            : { name, ...(storage === 'folder' ? { folder: folder.trim(), adopt } : {}) },
+            : { name },
         ),
       );
     } catch (e) {
@@ -265,88 +200,20 @@ export function NewProjectModal({
               </span>
             </label>
             {!withPack && (
-              <label className="settings-check">
-                <input
-                  type="checkbox"
-                  checked={prepareNow}
-                  onChange={(e) => setPrepareNow(e.target.checked)}
-                />
-                <span>
-                  {t.coursePrepareNow}
-                  <small>{t.coursePrepareNowHint}</small>
-                </span>
+              <label className="new-project-prepare">
+                <span>{t.coursePrepareNow}</span>
+                <select
+                  value={prepare}
+                  onChange={(e) => setPrepare(e.target.value as typeof prepare)}
+                >
+                  <option value="none">{t.coursePrepareNone}</option>
+                  <option value="videos">{t.coursePrepareVideos}</option>
+                  <option value="all">{t.coursePrepareAll}</option>
+                </select>
+                <small>{t.coursePrepareNowHint}</small>
               </label>
             )}
           </fieldset>
-        )}
-        {start === 'empty' && (
-          <>
-            <fieldset>
-              <legend>{t.projectStorage}</legend>
-              <label className="new-project-choice">
-                <input
-                  type="radio"
-                  name="storage"
-                  checked={storage === 'library'}
-                  onChange={() => setStorage('library')}
-                />
-                <span>
-                  {t.projectStorageLibrary}
-                  <small>{t.projectStorageLibraryHint}</small>
-                </span>
-              </label>
-              <label className="new-project-choice">
-                <input
-                  type="radio"
-                  name="storage"
-                  checked={storage === 'folder'}
-                  onChange={() => setStorage('folder')}
-                />
-                <span>
-                  {t.projectStorageFolder}
-                  <small>{t.projectStorageFolderHint}</small>
-                </span>
-              </label>
-            </fieldset>
-            {storage === 'folder' && (
-              <div className="new-project-folder">
-                <label>
-                  <span>{t.projectFolderPath}</span>
-                  <div className="new-project-path">
-                    <input
-                      value={folder}
-                      spellCheck={false}
-                      placeholder={t.projectFolderPlaceholder}
-                      onChange={(e) => setFolder(e.target.value)}
-                    />
-                    <Button onClick={() => setBrowsing((value) => !value)}>
-                      {t.browseFolders}
-                    </Button>
-                  </div>
-                </label>
-                {browsing && (
-                  <FolderBrowser
-                    t={t}
-                    choose={(path) => {
-                      setFolder(path);
-                      setBrowsing(false);
-                    }}
-                  />
-                )}
-                <label className="settings-check">
-                  <input
-                    type="checkbox"
-                    checked={adopt}
-                    onChange={(e) => setAdopt(e.target.checked)}
-                  />
-                  <span>
-                    {t.adoptFolderFiles}
-                    <small>{t.adoptFolderFilesHint}</small>
-                  </span>
-                </label>
-              </div>
-            )}
-          </>
         )}
         {error && (
           <p role="alert" className="notice">

@@ -9,15 +9,18 @@ import {
 } from '../shared/domain';
 import type { CardDeck } from '../shared/flashcards';
 import { latestArtifact } from './artifact-revisions';
-import { commitPack, readPack, writePack } from './disk';
+import { commitPack, readPack, writePack } from './courses';
 
 /**
  * A course folder can carry the material the library prepared for its files: transcripts,
  * subtitles, chapters with their quizzes, the glossary terms, the artifact, pictures and
- * flashcards. Another project made from the same folder brings it in instead of preparing
- * again. Files are matched by their path in the folder and their size; the student's progress,
- * notes and conversations are never part of it.
+ * flashcards. Another project made from the same course brings it in instead of preparing
+ * again. A course's files keep their path in the course as their place in the library, and
+ * are matched by it and their size; the student's progress, notes and conversations are never
+ * part of it.
  */
+export const coursePath = (file: { folder: string; name: string }) =>
+  file.folder ? `${file.folder}/${file.name}` : file.name;
 type Bridge = { MEDIA_BRIDGE_URL: string; MEDIA_BRIDGE_TOKEN: string };
 type PackEnv = Bridge & { FILES: R2Bucket };
 const manifestSchema = z.object({
@@ -34,7 +37,7 @@ const CAPTIONS = ['original.vtt', 'original.srt', 'translated.vtt', 'translated.
 /** What a file's material keeps of a deck: its chapter and cards, never who studied them. */
 type PackedDeck = Pick<CardDeck, 'chapterId' | 'title' | 'locale' | 'model' | 'cards'>;
 
-/** Writes the prepared material of every file kept in the folder, then its manifest. */
+/** Writes the prepared material of every file of the course, then its manifest. */
 export async function exportPack(
   storage: DurableObjectStorage,
   env: PackEnv,
@@ -45,7 +48,7 @@ export async function exportPack(
   const entries: PackManifest['files'] = [];
   const locales = new Map<Locale, number>();
   for (const file of files) {
-    if (!file.path || file.kind === 'artifact') continue;
+    if (file.kind === 'artifact') continue;
     const learning = await storage.get<Learning>(`learning:${file.id}`);
     if (!learning || learning.sourceVersion !== file.version) continue;
     const key = String(entries.length + 1),
@@ -98,7 +101,7 @@ export async function exportPack(
         });
     }
     if (decks.length) await writePack(env, root, at('cards.json'), JSON.stringify(decks));
-    entries.push({ path: file.path, size: file.size, key });
+    entries.push({ path: coursePath(file), size: file.size, key });
     locales.set(learning.locale, (locales.get(learning.locale) || 0) + 1);
   }
   if (!entries.length) throw new PackError('No file in this project has prepared material yet');
@@ -136,7 +139,7 @@ export async function importPack(
   const response = await readPack(env, root, 'manifest.json');
   if (!response) throw new PackError('This folder has no prepared material');
   const manifest = manifestSchema.parse(await response.json());
-  const byPath = new Map(files.filter((file) => file.path).map((file) => [file.path!, file]));
+  const byPath = new Map(files.map((file) => [coursePath(file), file]));
   let imported = 0,
     skipped = 0;
   for (const entry of manifest.files) {

@@ -3,7 +3,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { mkdir, readFile, writeFile, open, rename, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { MAX_FILE_BYTES, kindSchema } from '../shared/domain';
-import { diskRoute } from './disk';
+import { courseRoute } from './courses';
 import { normalize } from './media';
 import { museEngine } from './muse';
 import { z } from 'zod';
@@ -18,6 +18,7 @@ export async function startBridge(
   root: string,
   port = 9877,
   tutorProvider?: TutorProvider,
+  coursesDir?: string,
 ) {
   await mkdir(root, { recursive: true, mode: 0o700 });
   const tutor = new TutorTransport(
@@ -39,7 +40,7 @@ export async function startBridge(
         return;
       }
       const url = new URL(req.url || '/', 'http://127.0.0.1');
-      if (url.pathname.startsWith('/disk/')) return await diskRoute(url, req, res);
+      if (url.pathname.startsWith('/courses/')) return await courseRoute(url, req, res, coursesDir);
       const tutorMatch = url.pathname.match(/^\/tutor-requests\/([a-f0-9]{64})(\/cancel)?$/);
       if (tutorMatch) {
         let result;
