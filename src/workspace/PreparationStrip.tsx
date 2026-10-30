@@ -10,14 +10,19 @@ export function PreparationMarker({ job, t }: { job: Job; t: T }) {
     job.status === 'failed'
       ? t.jobFailed
       : job.status === 'queued'
-        ? t.jobQueued
+        ? job.position
+          ? t.jobWaitingTurn.replace('{n}', String(job.position))
+          : t.jobQueued
         : `${t.jobRunning} · ${t[job.stage]}${jobProgress(job)}`;
   return (
     <span className={`preparation-marker ${job.status}`} title={label} aria-label={label}>
       {job.status === 'failed' ? (
         <CircleAlert size={14} aria-hidden="true" />
       ) : job.status === 'queued' ? (
-        <Clock size={14} aria-hidden="true" />
+        <>
+          <Clock size={14} aria-hidden="true" />
+          {job.position ? <small aria-hidden="true">{job.position}</small> : null}
+        </>
       ) : (
         <LoaderCircle size={14} className="spin" aria-hidden="true" />
       )}
@@ -45,6 +50,8 @@ export function PreparationStrip({
   const entries = [...jobs].filter(([id]) => names.has(id));
   const running = entries.filter(([, job]) => working(job)),
     current = running.length === 1 ? running[0] : null;
+  // Two files are prepared at a time, so both are named.
+  const both = running.length === 2 ? running.map(([id]) => names.get(id)!).join(' · ') : '';
   const queued = entries.filter(([, job]) => job.status === 'queued').length,
     failed = entries.filter(([, job]) => job.status === 'failed').length;
   if (!running.length && !queued && !failed) return null;
@@ -61,11 +68,13 @@ export function PreparationStrip({
         <strong>
           {current
             ? t.preparingFile.replace('{name}', names.get(current[0])!)
-            : running.length
-              ? t.preparingMany.replace('{n}', String(running.length))
-              : queued
-                ? t.preparingWaiting
-                : t.preparingStopped}
+            : both
+              ? t.preparingFile.replace('{name}', both)
+              : running.length
+                ? t.preparingMany.replace('{n}', String(running.length))
+                : queued
+                  ? t.preparingWaiting
+                  : t.preparingStopped}
         </strong>
         <small>
           {[

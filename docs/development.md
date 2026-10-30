@@ -383,6 +383,16 @@ The test projects and the temporary course were then deleted. The dialog was not
 
 The library follows preparation in the student's language while it is open (`usePreparation`): it reads `GET /api/jobs` every 4 seconds while any job is queued or under way and every 15 seconds otherwise, so jobs started by a course import or from the queue appear on their own. Each file with an unfinished job gets a marker beside its name in the library tree: a spinner while it is prepared (its title gives the step and progress), a clock while queued, an alert when it failed. Above the files, a line names the file under way and its step, or how many are under way, with the counts queued and needing attention; it opens the preparation queue. When a job completes, the catalog reloads so the file's chapters and practice appear.
 
-Jobs are not limited in number: preparing every file of a course starts them all at once (CS223A showed 47 running, 16 of them reading their videos). The wording that promised one file after another was corrected.
+Jobs were not limited in number: preparing every file of a course started them all at once (CS223A showed 47 running, 16 of them reading their videos). The wording that promised one file after another was corrected, and the next change limits them.
 
 Verification: type checks and 321 tests pass; the CS223A import finished with its 47 files, and `GET /api/jobs` reported the running jobs the markers follow. The markers were not checked in a browser.
+
+### Two files prepared at a time
+
+Preparation now takes turns across the whole app (`shared/preparation-turns.ts`). Before each step a job asks the first library for a turn. Two turns exist. A job keeps its turn while it renews it at each step, and a turn nobody renews for 6 minutes frees up, so a job that stopped cannot hold one.
+
+Without a turn, a job stays queued with its place in line (`position`) and asks again 6 to 10 seconds later. Turns go to the job that has waited longest; jobs that started waiting together go in id order. A place in line nobody asks about for 2 minutes is forgotten. A job gives its turn back when it completes, fails for good, is cancelled or is deleted with its project; a retry after a passing error keeps it.
+
+The library shows the place in line beside each waiting file (a clock and its number), in the preparation queue ("Waiting its turn · 3 in line"), and in the line above the files ("45 waiting their turn"). The line names both files under way.
+
+Verification: type checks and 323 tests pass, including turns for two jobs at a time, the order of the line, a renewed turn and an expired one. With the CS223A project preparing all its files, after the restart and the jobs' recovery wake, `GET /api/jobs` reported 2 running (one transcribing, one reviewing its glossary), 42 queued with places 1 to 42, and 3 completed. The markers were not checked in a browser.

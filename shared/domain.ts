@@ -260,6 +260,8 @@ export type Job = {
   totalParts?: number;
   attempts: number;
   error?: string;
+  /** While queued, its place in line for a turn to prepare. */
+  position?: number;
   createdAt: string;
 };
 // A long source's synthesis reports its windows; recordings report their audio chunks.

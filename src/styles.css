@@ -381,11 +381,17 @@ hr {
 }
 .preparation-marker {
   display: inline-flex;
+  align-items: center;
   flex-shrink: 0;
   color: var(--primary);
 }
 .preparation-marker.queued {
   color: var(--muted-text);
+}
+.preparation-marker small {
+  margin-left: 2px;
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
 }
 .preparation-marker.failed {
   color: var(--danger);

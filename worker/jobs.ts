@@ -48,6 +48,7 @@ export class ProcessingJob extends DurableObject<Env> {
     const path = new URL(request.url).pathname;
     // A deleted project's jobs are removed with it.
     if (path === '/purge' && request.method === 'POST') {
+      await this.releaseTurn();
       await this.ctx.storage.deleteAlarm();
       await this.ctx.storage.deleteAll();
       return Response.json({ ok: true });
@@ -79,9 +80,10 @@ export class ProcessingJob extends DurableObject<Env> {
     }
     if (!job) return Response.json(null);
     if (request.method === 'DELETE') {
-      job = { ...job, status: 'cancelled' };
+      job = { ...job, status: 'cancelled', position: undefined };
       await this.ctx.storage.put('job', job);
       await this.ctx.storage.deleteAlarm();
+      await this.releaseTurn();
     }
     if (request.method === 'POST' && (job.status === 'failed' || job.status === 'cancelled')) {
       job = { ...job, status: 'queued', error: undefined, attempts: 0 };
@@ -95,6 +97,17 @@ export class ProcessingJob extends DurableObject<Env> {
       { ...job, segments: segments || [] },
       { headers: { 'Cache-Control': 'no-store' } },
     );
+  }
+  /** A turn to prepare, asked for before each step; without one the job waits in line. */
+  private turn(id: string) {
+    return internal<{ granted: boolean; position?: number }>(this.env, '/internal/turns/claim', {
+      id,
+    });
+  }
+  private async releaseTurn() {
+    const job = await this.ctx.storage.get<Job>('job');
+    if (job)
+      await internal(this.env, '/internal/turns/release', { id: job.id }).catch(() => undefined);
   }
   /** The library of the project the file belongs to. */
   private async library<T>(path: string, body?: unknown) {
@@ -251,6 +264,14 @@ export class ProcessingJob extends DurableObject<Env> {
   async alarm() {
     let job = await this.ctx.storage.get<Job>('job');
     if (!job || job.status === 'cancelled' || job.status === 'completed') return;
+    const turn = await this.turn(job.id).catch(() => null);
+    if (!turn?.granted) {
+      // Waiting jobs ask again a little apart, so they do not all ask at the same moment.
+      await this.ctx.storage.put('job', { ...job, status: 'queued', position: turn?.position });
+      await this.ctx.storage.setAlarm(Date.now() + 6000 + Math.random() * 4000);
+      return;
+    }
+    job = { ...job, position: undefined };
     const initial = job;
     try {
       // Schedule a recovery wake before external work; completed checkpoints are never repeated.
@@ -444,8 +465,10 @@ export class ProcessingJob extends DurableObject<Env> {
       const current = await this.ctx.storage.get<Job>('job');
       if (current?.status === 'cancelled') return;
       await this.ctx.storage.put('job', { ...job, attempts: 0 });
-      if (job.status === 'completed') await this.ctx.storage.deleteAlarm();
-      else await this.ctx.storage.setAlarm(Date.now() + 100);
+      if (job.status === 'completed') {
+        await this.ctx.storage.deleteAlarm();
+        await this.releaseTurn();
+      } else await this.ctx.storage.setAlarm(Date.now() + 100);
     } catch (error) {
       const current = await this.ctx.storage.get<Job>('job');
       if (current?.status === 'cancelled') return;
@@ -473,7 +496,10 @@ export class ProcessingJob extends DurableObject<Env> {
       });
       if (retryable && attempts < 4)
         await this.ctx.storage.setAlarm(Date.now() + Math.min(60000, 2000 * 2 ** attempts));
-      else await this.ctx.storage.deleteAlarm();
+      else {
+        await this.ctx.storage.deleteAlarm();
+        await this.releaseTurn();
+      }
     }
   }
   // A batch whose cue identities come back changed is retried in halves; a cue that still

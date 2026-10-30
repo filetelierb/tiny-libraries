@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Check, LoaderCircle, RotateCcw, Square, X } from 'lucide-react';
+import { Check, Clock, LoaderCircle, RotateCcw, Square, X } from 'lucide-react';
 import { jobProgress, type Job, type Locale, type Source } from '../../shared/domain';
 import { api } from '../api';
 import { Button, IconButton } from '../design/components';
@@ -163,12 +163,19 @@ export function ProcessingPanel({
               active = ['queued', 'running', 'partial'].includes(job.status);
             return (
               <li key={job.id} className={job.status}>
-                {active ? <LoaderCircle className="spin" size={14} /> : <Check size={14} />}
+                {job.status === 'queued' ? (
+                  <Clock size={14} />
+                ) : active ? (
+                  <LoaderCircle className="spin" size={14} />
+                ) : (
+                  <Check size={14} />
+                )}
                 <button type="button" className="processing-file" onClick={() => open(file)}>
                   <span>{file.name}</span>
                   <small>
-                    {t[statusLabel[job.status]]} · {t[job.stage]}
-                    {jobProgress(job)}
+                    {job.status === 'queued' && job.position
+                      ? t.jobWaitingTurn.replace('{n}', String(job.position))
+                      : `${t[statusLabel[job.status]]} · ${t[job.stage]}${jobProgress(job)}`}
                   </small>
                   {job.error && <small className="form-error">{job.error}</small>}
                 </button>

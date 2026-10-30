@@ -25,6 +25,7 @@ import {
 } from '../shared/domain';
 import { CourseError, listCourses, readCourseFile, scanCourse } from './courses';
 import { exportPack, importPack, PackError } from './pack';
+import { claimTurn, noTurns, releaseTurn, type Turns } from '../shared/preparation-turns';
 export { ProcessingJob } from './jobs';
 export { TutorConversation } from './tutor-conversation';
 import {
@@ -562,6 +563,22 @@ export class Library extends DurableObject<Env> {
       return entries;
     };
     const existsMatch = path.match(/^\/internal\/projects\/([\w-]+)$/);
+    // Turns to prepare files, shared by every project's jobs.
+    if (path === '/internal/turns/claim' || path === '/internal/turns/release') {
+      const { id } = z.object({ id: z.string().min(1).max(200) }).parse(await boundedJson(request));
+      return json(
+        await storage.transaction(async (tx) => {
+          const turns = (await tx.get<Turns>('preparation-turns')) || noTurns();
+          if (path === '/internal/turns/release') {
+            await tx.put('preparation-turns', releaseTurn(turns, id, Date.now()));
+            return { granted: false };
+          }
+          const result = claimTurn(turns, id, Date.now());
+          await tx.put('preparation-turns', result.turns);
+          return result.granted ? { granted: true } : { granted: false, position: result.position };
+        }),
+      );
+    }
     if (existsMatch) {
       const record = await storage.get<Project>(`project:${existsMatch[1]}`);
       return json({ exists: !!record, course: record?.course ?? null });
