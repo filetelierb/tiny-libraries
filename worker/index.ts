@@ -595,6 +595,7 @@ export class Library extends DurableObject<Env> {
       model: (await this.ctx.storage.get<string>('model')) || 'muse-spark-1.3',
       webAuto: (await this.ctx.storage.get<boolean>('webAuto')) ?? true,
       ...(key ? { keySuffix: key.slice(-4) } : {}),
+      ...(this.env.DATA_DIR ? { dataDir: this.env.DATA_DIR } : {}),
     };
   }
   async fetch(request: Request): Promise<Response> {

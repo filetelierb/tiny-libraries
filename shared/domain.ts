@@ -276,6 +276,8 @@ export type Settings = {
   /** The tutor may search the web when the library does not cover a question. */
   webAuto: boolean;
   keySuffix?: string;
+  /** The folder the library keeps its data in, when it is not the project's own. */
+  dataDir?: string;
 };
 export type ConceptSource = {
   sourceId: string;

@@ -4,6 +4,7 @@ import { mkdir, readFile, writeFile, access, chmod } from 'node:fs/promises';
 import { join, delimiter } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { startBridge } from '../server/bridge';
+import { DataFolderError, resolveDataLocation } from './data-dir';
 
 process.umask(0o077);
 const root = process.cwd(),
@@ -39,7 +40,21 @@ try {
   console.error('Run npm install first: the local Workers runtime is missing.');
   process.exit(1);
 }
-const bridge = await startBridge(token, join(local, 'processing'));
+// `--data <folder>` (or `npm start --data=<folder>`) keeps the library in that folder from now on.
+const flag = process.argv.indexOf('--data');
+let data;
+try {
+  data = await resolveDataLocation(
+    root,
+    (flag >= 0 ? process.argv[flag + 1] : undefined) || process.env.npm_config_data || undefined,
+  );
+} catch (error) {
+  if (!(error instanceof DataFolderError)) throw error;
+  console.error(error.message);
+  process.exit(1);
+}
+if (data.folder) console.log(`Library data: ${data.folder}`);
+const bridge = await startBridge(token, data.processing);
 const port = 9876;
 const args = [
   'dev',
@@ -49,6 +64,10 @@ const args = [
   '--port',
   String(port),
   '--show-interactive-dev-session=false',
+  '--persist-to',
+  data.state,
+  // Shown in Settings, so the library's location is visible from the app.
+  ...(data.folder ? ['--var', `DATA_DIR:${data.folder}`] : []),
 ];
 // If the runtime stops unexpectedly, the bridge keeps running and the runtime is started again,
 // a bounded number of times.

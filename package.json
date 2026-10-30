@@ -14,7 +14,9 @@
     "test": "tsx --test tests/*.test.ts",
     "types": "wrangler types worker-env.d.ts --include-runtime false",
     "start": "npm run build && npm run dev",
-    "smoke": "tsx scripts/smoke.ts"
+    "smoke": "tsx scripts/smoke.ts",
+    "courses": "tsx scripts/courses.ts",
+    "move-data": "tsx scripts/move-data.ts"
   },
   "dependencies": {
     "@muse-code/sdk": "^1.4.14",

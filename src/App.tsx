@@ -2955,6 +2955,11 @@ function SettingsModal({
           </span>
         </label>
         <p className="credential-notice">{t.keyStorage}</p>
+        <p className="credential-notice">
+          {initial.dataDir
+            ? t.dataLocation.replace('{path}', initial.dataDir)
+            : t.dataLocationDefault}
+        </p>
         {status && (
           <p role="status" className="success-text">
             {t[status]}

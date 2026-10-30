@@ -45,6 +45,38 @@ Do **not** delete `.wrangler/state` or run a cleanup command if you want to keep
 
 The repository alone is not a backup of your library. No user documents, transcripts or keys are pushed to GitHub.
 
+## Keep the library on an external disk
+
+Recorded lectures are large (about 800 MB each), so the library can keep its data in another folder, such as an external disk:
+
+```sh
+npm run move-data -- "/Volumes/MyDisk/courses/library"   # with the app stopped: copies the current library
+npm run dev                                                # uses that folder from now on
+```
+
+Or start a new library there with `npm run dev -- --data "/Volumes/MyDisk/courses/library"`. The folder is remembered in `.local/config.json`; it then holds `state/` (what `.wrangler/state/` held, including the saved Meta key) and `processing/` (what `.local/processing/` held). The companion credential stays in the project. Settings shows the folder in use.
+
+- With the disk disconnected, the app does not start: it says the disk is not mounted rather than begin an empty library on the internal disk. A remembered folder must still contain `tailored-library.json`, which marks it as a library.
+- macOS asks before a program uses a removable volume. If the start says access was denied, allow your terminal under System Settings › Privacy & Security › Files and Folders › Removable Volumes.
+- `move-data` copies and checks that file counts and sizes match before switching. It leaves the previous copy in place; delete it yourself once the library opens from the new folder.
+
+## Open courseware
+
+`npm run courses` lists, downloads and imports courses whose material is openly licensed. The first source is Stanford Engineering Everywhere (`see`), licensed CC BY-NC-SA 4.0 unless an item says otherwise.
+
+```sh
+npm run courses -- list see
+npm run courses -- show see EE261                     # lectures, durations and download sizes
+npm run courses -- download see EE261 --lectures 1-3 --to /Volumes/MyDisk/courses
+npm run courses -- import "/Volumes/MyDisk/courses/see/EE261 – The Fourier Transform and its Applications" --prepare videos
+```
+
+- `download` takes every handout, assignment, exam and transcript, and the videos of the lectures named with `--lectures` (`1-3`, `1,4,7`, `all`; none by default). `--no-transcripts` and `--no-materials` leave those out. It checks free space first, resumes interrupted files, and remembers the `--to` folder.
+- A course folder holds `Handouts/`, `Assignments/`, `Exams/` and `Lectures/Lecture 01/…` as the course page lists them, plus `course.json` (what was downloaded) and `SOURCE.md` (source, instructor and license). Links to other sites are not downloaded.
+- `import` needs the app running. It creates a project named after the course (or uses `--project <name>`), recreates the folders and uploads each file the library reads; other kinds (zip, gif) are listed and skipped. Files already present are left alone, so an import can be repeated after downloading more lectures. `--prepare videos` or `--prepare all` queues preparation, which uses your Meta key; follow it in the preparation queue.
+
+Downloaded courses stay on your disk and are never part of the repository. Attribute the course and its source when you show the material, for example in a demo.
+
 ## Directories and split workspaces
 
 Use **New folder** at the root or **Create subfolder** from a folder's `+` menu. The same tree and folder actions are available in resource pickers and upload destinations. Empty folders persist. Renaming a parent changes descendant paths while preserving directory/file identities and saved study links. A selected upload destination follows its directory identity through a rename.

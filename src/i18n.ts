@@ -598,6 +598,9 @@ const en = {
   newConversation: 'New conversation in this session',
   renameConversation: 'Rename conversation',
   deleteConversation: 'Delete conversation',
+  dataLocation: 'Library data: {path}',
+  dataLocationDefault:
+    'Library data: inside the project folder. Start with --data <folder> to keep it elsewhere, such as an external disk.',
   deleteConversationConfirm: 'Delete this conversation and its messages? This cannot be undone.',
   deleteSession: 'Delete session',
   deleteSessionTitle: 'Delete “{name}”?',
@@ -1878,6 +1881,9 @@ const es: Dictionary = {
   newConversation: 'Nueva conversación en esta sesión',
   renameConversation: 'Renombrar conversación',
   deleteConversation: 'Eliminar conversación',
+  dataLocation: 'Datos de la biblioteca: {path}',
+  dataLocationDefault:
+    'Datos de la biblioteca: dentro de la carpeta del proyecto. Inicia con --data <carpeta> para guardarlos en otro lugar, como un disco externo.',
   deleteConversationConfirm: '¿Eliminar esta conversación y sus mensajes? No se puede deshacer.',
   deleteSession: 'Eliminar sesión',
   deleteSessionTitle: '¿Eliminar «{name}»?',
