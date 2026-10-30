@@ -144,12 +144,11 @@ export function ConversationPanel({
     [renameRequest, setRenameRequest] = useState(0),
     [query, setQuery] = useState(''),
     [loading, setLoading] = useState(true),
-    [creating, setCreating] = useState(false),
-    // A message written before any conversation exists; it is sent once one is created for it.
-    [openingMessage, setOpeningMessage] = useState<{ conversationId: string; text: string } | null>(
-      null,
-    );
-  const alive = useRef(true);
+    // A new conversation lives only here until its first message is sent, which saves it.
+    [draft, setDraft] = useState<ConversationDetail | null>(null);
+  const alive = useRef(true),
+    draftRef = useRef(draft);
+  draftRef.current = draft;
   useEffect(() => {
     alive.current = true;
     return () => {
@@ -170,7 +169,9 @@ export function ConversationPanel({
           ),
         );
         select((current) =>
-          value.some((item) => item.id === current) ? current : value[0]?.id || '',
+          value.some((item) => item.id === current) || current === draftRef.current?.id
+            ? current
+            : value[0]?.id || '',
         );
       })
       .catch((error) => onError(error.message))
@@ -184,8 +185,36 @@ export function ConversationPanel({
   useEffect(() => {
     store(selectionKey, selected);
   }, [selectionKey, selected]);
-  const current = threads.find((item) => item.id === selected);
+  const current =
+    threads.find((item) => item.id === selected) || (draft?.id === selected ? draft : undefined);
+  const startDraft = () => {
+    const now = new Date().toISOString();
+    const value = {
+      id: crypto.randomUUID(),
+      sessionId,
+      name: `${t.conversation} ${threads.length + 1}`,
+      sourceIds: questionRequest ? [] : source ? [source.id] : [],
+      messages: [],
+      createdAt: now,
+      updatedAt: now,
+      pending: false,
+    } as ConversationDetail;
+    draftRef.current = value;
+    setDraft(value);
+    select(value.id);
+    setHistory(false);
+  };
+  // With nothing selected, the panel opens a draft so the full composer is ready.
+  useEffect(() => {
+    if (!loading && !current) startDraft();
+  }, [loading, current?.id]);
   const receive = async (value: ConversationDetail, refresh = true) => {
+    // Changes to the draft, such as its name or references, stay local until it is saved.
+    if (value.id === draftRef.current?.id) {
+      draftRef.current = value;
+      if (alive.current) setDraft(value);
+      return;
+    }
     if (alive.current)
       setThreads((old) => [
         ...old.filter((item) => item.id !== value.id),
@@ -197,38 +226,20 @@ export function ConversationPanel({
     if (refresh)
       await changed().catch((error) => onError(error instanceof Error ? error.message : t.error));
   };
-  const create = async (text?: string) => {
-    setCreating(true);
-    try {
-      const created = await api<ConversationDetail>(
-        `/sessions/${sessionId}/conversations`,
-        'POST',
-        {
-          name: `${t.conversation} ${threads.length + 1}`,
-          sourceIds: questionRequest ? [] : source ? [source.id] : [],
-        },
-      );
-      await receive(created);
-      if (alive.current) {
-        if (text) setOpeningMessage({ conversationId: created.id, text });
-        select(created.id);
-        setHistory(false);
-      }
-    } catch (error) {
-      onError(error instanceof Error ? error.message : t.error);
-    } finally {
-      if (alive.current) setCreating(false);
-    }
+  /** Saves the draft with its id, so the first message is sent to a conversation that exists. */
+  const persist = async () => {
+    const value = draftRef.current;
+    if (!value) return;
+    const created = await api<ConversationDetail>(`/sessions/${sessionId}/conversations`, 'POST', {
+      id: value.id,
+      name: value.name,
+      sourceIds: value.sourceIds,
+      ...(value.pausedSourceIds ? { pausedSourceIds: value.pausedSourceIds } : {}),
+    });
+    draftRef.current = null;
+    if (alive.current) setDraft(null);
+    await receive(created);
   };
-  const handledRequest = useRef('');
-  useEffect(() => {
-    if (!questionRequest || loading) return;
-    setHistory(false);
-    if (!current && !creating && handledRequest.current !== questionRequest.id) {
-      handledRequest.current = questionRequest.id;
-      void create();
-    }
-  }, [questionRequest?.id, loading, current?.id, creating]);
   return (
     <div className="conversation-panel">
       {history ? (
@@ -245,8 +256,8 @@ export function ConversationPanel({
           </IconButton>
           <IconButton
             label={t.newConversation}
-            disabled={creating || loading}
-            onClick={() => void create()}
+            disabled={loading || (!!draft && current?.id === draft.id)}
+            onClick={startDraft}
           >
             <Plus />
           </IconButton>
@@ -331,14 +342,10 @@ export function ConversationPanel({
           changed={changed}
           prepareSource={prepareSource}
           createAttachment={createAttachment}
-          openingMessage={
-            openingMessage?.conversationId === current.id ? openingMessage.text : undefined
-          }
-          consumeOpeningMessage={() => setOpeningMessage(null)}
+          persisted={current.id !== draft?.id}
+          persist={persist}
         />
-      ) : (
-        <DraftComposer source={source} t={t} busy={creating} send={(text) => create(text)} />
-      )}
+      ) : null}
     </div>
   );
 }
@@ -362,8 +369,8 @@ function ConversationThread({
   prepareSource,
   createAttachment,
   renameRequest,
-  openingMessage,
-  consumeOpeningMessage,
+  persisted,
+  persist,
   openFile,
   openTest,
 }: {
@@ -382,9 +389,9 @@ function ConversationThread({
   prepareSource: (source: Source) => void;
   createAttachment: () => Promise<AnnotationRequest | null>;
   renameRequest: number;
-  /** Written before this conversation existed: sent as soon as the thread opens. */
-  openingMessage?: string;
-  consumeOpeningMessage: () => void;
+  /** False for a draft, which exists only in the app until its first message is sent. */
+  persisted: boolean;
+  persist: () => Promise<void>;
   receive: (conversation: ConversationDetail, refresh?: boolean) => Promise<void>;
   onError: (message: string) => void;
   cite: (sourceId: string, segment: Segment) => void;
@@ -581,12 +588,6 @@ function ConversationThread({
     composer.current?.focus();
   }, [questionRequest?.id]);
   useEffect(() => {
-    if (!openingMessage) return;
-    consumeOpeningMessage();
-    changeDraft(openingMessage);
-    void send();
-  }, []);
-  useEffect(() => {
     if (!incomingAttachment) return;
     consumeAttachment();
     const current = attachmentRef.current,
@@ -633,6 +634,10 @@ function ConversationThread({
       alive.current = false;
     };
   }, []);
+  const persistedRef = useRef(persisted),
+    persistRef = useRef(persist);
+  persistedRef.current = persisted;
+  persistRef.current = persist;
   const detailRef = useRef(conversation),
     receiveRef = useRef(receive),
     changedRef = useRef(changed);
@@ -742,7 +747,7 @@ function ConversationThread({
     notifyDraft();
   };
   const reconcile = async (sent = readTutorSubmission(stored(retryKey))) => {
-    if (!sent) return false;
+    if (!sent || !persistedRef.current) return false;
     try {
       const receipt = await api<{
         accepted: boolean;
@@ -773,6 +778,8 @@ function ConversationThread({
     let cancelled = false,
       loading = false,
       timer: number | undefined;
+    // A draft has nothing on the server to follow yet.
+    if (!persisted) return;
     const load = async () => {
       if (loading || cancelled) return;
       loading = true;
@@ -818,9 +825,13 @@ function ConversationThread({
       window.removeEventListener('online', wake);
       document.removeEventListener('visibilitychange', wake);
     };
-  }, [conversation.id]);
+  }, [conversation.id, persisted]);
   const paused = new Set(conversation.pausedSourceIds || []);
   const patch = async (value: Partial<Conversation>) => {
+    if (!persisted) {
+      await receive({ ...conversation, ...value } as ConversationDetail, false);
+      return true;
+    }
     try {
       await receive(
         await api<ConversationDetail>(`/conversations/${conversation.id}`, 'PATCH', value),
@@ -1025,6 +1036,7 @@ function ConversationThread({
     submitLock.current = true;
     setPending(true);
     try {
+      if (!persistedRef.current) await persistRef.current();
       const next = await api<ConversationDetail>(
         `/conversations/${conversation.id}/turns`,
         'POST',
@@ -1129,11 +1141,18 @@ function ConversationThread({
     setDraft('');
     await submitSaved(sent);
   }
+  // The start hint gives way to a question being sent or one waiting to be resent.
+  const empty =
+    messageCount === 0 &&
+    !conversation.pending &&
+    !pending &&
+    !submission &&
+    !conversation.runState?.outbox?.length;
   return (
     <div className="assistant">
       <div
         ref={messageViewport}
-        className="conversation-messages"
+        className={`conversation-messages${empty ? ' conversation-empty' : ''}`}
         role="log"
         aria-live="polite"
         aria-relevant="additions text"
@@ -1143,6 +1162,7 @@ function ConversationThread({
             element.scrollHeight - element.scrollTop - element.clientHeight < 48;
         }}
       >
+        {empty && <p>{t.startConversationBody}</p>}
         {firstMessage > 1 && (
           <Button variant="ghost" disabled={historyLoading} onClick={() => void loadEarlier()}>
             {historyLoading ? t.loading : t.earlierMessages}
@@ -1752,74 +1772,3 @@ function ConversationThread({
  * The chat before any conversation exists: the same composer, with the open file as its
  * reference. Sending starts a new conversation in the session with that message.
  */
-function DraftComposer({
-  source,
-  t,
-  busy,
-  send,
-}: {
-  source: Source | null;
-  t: T;
-  busy: boolean;
-  send: (text: string) => Promise<void>;
-}) {
-  const [draft, setDraft] = useState('');
-  const submit = () => {
-    const text = draft.trim();
-    if (!text || busy) return;
-    void send(text);
-  };
-  return (
-    <div className="assistant">
-      <div className="conversation-messages conversation-empty">
-        <p>{t.startConversationBody}</p>
-      </div>
-      <form
-        className="tutor-composer"
-        onSubmit={(event) => {
-          event.preventDefault();
-          submit();
-        }}
-      >
-        <div className="composer-card">
-          <div className="composer-strip">
-            <span className="reference-chip" title={source ? source.name : t.generalTutorNotice}>
-              <FileStack />
-              <span>
-                {t.references} ({source ? 1 : 0})
-              </span>
-            </span>
-          </div>
-          <div className="composer-input">
-            <textarea
-              aria-label={t.assistant}
-              placeholder={t.chatPlaceholder}
-              maxLength={8000}
-              value={draft}
-              disabled={busy}
-              onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
-                  event.preventDefault();
-                  submit();
-                }
-              }}
-            />
-          </div>
-          <div className="composer-actions">
-            <Button
-              variant="primary"
-              type="submit"
-              className="composer-send"
-              aria-label={t.send}
-              title={t.send}
-              disabled={busy || !draft.trim()}
-            >
-              {busy ? <LoaderCircle className="spin" /> : <ArrowUp />}
-            </Button>
-          </div>
-        </div>
-      </form>
-    </div>
-  );
-}

@@ -302,17 +302,26 @@ export async function conversationRoute({
     if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
     const input = z
       .object({
+        /** The id the app gave the conversation while it was a draft; repeating it is harmless. */
+        id: z.string().uuid().optional(),
         name: z.string().trim().min(1).max(160),
         sourceIds: z.array(z.string().uuid()).max(20).default([]),
+        pausedSourceIds: z.array(z.string().uuid()).max(20).optional(),
       })
       .parse(await body());
+    if (input.id) {
+      const existing = await storage.get<Conversation>(`conversation:${input.id}`);
+      if (existing?.sessionId === session.id)
+        return json(threads.find((item) => item.id === existing.id) || existing);
+      if (existing) return json({ error: 'Conversation belongs to another session' }, 409);
+    }
     if (threads.filter((item) => item.sessionId === session.id).length >= 100)
       return json({ error: 'Conversation limit reached for this session (100)' }, 409);
     for (const id of input.sourceIds)
       if (!(await storage.get(`file:${id}`))) return json({ error: 'Reference not found' }, 404);
     const created = conversationSchema.parse({
       ...input,
-      id: crypto.randomUUID(),
+      id: input.id || crypto.randomUUID(),
       sessionId: session.id,
       messages: [],
       createdAt: new Date().toISOString(),

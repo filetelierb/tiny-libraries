@@ -1,7 +1,7 @@
 import type { Locale } from '../shared/domain';
 const en = {
   tutorGeneration: 'Model and reasoning',
-  tutorModel: 'Tutor model',
+  tutorModel: 'Librarian model',
   effortCompactAuto: 'Auto',
   reasoningEffort: 'Reasoning effort',
   useSettingsModel: 'Use Settings default',
@@ -87,7 +87,7 @@ const en = {
     'Drag to reorder. Alt+Shift+Left or Right moves this tab. Shift+F10 opens tab actions.',
   artifacts: 'Artifacts',
   moreStudyTools: 'More study tools',
-  backToTutor: 'Back to Tutor',
+  backToTutor: 'Back to the Librarian',
   noSourceArtifacts:
     'No prepared artifact for this resource yet. Open Chapters to prepare its study material.',
   assessments: 'Assessments and reports',
@@ -144,7 +144,7 @@ const en = {
   assessmentStepHint_material:
     'Choose studied files, saved evidence, or both. Questions use only this selection.',
   assessmentStepHint_focus:
-    'Tell the tutor what to stress, and reuse what earlier reports found uncertain.',
+    'Tell the Librarian what to stress, and reuse what earlier reports found uncertain.',
   assessmentStepHint_format: 'Choose how long and how demanding the review is.',
   assessmentStepHint_review: 'Check the setup. Nothing is sent to Meta until you prepare it.',
   assessmentStepProgress: 'Step {n} of {total}',
@@ -245,7 +245,7 @@ const en = {
   assessmentCoverageLimits: 'Coverage limits',
   assessmentLinkedConversation: 'Included linked conversation',
   assessmentLearner: 'Learner',
-  assessmentTutor: 'Tutor',
+  assessmentTutor: 'Librarian',
   assessmentPriorResults:
     'earlier results with recorded uncertainty or an incorrect answer are included.',
   reviewLearning: 'Review what I learned',
@@ -317,7 +317,7 @@ const en = {
   csvTable: 'Table',
   csvText: 'Text',
   csvRowLimit: 'Showing the first {shown} of {total} rows. The Text view shows them all.',
-  temporaryFileNotice: '(temporary file; ask the tutor to save it as an artifact)',
+  temporaryFileNotice: '(temporary file; ask the Librarian to save it as an artifact)',
   openOriginalFile: 'Open the original file',
   studyToolUnavailable: 'Study tool unavailable',
   contentLoadRecovery: 'This view could not load. Reload the app to load the current version.',
@@ -579,7 +579,7 @@ const en = {
   selectedText: 'Selected text',
   captureNotReady: 'Wait for the page or frame to finish rendering, then try again.',
   saveAsAnnotation: 'Save as annotation',
-  suggestedByTutor: 'Suggested by the tutor',
+  suggestedByTutor: 'Suggested by the Librarian',
   noteCategory_concept: 'Concept',
   noteCategory_comparison: 'Comparison',
   noteCategory_procedure: 'Procedure',
@@ -650,7 +650,7 @@ const en = {
     'This request ID belongs to different saved input. Your current draft has been kept.',
   startConversation: 'Start conversation',
   startConversationBody:
-    'Start a conversation with your tutor. Add references when you want to discuss library material.',
+    'Start a conversation with the Librarian. Add references when you want to discuss library material.',
   references: 'Persistent references',
   removeReference: 'Remove reference',
   pauseReference: 'Pause reference',
@@ -697,10 +697,10 @@ const en = {
   noTests: 'No tests yet. Review what you learned to create one.',
   reviewLearningHint: 'New test from the files open in this session.',
   noLibraryArtifacts:
-    'Interactive artifacts of prepared files and artifacts the tutor writes appear here.',
+    'Interactive artifacts of prepared files and artifacts the Librarian writes appear here.',
   noArtifactUsesFile: 'No artifact uses this file yet',
   noArtifactUsesFileHint: 'Preparing the file creates its artifact; reviews add more.',
-  askTutorForArtifactVersion: 'Ask the tutor for a new version',
+  askTutorForArtifactVersion: 'Ask the Librarian for a new version',
   artifactVersionPrompt: 'Rewrite the artifact of this file as a new version: ',
   artifactListHint:
     'Artifacts of prepared files and of review sessions. Open one to study, edit or download it.',
@@ -734,7 +734,7 @@ const en = {
   splitResizeHelp:
     'Drag or use Left/Right. Shift takes larger steps. Home/End set limits; double-click or Enter restores equal widths.',
   toolsTarget: 'Tools target',
-  askTutor: 'Ask tutor',
+  askTutor: 'Ask the Librarian',
   replaceResource: 'Replace resource',
   swapPanes: 'Swap panes',
   activeResource: 'Active resource',
@@ -799,7 +799,7 @@ const en = {
   glossary: 'Glossary',
   practice: 'Practice',
   review: 'Review',
-  assistant: 'Tutor',
+  assistant: 'Librarian',
   artifact: 'Signal explorer',
   artifactLabel: 'Artifact',
   openInGlossary: 'Open in glossary',
@@ -915,7 +915,8 @@ const en = {
   deleteBookmark: 'Move bookmark to Trash',
   confirmBookmarkDelete: 'Delete this bookmark? This cannot be undone.',
   noPersonalBookmarks: 'There are no personal bookmarks for this resource.',
-  noSuggestedBookmarks: 'No suggested bookmarks yet. Ask the tutor to bookmark a study location.',
+  noSuggestedBookmarks:
+    'No suggested bookmarks yet. Ask the Librarian to bookmark a study location.',
   show: 'Show',
   noBookmarks: 'Save a place to return to.',
   noChapters: 'Prepare this file to create source-linked chapters and practice.',
@@ -941,11 +942,11 @@ const en = {
   explore: 'Explore without AI',
   language: 'Interface language',
   model: 'Analysis model',
-  webAuto: 'Let the tutor search the web',
-  basisWeb: 'Written by the tutor from web pages.',
-  basisGeneral: 'Written by the tutor from general knowledge, not from your files.',
+  webAuto: 'Let the Librarian search the web',
+  basisWeb: 'Written by the Librarian from web pages.',
+  basisGeneral: 'Written by the Librarian from general knowledge, not from your files.',
   webAutoHint:
-    'When your files and glossary do not cover a question, the tutor may send search queries based on it to Meta and lists external sources separately.',
+    'When your files and glossary do not cover a question, the Librarian may send search queries based on it to Meta and lists external sources separately.',
   keyStorage:
     'The key is stored in the local app data and never returned to the browser. Local data is not encrypted at rest; protect your device and backups.',
   replaceKey: 'Replace key',
@@ -1055,7 +1056,7 @@ const en = {
   deleteProject: 'Delete project',
   deleteProjectTitle: 'Delete {name}?',
   deleteProjectWarning:
-    'This permanently deletes the project with its {files} and {sessions}, and its notes, bookmarks, glossary, artifacts, flashcards, tests and tutor conversations. Its points are removed from the activity graph. This cannot be undone.',
+    'This permanently deletes the project with its {files} and {sessions}, and its notes, bookmarks, glossary, artifacts, flashcards, tests and conversations with the Librarian. Its points are removed from the activity graph. This cannot be undone.',
   deleteProjectConfirm: 'Type {name} to confirm',
   deleteProjectAction: 'Delete permanently',
   deletingProject: 'Deleting…',
@@ -1074,7 +1075,7 @@ const en = {
   activityNone: 'No activity on {date}',
   activityScoring: 'How points are counted',
   activityScoringIntro:
-    'Each interaction adds its points once a day for the record it concerns, so repeating it the same day adds nothing. Tutor questions count every time.',
+    'Each interaction adds its points once a day for the record it concerns, so repeating it the same day adds nothing. Questions to the Librarian count every time.',
   activityToday: 'Today',
   activityLogEmpty: 'No points logged on this day.',
   activityKind_progress: 'Progress saved in a file',
@@ -1087,7 +1088,7 @@ const en = {
   activityRule_test: 'Once a day per question',
   activityKind_note: 'Note, bookmark or concept added or edited',
   activityRule_note: 'Once a day per note, bookmark or concept',
-  activityKind_tutor: 'Question or decision for the tutor',
+  activityKind_tutor: 'Question or decision for the Librarian',
   activityRule_tutor: 'Every time',
   activityPointUnit: 'point',
   activityPointsUnit: 'points',
@@ -1100,10 +1101,10 @@ const en = {
   activityDaysUnit: 'days',
   panel: 'Panel',
   artifactTutorHint:
-    'To change an artifact, ask the tutor with its source selected. Earlier versions are kept.',
+    'To change an artifact, ask the Librarian with its source selected. Earlier versions are kept.',
   toolSaveArtifact: 'Saved an artifact version',
   toolCreateArtifact: 'Started an artifact',
-  tutorArtifact: 'Tutor',
+  tutorArtifact: 'Librarian',
   actionFolderCreate: 'Created the folder {subject}',
   actionRename: 'Renamed {subject} to {detail}',
   actionMove: 'Moved {subject} to {detail}',
@@ -1120,7 +1121,7 @@ const en = {
   actionTest: 'Started a test on {subject} ({detail})',
   actionLog: 'Library changes',
   actionConfirmTitle: 'Waiting for your confirmation',
-  actionConfirmHint: 'The tutor proposes this; nothing changes until you confirm.',
+  actionConfirmHint: 'The Librarian proposes this; nothing changes until you confirm.',
   actionConfirm: 'Confirm',
   actionDone: 'Done',
   actionCancelled: 'Cancelled',
@@ -1140,8 +1141,8 @@ const en = {
   artifactFailed: 'The artifact could not be written.',
   openArtifact: 'Open',
   tutorArtifactHint:
-    'Written by the tutor from your library. Ask the tutor in the chat for a new version; earlier versions stay available.',
-  versionTutor: 'by the tutor',
+    'Written by the Librarian from your library. Ask the Librarian in the chat for a new version; earlier versions stay available.',
+  versionTutor: 'by the Librarian',
   viewSource: 'Source',
   viewPreview: 'Preview',
   downloadArtifact: 'Download',
@@ -1256,7 +1257,7 @@ const en = {
 type Dictionary = typeof en;
 const es: Dictionary = {
   tutorGeneration: 'Modelo y razonamiento',
-  tutorModel: 'Modelo del tutor',
+  tutorModel: 'Modelo del Bibliotecario',
   effortCompactAuto: 'Auto',
   reasoningEffort: 'Esfuerzo de razonamiento',
   useSettingsModel: 'Usar modelo de Ajustes',
@@ -1344,7 +1345,7 @@ const es: Dictionary = {
     'Arrastra para ordenar. Alt+Mayús+Izquierda o Derecha mueve esta pestaña. Mayús+F10 abre sus opciones.',
   artifacts: 'Artefactos',
   moreStudyTools: 'Más herramientas de estudio',
-  backToTutor: 'Volver al tutor',
+  backToTutor: 'Volver al Bibliotecario',
   noSourceArtifacts:
     'Este recurso todavía no tiene un artefacto preparado. Abre Capítulos para preparar su material de estudio.',
   assessments: 'Repasos e informes',
@@ -1507,7 +1508,7 @@ const es: Dictionary = {
   assessmentCoverageLimits: 'Límites de cobertura',
   assessmentLinkedConversation: 'Conversación vinculada incluida',
   assessmentLearner: 'Estudiante',
-  assessmentTutor: 'Tutor',
+  assessmentTutor: 'Bibliotecario',
   assessmentPriorResults:
     'resultados anteriores con dudas o una respuesta incorrecta están incluidos.',
   reviewLearning: 'Repasar lo aprendido',
@@ -1581,7 +1582,7 @@ const es: Dictionary = {
   csvText: 'Texto',
   csvRowLimit:
     'Se muestran las primeras {shown} de {total} filas. La vista Texto las muestra todas.',
-  temporaryFileNotice: '(archivo temporal; pide al tutor que lo guarde como artefacto)',
+  temporaryFileNotice: '(archivo temporal; pide al Bibliotecario que lo guarde como artefacto)',
   openOriginalFile: 'Abrir el archivo original',
   studyToolUnavailable: 'Herramienta de estudio no disponible',
   contentLoadRecovery:
@@ -1847,7 +1848,7 @@ const es: Dictionary = {
   captureNotReady:
     'Espera a que la página o el fotograma termine de cargarse e inténtalo de nuevo.',
   saveAsAnnotation: 'Guardar como anotación',
-  suggestedByTutor: 'Sugerida por el tutor',
+  suggestedByTutor: 'Sugerida por el Bibliotecario',
   noteCategory_concept: 'Concepto',
   noteCategory_comparison: 'Comparación',
   noteCategory_procedure: 'Procedimiento',
@@ -1920,7 +1921,7 @@ const es: Dictionary = {
     'Este identificador corresponde a otra entrada guardada. Se ha conservado el borrador actual.',
   startConversation: 'Iniciar conversación',
   startConversationBody:
-    'Inicia una conversación con el tutor. Añade referencias para hablar sobre material de la biblioteca.',
+    'Inicia una conversación con el Bibliotecario. Añade referencias para hablar sobre material de la biblioteca.',
   references: 'Referencias permanentes',
   removeReference: 'Quitar referencia',
   pauseReference: 'Pausar referencia',
@@ -1967,10 +1968,10 @@ const es: Dictionary = {
   noTests: 'Aún no hay pruebas. Repasa lo aprendido para crear una.',
   reviewLearningHint: 'Nueva prueba con los archivos abiertos en esta sesión.',
   noLibraryArtifacts:
-    'Aquí aparecen los artefactos interactivos de los archivos preparados y los que escribe el tutor.',
+    'Aquí aparecen los artefactos interactivos de los archivos preparados y los que escribe el Bibliotecario.',
   noArtifactUsesFile: 'Ningún artefacto usa todavía este archivo',
   noArtifactUsesFileHint: 'Al preparar el archivo se crea su artefacto; los repasos añaden más.',
-  askTutorForArtifactVersion: 'Pedir al tutor una nueva versión',
+  askTutorForArtifactVersion: 'Pedir al Bibliotecario una nueva versión',
   artifactVersionPrompt: 'Reescribe el artefacto de este archivo como una nueva versión: ',
   artifactListHint:
     'Artefactos de los archivos preparados y de las sesiones de repaso. Ábrelos para estudiarlos, editarlos o descargarlos.',
@@ -2005,7 +2006,7 @@ const es: Dictionary = {
   splitResizeHelp:
     'Arrastra o usa Izquierda/Derecha. Mayús cambia pasos mayores. Inicio/Fin fijan límites; doble clic o Intro restablece partes iguales.',
   toolsTarget: 'Destino de las herramientas',
-  askTutor: 'Preguntar al tutor',
+  askTutor: 'Preguntar al Bibliotecario',
   replaceResource: 'Cambiar recurso',
   swapPanes: 'Intercambiar paneles',
   activeResource: 'Recurso activo',
@@ -2071,7 +2072,7 @@ const es: Dictionary = {
   glossary: 'Glosario',
   practice: 'Práctica',
   review: 'Repaso',
-  assistant: 'Tutor',
+  assistant: 'Bibliotecario',
   artifact: 'Explorador de señales',
   artifactLabel: 'Artefacto',
   openInGlossary: 'Ver en el glosario',
@@ -2189,7 +2190,7 @@ const es: Dictionary = {
   confirmBookmarkDelete: '¿Eliminar este marcador? No se puede deshacer.',
   noPersonalBookmarks: 'No hay marcadores personales para este recurso.',
   noSuggestedBookmarks:
-    'No hay marcadores sugeridos. Pide al tutor que marque un lugar de estudio.',
+    'No hay marcadores sugeridos. Pide al Bibliotecario que marque un lugar de estudio.',
   show: 'Mostrar',
   noBookmarks: 'Guarda un lugar al que volver.',
   noChapters: 'Prepara el archivo para crear capítulos y preguntas vinculados a fuentes.',
@@ -2215,11 +2216,12 @@ const es: Dictionary = {
   explore: 'Explorar sin IA',
   language: 'Idioma de la interfaz',
   model: 'Modelo de análisis',
-  webAuto: 'Permitir que el tutor busque en la web',
-  basisWeb: 'Escrito por el tutor a partir de páginas web.',
-  basisGeneral: 'Escrito por el tutor con conocimiento general, no a partir de tus archivos.',
+  webAuto: 'Permitir que el Bibliotecario busque en la web',
+  basisWeb: 'Escrito por el Bibliotecario a partir de páginas web.',
+  basisGeneral:
+    'Escrito por el Bibliotecario con conocimiento general, no a partir de tus archivos.',
   webAutoHint:
-    'Cuando tus archivos y el glosario no cubren una pregunta, el tutor puede enviar a Meta búsquedas basadas en ella y muestra las fuentes externas aparte.',
+    'Cuando tus archivos y el glosario no cubren una pregunta, el Bibliotecario puede enviar a Meta búsquedas basadas en ella y muestra las fuentes externas aparte.',
   keyStorage:
     'La clave se guarda en los datos locales de la app y nunca se devuelve al navegador. Los datos locales no están cifrados; protege tu dispositivo y copias.',
   replaceKey: 'Cambiar clave',
@@ -2330,7 +2332,7 @@ const es: Dictionary = {
   deleteProject: 'Eliminar proyecto',
   deleteProjectTitle: '¿Eliminar {name}?',
   deleteProjectWarning:
-    'Se eliminará definitivamente el proyecto con sus {files} y {sessions}, y sus notas, marcadores, glosario, artefactos, tarjetas, tests y conversaciones con el tutor. Sus puntos se quitarán del gráfico de actividad. No se puede deshacer.',
+    'Se eliminará definitivamente el proyecto con sus {files} y {sessions}, y sus notas, marcadores, glosario, artefactos, tarjetas, tests y conversaciones con el Bibliotecario. Sus puntos se quitarán del gráfico de actividad. No se puede deshacer.',
   deleteProjectConfirm: 'Escribe {name} para confirmar',
   deleteProjectAction: 'Eliminar definitivamente',
   deletingProject: 'Eliminando…',
@@ -2349,7 +2351,7 @@ const es: Dictionary = {
   activityNone: 'Sin actividad el {date}',
   activityScoring: 'Cómo se cuentan los puntos',
   activityScoringIntro:
-    'Cada interacción suma sus puntos una vez al día por el registro al que corresponde, así que repetirla el mismo día no suma más. Las preguntas al tutor cuentan siempre.',
+    'Cada interacción suma sus puntos una vez al día por el registro al que corresponde, así que repetirla el mismo día no suma más. Las preguntas al Bibliotecario cuentan siempre.',
   activityToday: 'Hoy',
   activityLogEmpty: 'No hay puntos registrados este día.',
   activityKind_progress: 'Progreso guardado en un archivo',
@@ -2362,7 +2364,7 @@ const es: Dictionary = {
   activityRule_test: 'Una vez al día por pregunta',
   activityKind_note: 'Nota, marcador o concepto añadido o editado',
   activityRule_note: 'Una vez al día por nota, marcador o concepto',
-  activityKind_tutor: 'Pregunta o decisión para el tutor',
+  activityKind_tutor: 'Pregunta o decisión para el Bibliotecario',
   activityRule_tutor: 'Cada vez',
   activityPointUnit: 'punto',
   activityPointsUnit: 'puntos',
@@ -2375,10 +2377,10 @@ const es: Dictionary = {
   activityDaysUnit: 'días',
   panel: 'Panel',
   artifactTutorHint:
-    'Para cambiar un artefacto, pídeselo al tutor con su fuente seleccionada. Las versiones anteriores se conservan.',
+    'Para cambiar un artefacto, pídeselo al Bibliotecario con su fuente seleccionada. Las versiones anteriores se conservan.',
   toolSaveArtifact: 'Guardó una versión del artefacto',
   toolCreateArtifact: 'Comenzó un artefacto',
-  tutorArtifact: 'Tutor',
+  tutorArtifact: 'Bibliotecario',
   actionFolderCreate: 'Creó la carpeta {subject}',
   actionRename: 'Renombró {subject} a {detail}',
   actionMove: 'Movió {subject} a {detail}',
@@ -2395,7 +2397,7 @@ const es: Dictionary = {
   actionTest: 'Comenzó un test sobre {subject} ({detail})',
   actionLog: 'Cambios en la biblioteca',
   actionConfirmTitle: 'Esperando tu confirmación',
-  actionConfirmHint: 'El tutor lo propone; nada cambia hasta que confirmes.',
+  actionConfirmHint: 'El Bibliotecario lo propone; nada cambia hasta que confirmes.',
   actionConfirm: 'Confirmar',
   actionDone: 'Hecho',
   actionCancelled: 'Cancelado',
@@ -2415,8 +2417,8 @@ const es: Dictionary = {
   artifactFailed: 'No se pudo escribir el artefacto.',
   openArtifact: 'Abrir',
   tutorArtifactHint:
-    'Escrito por el tutor a partir de tu biblioteca. Pide al tutor en el chat una nueva versión; las anteriores siguen disponibles.',
-  versionTutor: 'del tutor',
+    'Escrito por el Bibliotecario a partir de tu biblioteca. Pide al Bibliotecario en el chat una nueva versión; las anteriores siguen disponibles.',
+  versionTutor: 'del Bibliotecario',
   viewSource: 'Fuente',
   viewPreview: 'Vista previa',
   downloadArtifact: 'Descargar',

@@ -9990,9 +9990,6 @@ body:has(.panel-resizer.resizing) {
   flex: 1;
   min-width: 0;
 }
-.conversation-empty + .tutor-composer .composer-actions {
-  justify-content: flex-end;
-}
 /* Room under the floating history and new-conversation buttons. */
 .conversation-panel > .assistant > .conversation-messages {
   padding-top: 48px;

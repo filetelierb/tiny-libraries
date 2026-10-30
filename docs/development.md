@@ -286,3 +286,11 @@ A project can be deleted from its card on the home page. A dialog says what will
 The library is emptied first, so a deletion that fails part way leaves the project listed and can be repeated. The first library keeps the app settings, the project list and the activity log, so it cannot be deleted.
 
 Verification: type checks and 314 tests pass, including a test that removes a project's points from a shared day and drops a day it had alone. Through the API, deleting a new project with a file, a session and a logged point removed the file's stored object (1 to 0), made the project unknown (404), dropped it from the list and lowered the day from 4 to 3 points; deleting the first library was refused (409). In the browser, the dialog kept the delete button disabled until the name was typed, and the project left the list.
+
+### New conversations start as drafts; the tutor is now the Librarian
+
+The new conversation button no longer creates a conversation. It opens a draft that lives only in the page: its name and references can be changed, and the start hint shows in the empty thread. Sending the first message saves the draft with the id it already had and then sends the message, so history only lists conversations that have one. Saving with an id that already exists returns that conversation, so a repeated save does not add a second one. The button is disabled while the draft is open.
+
+The assistant is named the Librarian ("Bibliotecario" in Spanish) in every label, and the model is told it is the Librarian. Code names and these notes still say tutor.
+
+Verification: type checks and 314 tests pass. Through the API, saving twice with the same id added one conversation. In the browser, the new conversation button left the saved conversations at 1 and showed the hint; sending a question saved "Conversation 2" before sending it. Without an API key the question waited to be resent, and the hint gave way to it.
