@@ -4,7 +4,9 @@ import {
   WEEKS,
   activityLevel,
   activityStreaks,
-  countsAsActivity,
+  activityWeights,
+  classifyActivity,
+  scoreActivity,
   heatmapStart,
   libraryObjectName,
   localDay,
@@ -18,16 +20,58 @@ test('the first library keeps its object, and other projects get their own', () 
   assert.equal(projectIdSchema.safeParse('../local-user').success, false);
 });
 
-test('only changes the student makes count as activity', () => {
-  assert.equal(countsAsActivity('POST', '/api/sessions/abc/conversations'), true);
-  assert.equal(countsAsActivity('PUT', '/api/annotations/abc'), true);
-  assert.equal(countsAsActivity('DELETE', '/api/files/abc'), true);
-  assert.equal(countsAsActivity('GET', '/api/catalog'), false);
-  assert.equal(countsAsActivity('POST', '/api/annotations/query'), false);
-  assert.equal(countsAsActivity('POST', '/api/assessments/options'), false);
-  assert.equal(countsAsActivity('PUT', '/api/sessions/abc'), false);
-  assert.equal(countsAsActivity('POST', '/api/settings'), false);
-  assert.equal(countsAsActivity('POST', '/api/projects'), false);
+test('each interaction on the list is recognised with the record it concerns', () => {
+  const kinds = (method: string, path: string, body: unknown = {}) =>
+    classifyActivity(method, path, body);
+  assert.deepEqual(kinds('PATCH', '/api/files/f1', { reviewed: true }), [
+    { kind: 'progress', key: 'f1' },
+  ]);
+  assert.deepEqual(kinds('PATCH', '/api/files/f1', { name: 'Renamed' }), []);
+  assert.deepEqual(
+    kinds('POST', '/api/attempts', { sourceId: 's', chapterId: 'c2', questionId: 'q' }),
+    [{ kind: 'quiz', key: 's:c2' }],
+  );
+  assert.deepEqual(kinds('POST', '/api/flashcards/d1/review', { cardId: 'c' }), [
+    { kind: 'card', key: 'd1:c' },
+  ]);
+  assert.deepEqual(kinds('POST', '/api/assessments/t1/answers', { questionId: 'b1:q3' }), [
+    { kind: 'test', key: 't1:b1:q3' },
+  ]);
+  assert.deepEqual(kinds('PUT', '/api/annotations/0a1b'), [{ kind: 'note', key: 'note:0a1b' }]);
+  assert.deepEqual(kinds('PUT', '/api/glossary/0c2d'), [{ kind: 'note', key: 'concept:0c2d' }]);
+  assert.deepEqual(kinds('POST', '/api/glossary/merge', { targetId: 'x' }), [
+    { kind: 'note', key: 'concept:x' },
+  ]);
+  assert.deepEqual(kinds('POST', '/api/conversations/c/messages', { requestId: 'r1' }), [
+    { kind: 'tutor', key: 'r1' },
+  ]);
+  assert.deepEqual(kinds('DELETE', '/api/annotations/0a1b'), []);
+  assert.deepEqual(kinds('POST', '/api/annotations/query'), []);
+  assert.deepEqual(kinds('PUT', '/api/sessions/s1', { positions: { f: 3 } }), []);
+  assert.deepEqual(kinds('POST', '/api/directories'), []);
+});
+
+test('an interaction counts once a day per record, weighted by its kind', () => {
+  let day = scoreActivity({ day: '2026-10-30', total: 0, projects: {} }, 'default', [
+    { kind: 'progress', key: 'f1' },
+    { kind: 'progress', key: 'f1' },
+    { kind: 'test', key: 't:q1' },
+  ]);
+  assert.equal(day.total, activityWeights.progress + activityWeights.test);
+  day = scoreActivity(day, 'default', [
+    { kind: 'progress', key: 'f1' },
+    { kind: 'test', key: 't:q2' },
+    { kind: 'tutor', key: 'r1' },
+    { kind: 'tutor', key: 'r2' },
+  ]);
+  assert.equal(
+    day.total,
+    activityWeights.progress + 2 * activityWeights.test + 2 * activityWeights.tutor,
+  );
+  assert.deepEqual(day.kinds, { progress: 1, test: 2, tutor: 2 });
+  const other = crypto.randomUUID();
+  day = scoreActivity(day, other, [{ kind: 'progress', key: 'f1' }]);
+  assert.equal(day.projects[other], activityWeights.progress);
 });
 
 test('the graph covers a year of whole weeks ending with today', () => {

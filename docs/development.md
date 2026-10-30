@@ -249,3 +249,20 @@ The app now opens on a home page instead of going straight into the library:
 - **Activity.** A contribution-style graph shows one square per day for the last year across all projects, with the total, active days and current and longest streaks; hovering a day shows its count per project. Changes the student makes count (uploads, notes, folders, tutor questions, answers, tests); reads, polling, read-only queries, saved playback positions and settings do not. Days are the student's local days.
 
 Verification: type checks and 311 tests pass, including tests for which requests count, the year of whole weeks, levels and streaks. Through the API: a new project starts empty with its own session and folders while the first library keeps its own; an unknown project is refused with 404 and a malformed one with 400; two changes counted on the right day and project, and a rename did not count. In the browser: the home page listed both projects with their counts and showed the day's activity with its tooltip; opening a project showed its empty library; a file uploaded there loaded through the cookie alone and was not found from the first library.
+
+### Activity points: weighted interactions that count once a day
+
+Counting every change treated saving a video position like finishing a test. The graph now scores a fixed list of interactions (`activityKinds` and `activityWeights` in `shared/projects.ts`), each counted once a day for the record it concerns:
+
+| Interaction                                                                | Counts                  | Points |
+| -------------------------------------------------------------------------- | ----------------------- | ------ |
+| Progress saved in a file (position, page, marked reviewed)                 | once a day per file     | 1      |
+| Flashcard reviewed                                                         | once a day per card     | 1      |
+| Mini quiz answered (chapter quiz, artifact study questions, reinforcement) | once a day per quiz     | 3      |
+| Test question answered                                                     | once a day per question | 2      |
+| Note, bookmark or concept added or edited                                  | once a day per record   | 2      |
+| Question or decision for the tutor                                         | every time              | 2      |
+
+The Worker classifies each successful request from its route (and, for a few routes, a field of its body such as the question or card); the library names the files whose saved position moved. The day's record keeps which interactions it has already counted, so repeats add nothing. Anything else, such as uploads, folders or renames, scores nothing. The home page shows points, the day's breakdown by interaction and project, and the list above under "How points are counted". Days are stored under a new key, so counts from the earlier rule are not mixed in.
+
+Verification: type checks and 312 tests pass, including the classification of each interaction and once-a-day scoring across kinds and projects. Through the API: two position changes and marking the same file reviewed gave 1 point; an unchanged position, an upload, a folder and a rename gave none; marking a second file reviewed added 1. In the browser, the tooltip showed the points with "Progress saved in a file × 2" and the project, and the scoring list showed the six interactions.

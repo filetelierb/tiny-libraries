@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import {
+  activityKinds,
   activityLevel,
+  activityWeights,
   activityStreaks,
   heatmapStart,
   localDay,
@@ -130,6 +132,17 @@ export function ActivityHeatmap({
             >
               <strong>{describe(hovered.day)}</strong>
               {hoveredDay &&
+                activityKinds
+                  .filter((kind) => hoveredDay.kinds?.[kind])
+                  .map((kind) => (
+                    <span key={kind}>
+                      {t[`activityKind_${kind}`]} × {hoveredDay.kinds![kind]}
+                    </span>
+                  ))}
+              {hoveredDay && Object.keys(hoveredDay.projects).length > 0 && (
+                <span className="activity-tooltip-rule" aria-hidden="true" />
+              )}
+              {hoveredDay &&
                 Object.entries(hoveredDay.projects)
                   .sort((a, b) => b[1] - a[1])
                   .map(([id, count]) => (
@@ -151,6 +164,23 @@ export function ActivityHeatmap({
           <span>{t.activityMore}</span>
         </div>
       </div>
+      <details className="activity-scoring">
+        <summary>{t.activityScoring}</summary>
+        <ul>
+          {activityKinds.map((kind) => (
+            <li key={kind}>
+              <span>
+                {t[`activityKind_${kind}`]}
+                <small>{t[`activityRule_${kind}`]}</small>
+              </span>
+              <strong>
+                +{activityWeights[kind]}{' '}
+                {activityWeights[kind] === 1 ? t.activityPointUnit : t.activityPointsUnit}
+              </strong>
+            </li>
+          ))}
+        </ul>
+      </details>
     </div>
   );
 }

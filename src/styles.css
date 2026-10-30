@@ -10321,3 +10321,48 @@ body:has(.panel-resizer.resizing) {
     padding: 16px;
   }
 }
+.activity-tooltip-rule {
+  height: 1px;
+  margin: 2px 0;
+  background: currentColor;
+  opacity: 0.2;
+}
+.activity-scoring {
+  font-size: var(--font-size-small);
+}
+.activity-scoring summary {
+  cursor: pointer;
+  color: var(--primary);
+}
+.activity-scoring ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.activity-scoring li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--background);
+}
+.activity-scoring li span {
+  display: grid;
+  gap: 2px;
+  font-size: var(--font-size-control);
+}
+.activity-scoring li small {
+  font-size: var(--font-size-small);
+  color: var(--muted-text);
+}
+.activity-scoring li strong {
+  flex: none;
+  color: var(--primary);
+  font-weight: var(--font-weight-semibold);
+}

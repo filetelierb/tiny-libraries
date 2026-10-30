@@ -125,7 +125,11 @@ import {
 } from '../shared/directories';
 import {
   activityDaySchema,
-  countsAsActivity,
+  activityBodyRoute,
+  activityEventSchema,
+  classifyActivity,
+  scoreActivity,
+  type ActivityEvent,
   libraryObjectName,
   projectIdSchema,
   projectInputSchema,
@@ -401,18 +405,22 @@ export class Library extends DurableObject<Env> {
     if (existsMatch)
       return json({ exists: !!(await storage.get<Project>(`project:${existsMatch[1]}`)) });
     if (path === '/internal/activity' && request.method === 'POST') {
-      const { project, day } = z
-        .object({ project: projectIdSchema, day: activityDaySchema })
+      const { project, day, events } = z
+        .object({
+          project: projectIdSchema,
+          day: activityDaySchema,
+          events: z.array(activityEventSchema).min(1).max(50),
+        })
         .parse(await boundedJson(request));
       await storage.transaction(async (tx) => {
-        const current = (await tx.get<ActivityDay>(`activity:${day}`)) || {
+        const current = (await tx.get<ActivityDay & { seen?: string[] }>(
+          `activity-day:${day}`,
+        )) || {
           day,
           total: 0,
           projects: {},
         };
-        current.total += 1;
-        current.projects[project] = (current.projects[project] || 0) + 1;
-        await tx.put(`activity:${day}`, current);
+        await tx.put(`activity-day:${day}`, scoreActivity(current, project, events));
         const record = await tx.get<Project>(`project:${project}`);
         if (record)
           await tx.put(`project:${project}`, { ...record, lastActiveAt: new Date().toISOString() });
@@ -421,7 +429,11 @@ export class Library extends DurableObject<Env> {
     }
     if (path === '/api/activity' && request.method === 'GET') {
       const since = activityDaySchema.safeParse(new URL(request.url).searchParams.get('since'));
-      const days = [...(await storage.list<ActivityDay>({ prefix: 'activity:' })).values()];
+      const days = [
+        ...(
+          await storage.list<ActivityDay & { seen?: string[] }>({ prefix: 'activity-day:' })
+        ).values(),
+      ].map(({ seen: _seen, ...day }) => day);
       return json(since.success ? days.filter((day) => day.day >= since.data) : days);
     }
     if (path === '/api/projects') {
@@ -933,13 +945,22 @@ export class Library extends DurableObject<Env> {
       if (sessionMatch && request.method === 'PUT') {
         const value = sessionSchema.parse(await boundedJson(request));
         if (value.id !== sessionMatch[1]) throw new ApiError('Session identity mismatch');
-        await this.ctx.storage.transaction(async (tx) => {
+        const progressed = await this.ctx.storage.transaction(async (tx) => {
           const previous = await tx.get<StudySession>(`session:${value.id}`);
           if (!previous) throw new ApiError('Session not found', 404);
           await captureStudyProgress(tx, previous, value);
           await tx.put(`session:${value.id}`, value);
+          return Object.keys(value.positions).filter(
+            (id) => value.positions[id] !== previous.positions[id],
+          );
         });
-        return json(value);
+        // The files whose saved position moved count once a day each in the activity graph.
+        return Response.json(value, {
+          headers: {
+            'Cache-Control': 'no-store',
+            ...(progressed.length ? { 'X-Activity-Progress': progressed.join(',') } : {}),
+          },
+        });
       }
       if (path.startsWith('/api/assessments')) {
         const options = {
@@ -1350,14 +1371,31 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
+    // The few routes whose interaction is named in the body are read before the library uses it.
+    const body = activityBodyRoute(request.method, url.pathname)
+      ? await request
+          .clone()
+          .json()
+          .catch(() => null)
+      : null;
     const response = await serve(request, env, url);
-    // Changes the student makes are counted per local day for the activity heatmap.
-    if (response.ok && countsAsActivity(request.method, url.pathname)) {
+    if (!response.ok) return response;
+    // Scored interactions go to the activity log per local day; files whose saved position
+    // changed are named by the library.
+    const events: ActivityEvent[] = [
+      ...classifyActivity(request.method, url.pathname, body),
+      ...(response.headers.get('X-Activity-Progress') || '')
+        .split(',')
+        .filter(Boolean)
+        .map((key) => ({ kind: 'progress' as const, key })),
+    ];
+    if (events.length) {
       const day = activityDaySchema.safeParse(request.headers.get('X-Local-Day'));
       ctx.waitUntil(
         internal(env, '/internal/activity', {
           project: requestProject(request, url),
           day: day.success ? day.data : new Date().toISOString().slice(0, 10),
+          events,
         }).catch(() => {}),
       );
     }

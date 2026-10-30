@@ -22,8 +22,33 @@ export const libraryObjectName = (project: ProjectId) =>
   project === 'default' ? 'local-user' : `project:${project}`;
 
 export const activityDaySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-/** Interactions recorded on one local day, in total and per project. */
-export type ActivityDay = { day: string; total: number; projects: Record<string, number> };
+
+/**
+ * The interactions the activity graph scores. Each counts once per day for the record it
+ * concerns (a file, a quiz, a card, a test question, a note); tutor questions count each time.
+ */
+export const activityKinds = ['progress', 'card', 'quiz', 'test', 'note', 'tutor'] as const;
+export type ActivityKind = (typeof activityKinds)[number];
+export const activityWeights: Record<ActivityKind, number> = {
+  progress: 1,
+  card: 1,
+  quiz: 3,
+  test: 2,
+  note: 2,
+  tutor: 2,
+};
+export const activityEventSchema = z.object({
+  kind: z.enum(activityKinds),
+  key: z.string().min(1).max(300),
+});
+export type ActivityEvent = z.infer<typeof activityEventSchema>;
+/** A day's points, in total and per project, and how many interactions of each kind it had. */
+export type ActivityDay = {
+  day: string;
+  total: number;
+  projects: Record<string, number>;
+  kinds?: Partial<Record<ActivityKind, number>>;
+};
 
 /** The local calendar day of a date, as YYYY-MM-DD. */
 export function localDay(date = new Date()) {
@@ -31,19 +56,83 @@ export function localDay(date = new Date()) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
+/** Routes whose interaction is identified by a field of the request body. */
+export const activityBodyRoute = (method: string, path: string) =>
+  (method === 'POST' &&
+    /^\/api\/(attempts|flashcards\/[^/]+\/review|assessments\/[^/]+\/answers|glossary\/merge|conversations\/[^/]+\/messages)$/.test(
+      path,
+    )) ||
+  (method === 'PATCH' && /^\/api\/files\/[^/]+$/.test(path));
+
 /**
- * Requests that count as an interaction: changes the student makes. Reads, polling, read-only
- * queries sent as POST, session position saves and app settings do not count.
+ * The scored interactions a successful request made. Saved positions are reported by the
+ * library itself, which knows which files changed; everything else is read from the route.
  */
-export function countsAsActivity(method: string, path: string) {
-  if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) return false;
-  if (method === 'PUT' && /^\/api\/sessions\/[^/]+$/.test(path)) return false;
-  return !/^\/api\/(annotations\/query|assessments\/options|settings|projects|activity|tutor-tools)(\/|$)/.test(
-    path,
-  );
+export function classifyActivity(method: string, path: string, body: unknown): ActivityEvent[] {
+  const value = (body && typeof body === 'object' ? body : {}) as Record<string, unknown>,
+    field = (name: string) => (typeof value[name] === 'string' ? (value[name] as string) : '');
+  let match: RegExpMatchArray | null;
+  if (method === 'PATCH' && (match = path.match(/^\/api\/files\/([^/]+)$/)))
+    return value.reviewed === undefined ? [] : [{ kind: 'progress', key: match[1] }];
+  if (method === 'POST' && path === '/api/attempts') {
+    // A mini quiz is a chapter's questions, an artifact's study questions or a reinforcement.
+    const quiz =
+      field('reinforcementId') ||
+      `${field('sourceId')}:${field('chapterId') || (value.artifactStudy ? 'study' : 'quiz')}`;
+    return [{ kind: 'quiz', key: quiz }];
+  }
+  if (method === 'POST' && (match = path.match(/^\/api\/flashcards\/([^/]+)\/review$/)))
+    return [{ kind: 'card', key: `${match[1]}:${field('cardId')}` }];
+  if (method === 'POST' && (match = path.match(/^\/api\/assessments\/([^/]+)\/answers$/)))
+    return [{ kind: 'test', key: `${match[1]}:${field('questionId')}` }];
+  if (
+    (method === 'PUT' || method === 'POST') &&
+    (match = path.match(/^\/api\/annotations\/([a-f0-9-]+)(\/capture|\/captures\/.*)?$/))
+  )
+    return [{ kind: 'note', key: `note:${match[1]}` }];
+  if (method === 'PUT' && (match = path.match(/^\/api\/glossary\/([a-f0-9-]+)$/)))
+    return [{ kind: 'note', key: `concept:${match[1]}` }];
+  if (method === 'POST' && (match = path.match(/^\/api\/glossary\/([a-f0-9-]+)\/proposals$/)))
+    return [{ kind: 'note', key: `concept:${match[1]}` }];
+  if (method === 'POST' && path === '/api/glossary/merge')
+    return [{ kind: 'note', key: `concept:${field('targetId')}` }];
+  if (method === 'POST' && /^\/api\/conversations\/[^/]+\/messages$/.test(path))
+    return [{ kind: 'tutor', key: field('requestId') || crypto.randomUUID() }];
+  if (method === 'POST' && (match = path.match(/^\/api\/tutor-actions\/([^/]+)$/)))
+    return [{ kind: 'tutor', key: `action:${match[1]}` }];
+  if (method === 'POST' && /^\/api\/tutor-artifacts\/[^/]+\/retry$/.test(path))
+    return [{ kind: 'tutor', key: crypto.randomUUID() }];
+  return [];
 }
 
-/** Activity counts on a 0–4 scale, relative to the busiest day shown. */
+/**
+ * Adds a request's interactions to its day. An interaction already counted that day for the
+ * same record adds nothing; `seen` keeps those identities.
+ */
+export function scoreActivity(
+  current: ActivityDay & { seen?: string[] },
+  project: ProjectId,
+  events: ActivityEvent[],
+) {
+  const seen = new Set(current.seen || []),
+    next = {
+      ...current,
+      projects: { ...current.projects },
+      kinds: { ...current.kinds },
+    };
+  for (const event of events) {
+    const identity = `${project}:${event.kind}:${event.key}`;
+    if (seen.has(identity)) continue;
+    seen.add(identity);
+    const weight = activityWeights[event.kind];
+    next.total += weight;
+    next.projects[project] = (next.projects[project] || 0) + weight;
+    next.kinds[event.kind] = (next.kinds[event.kind] || 0) + 1;
+  }
+  return { ...next, seen: [...seen] };
+}
+
+/** Activity points on a 0–4 scale, relative to the busiest day shown. */
 export function activityLevel(count: number, max: number) {
   if (!count || !max) return 0;
   return Math.min(4, Math.ceil((count / max) * 4));
