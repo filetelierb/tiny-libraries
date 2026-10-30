@@ -254,15 +254,17 @@ Verification: type checks and 311 tests pass, including tests for which requests
 
 Counting every change treated saving a video position like finishing a test. The graph now scores a fixed list of interactions (`activityKinds` and `activityWeights` in `shared/projects.ts`), each counted once a day for the record it concerns:
 
-| Interaction                                                                | Counts                  | Points |
-| -------------------------------------------------------------------------- | ----------------------- | ------ |
-| Progress saved in a file (position, page, marked reviewed)                 | once a day per file     | 1      |
-| Flashcard reviewed                                                         | once a day per card     | 1      |
-| Mini quiz answered (chapter quiz, artifact study questions, reinforcement) | once a day per quiz     | 3      |
-| Test question answered                                                     | once a day per question | 2      |
-| Note, bookmark or concept added or edited                                  | once a day per record   | 2      |
-| Question or decision for the tutor                                         | every time              | 2      |
+| Interaction                                                                 | Counts                                                    | Points |
+| --------------------------------------------------------------------------- | --------------------------------------------------------- | ------ |
+| Progress saved in a file (position, page, marked reviewed)                  | once a day per file                                       | 1      |
+| Flashcard set gone through                                                  | once a day per set, after all its cards are reviewed      | 2      |
+| Mini quiz completed (chapter quiz, artifact study questions, reinforcement) | once a day per quiz, after all its questions are answered | 3      |
+| Test question answered                                                      | once a day per question                                   | 2      |
+| Note, bookmark or concept added or edited                                   | once a day per record                                     | 2      |
+| Question or decision for the tutor                                          | every time                                                | 2      |
 
 The Worker classifies each successful request from its route (and, for a few routes, a field of its body such as the question or card); the library names the files whose saved position moved. The day's record keeps which interactions it has already counted, so repeats add nothing. Anything else, such as uploads, folders or renames, scores nothing. The home page shows points, the day's breakdown by interaction and project, and the list above under "How points are counted". Days are stored under a new key, so counts from the earlier rule are not mixed in.
 
 Verification: type checks and 312 tests pass, including the classification of each interaction and once-a-day scoring across kinds and projects. Through the API: two position changes and marking the same file reviewed gave 1 point; an unchanged position, an upload, a folder and a rename gave none; marking a second file reviewed added 1. In the browser, the tooltip showed the points with "Progress saved in a file × 2" and the project, and the scoring list showed the six interactions.
+
+A mini quiz and a flashcard set count as a whole rather than per question or card. With each answer or review, the library reports the quiz or set and how many questions or cards it has (`quizOf`, `deckSize`); the day's record keeps the ones done and adds the points when the last arrives. Saved positions travel the same way, so the library reports all of these in one `X-Activity` header. Verification: 313 tests pass, including a quiz that counts only on its third question and once after that, a set that counts on its second card, and a new day starting over; a position change on a new file still added 1 point through the header.
