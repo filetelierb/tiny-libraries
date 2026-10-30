@@ -2,13 +2,16 @@ import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { request } from 'node:http';
 import { basename, join } from 'node:path';
-import { kindFor, MAX_FILE_BYTES, type Source } from '../../shared/domain';
+import { kindFor, MAX_FILE_BYTES, mimeFor, type Source } from '../../shared/domain';
 import type { ProjectSummary } from '../../shared/projects';
 import { readManifest, type CourseManifest } from './download';
 
 export type ImportOptions = {
   app: string;
-  /** The project to fill; by default one named after the course, created if missing. */
+  /**
+   * A project to upload copies into. Without it, the course gets a project that keeps its files
+   * in the course folder itself.
+   */
   project?: string;
   /** Which imported files to queue for preparation. */
   prepare: 'none' | 'videos' | 'all';
@@ -29,31 +32,6 @@ async function call<T>(app: string, path: string, init: RequestInit = {}, projec
   return body as T;
 }
 
-// The type the browser would give each file, so the library serves it the same way.
-const types: Record<string, string> = {
-  mp4: 'video/mp4',
-  webm: 'video/webm',
-  mov: 'video/quicktime',
-  mkv: 'video/x-matroska',
-  wav: 'audio/wav',
-  mp3: 'audio/mpeg',
-  m4a: 'audio/mp4',
-  ogg: 'audio/ogg',
-  flac: 'audio/flac',
-  pdf: 'application/pdf',
-  png: 'image/png',
-  jpg: 'image/jpeg',
-  jpeg: 'image/jpeg',
-  webp: 'image/webp',
-  md: 'text/markdown',
-  txt: 'text/plain',
-  csv: 'text/csv',
-  vtt: 'text/vtt',
-  srt: 'application/x-subrip',
-};
-const typeOf = (name: string) =>
-  types[name.split('.').pop()!.toLowerCase()] || 'application/octet-stream';
-
 /** Streams a file to the library, as the upload form does, without reading it into memory. */
 function upload(
   app: string,
@@ -71,7 +49,7 @@ function upload(
       {
         method: 'POST',
         headers: {
-          'Content-Type': typeOf(name),
+          'Content-Type': mimeFor(name),
           'Content-Length': size,
           'X-File-Name': encodeURIComponent(name),
           'X-File-Folder': encodeURIComponent(folder),
@@ -117,7 +95,50 @@ export async function importCourse(folder: string, options: ImportOptions) {
     throw new Error(`The app is not answering at ${app}; start it with npm start.`);
   });
   const projects = await call<ProjectSummary[]>(app, '/projects');
-  const wanted = options.project || basename(folder);
+  const { locale } = await call<{ locale: 'en' | 'es' }>(app, '/settings');
+  const queue = async (project: string, sources: Source[]) => {
+    for (const source of sources)
+      await call(
+        app,
+        '/jobs',
+        { method: 'POST', body: JSON.stringify({ sourceId: source.id, locale }) },
+        project,
+      );
+    return sources.length;
+  };
+  // Without --project, the course gets a project that keeps its files in the course folder:
+  // the downloaded files are listed where they are, with nothing copied.
+  if (!options.project) {
+    let project = projects.find((item) => item.folder === folder);
+    if (!project) {
+      project = await call<ProjectSummary>(app, '/projects', {
+        method: 'POST',
+        body: JSON.stringify({ name: basename(folder).slice(0, 120), folder, adopt: false }),
+      });
+      log(`Created project “${project.name}” in ${folder}.`);
+    } else log(`Adding to project “${project.name}”.`);
+    const { added } = await call<{ added: Source[] }>(
+      app,
+      '/files/scan',
+      { method: 'POST', body: '{}' },
+      project.id,
+    );
+    const videos = new Set(
+      manifest.files.filter((file) => file.role === 'video').map((file) => file.path),
+    );
+    const queued = await queue(
+      project.id,
+      added.filter(
+        (source) =>
+          options.prepare === 'all' || (options.prepare === 'videos' && videos.has(source.path!)),
+      ),
+    );
+    log(
+      `Added ${added.length} file${added.length === 1 ? '' : 's'}${queued ? `, ${queued} queued for preparation` : ''}. Open ${app}/projects/${project.id}`,
+    );
+    return;
+  }
+  const wanted = options.project;
   let project = projects.find(
     (item) => item.id === wanted || item.name.trim().toLowerCase() === wanted.trim().toLowerCase(),
   );
@@ -128,7 +149,6 @@ export async function importCourse(folder: string, options: ImportOptions) {
     });
     log(`Created project “${project.name}”.`);
   } else log(`Adding to project “${project.name}”.`);
-  const { locale } = await call<{ locale: 'en' | 'es' }>(app, '/settings');
   const catalog = await call<{ files: Source[] }>(app, '/catalog', {}, project.id);
   const present = new Set(catalog.files.map((file) => `${file.folder}/${file.name}`));
   const root = basename(folder);
@@ -160,15 +180,8 @@ export async function importCourse(folder: string, options: ImportOptions) {
     });
     process.stdout.write('\n');
     added++;
-    if (options.prepare === 'all' || (options.prepare === 'videos' && file.role === 'video')) {
-      await call(
-        app,
-        '/jobs',
-        { method: 'POST', body: JSON.stringify({ sourceId: source.id, locale }) },
-        project.id,
-      );
-      queued++;
-    }
+    if (options.prepare === 'all' || (options.prepare === 'videos' && file.role === 'video'))
+      queued += await queue(project.id, [source]);
   }
   log(
     `Added ${added} file${added === 1 ? '' : 's'}${queued ? `, ${queued} queued for preparation` : ''}. Open ${app}/projects/${project.id}`,

@@ -1,5 +1,12 @@
-import { mkdir, readFile, stat, writeFile, unlink } from 'node:fs/promises';
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';
+import {
+  assertVolumeMounted,
+  assertWritable,
+  DiskFolderError as DataFolderError,
+} from '../server/disk';
+
+export { assertVolumeMounted, assertWritable, DataFolderError };
 
 /**
  * Where the library keeps its data: the local Workers state (originals, library records,
@@ -10,8 +17,6 @@ export type DataLocation = { state: string; processing: string; folder: string |
 
 const MARKER = 'tailored-library.json';
 const configFile = (root: string) => join(root, '.local', 'config.json');
-
-export class DataFolderError extends Error {}
 
 /** Launch preferences kept in the project, such as the data and courses folders. */
 export type LocalConfig = { dataDir?: string; coursesDir?: string };
@@ -33,34 +38,6 @@ export async function saveConfig(root: string, update: LocalConfig) {
 }
 export const saveDataFolder = (root: string, folder: string) =>
   saveConfig(root, { dataDir: folder });
-
-/**
- * A folder on a volume under /Volumes must be on a mounted disk: with the disk away, macOS
- * would let the folder be created on the internal disk and the library would look empty.
- */
-export async function assertVolumeMounted(folder: string) {
-  const volume = folder.match(/^\/Volumes\/[^/]+/)?.[0];
-  if (!volume) return;
-  const [disk, system] = await Promise.all([stat(volume).catch(() => null), stat('/')]);
-  if (!disk || disk.dev === system.dev)
-    throw new DataFolderError(`${volume} is not mounted. Connect the disk and start again.`);
-}
-
-/** Checks the folder can be written, with a hint when macOS withholds access to the disk. */
-export async function assertWritable(folder: string) {
-  const probe = join(folder, `.write-check-${process.pid}`);
-  try {
-    await writeFile(probe, '');
-    await unlink(probe);
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === 'EPERM' || code === 'EACCES')
-      throw new DataFolderError(
-        `macOS denied access to ${folder}. In System Settings › Privacy & Security › Files and Folders, allow your terminal to use removable volumes, then start again.`,
-      );
-    throw error;
-  }
-}
 
 /** Marks a folder as holding a library, so a later start can tell it from an empty one. */
 export async function markDataFolder(folder: string) {

@@ -11,9 +11,18 @@ export const projectSchema = z.object({
   name: z.string().trim().min(1).max(120),
   createdAt: z.string(),
   lastActiveAt: z.string().nullable(),
+  /** A folder on this computer where the project keeps its files as ordinary files. */
+  folder: z.string().max(1024).nullable().optional(),
 });
 export type Project = z.infer<typeof projectSchema>;
 export const projectInputSchema = z.object({ name: z.string().trim().min(1).max(120) }).strict();
+export const projectCreateSchema = projectInputSchema
+  .extend({
+    folder: z.string().trim().min(1).max(1024).optional(),
+    /** Adds the files already in the folder, where they are. */
+    adopt: z.boolean().default(true),
+  })
+  .strict();
 /** A project with what the home page shows on its card. */
 export type ProjectSummary = Project & { files: number; sessions: number };
 

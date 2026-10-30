@@ -26,12 +26,19 @@ if (typeof window !== 'undefined')
 export function projectHeaders(): Record<string, string> {
   return { 'X-Project': project, 'X-Local-Day': localDay() };
 }
-export async function api<T>(path: string, method = 'GET', value?: unknown): Promise<T> {
+/** `headers` can name another project, as the home page does for a project's own actions. */
+export async function api<T>(
+  path: string,
+  method = 'GET',
+  value?: unknown,
+  headers: Record<string, string> = {},
+): Promise<T> {
   const response = await fetch(`/api${path}`, {
     method,
     headers: {
       ...projectHeaders(),
       ...(value === undefined ? {} : { 'Content-Type': 'application/json' }),
+      ...headers,
     },
     ...(value === undefined ? {} : { body: JSON.stringify(value) }),
   });

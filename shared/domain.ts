@@ -27,6 +27,8 @@ export const sourceSchema = z.object({
   trashed: z.boolean().optional(),
   reviewed: z.boolean(),
   createdAt: z.string(),
+  /** Where the original is in the project's own folder, when the project keeps files there. */
+  path: z.string().min(1).max(1024).optional(),
 });
 export type Source = z.infer<typeof sourceSchema>;
 export const directorySchema = z.object({
@@ -310,6 +312,8 @@ export type Catalog = {
   concepts: Concept[];
   conversations: import('./conversations').Conversation[];
   settings: Settings;
+  /** The folder where this project keeps its files as ordinary files, if it has one. */
+  folder?: string | null;
 };
 /** Full-length lecture recordings commonly reach about 1 GB. */
 export const MAX_FILE_BYTES = 2 * 1024 * 1024 * 1024;
@@ -331,6 +335,30 @@ export function checkQuestion<Q extends Question>(q: Q): Q {
     throw new Error('Invalid question solution');
   return q;
 }
+// The type a browser gives each readable file, so files added without one are served the same way.
+const mimeTypes: Record<string, string> = {
+  mp4: 'video/mp4',
+  webm: 'video/webm',
+  mov: 'video/quicktime',
+  mkv: 'video/x-matroska',
+  wav: 'audio/wav',
+  mp3: 'audio/mpeg',
+  m4a: 'audio/mp4',
+  ogg: 'audio/ogg',
+  flac: 'audio/flac',
+  pdf: 'application/pdf',
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  webp: 'image/webp',
+  md: 'text/markdown',
+  txt: 'text/plain',
+  csv: 'text/csv',
+  vtt: 'text/vtt',
+  srt: 'application/x-subrip',
+};
+export const mimeFor = (name: string) =>
+  mimeTypes[name.split('.').pop()!.toLowerCase()] || 'application/octet-stream';
 export function kindFor(name: string): Kind | null {
   const ext = name.split('.').pop()?.toLowerCase();
   if (['mp4', 'webm', 'mov', 'mkv'].includes(ext || '')) return 'video';

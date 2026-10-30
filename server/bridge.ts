@@ -3,6 +3,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { mkdir, readFile, writeFile, open, rename, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { MAX_FILE_BYTES, kindSchema } from '../shared/domain';
+import { diskRoute } from './disk';
 import { normalize } from './media';
 import { museEngine } from './muse';
 import { z } from 'zod';
@@ -38,6 +39,7 @@ export async function startBridge(
         return;
       }
       const url = new URL(req.url || '/', 'http://127.0.0.1');
+      if (url.pathname.startsWith('/disk/')) return await diskRoute(url, req, res);
       const tutorMatch = url.pathname.match(/^\/tutor-requests\/([a-f0-9]{64})(\/cancel)?$/);
       if (tutorMatch) {
         let result;

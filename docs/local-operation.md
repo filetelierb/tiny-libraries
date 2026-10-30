@@ -60,6 +60,17 @@ Or start a new library there with `npm run dev -- --data "/Volumes/MyDisk/course
 - macOS asks before a program uses a removable volume. If the start says access was denied, allow your terminal under System Settings › Privacy & Security › Files and Folders › Removable Volumes.
 - `move-data` copies and checks that file counts and sizes match before switching. It leaves the previous copy in place; delete it yourself once the library opens from the new folder.
 
+## A project's own folder
+
+**New project** asks for a name and where its files go: the library's storage, or a folder on this computer (type its path or use **Browse…**, which lists the home folder and the mounted disks). With a folder:
+
+- Uploads are saved there as ordinary files, under the project's library folders (`Lectures/Lecture 01/…`). A name already taken there gets a suffix such as `notes (2).md`.
+- **Add the files already in this folder** lists the readable files found there, where they are, without copying them; hidden files are left out. Later, **Add new files from its folder** (on the project's card) adds what appeared since.
+- Renaming or moving a file or folder in the library renames or moves it in the folder; new library folders are created there too.
+- Deleting a file in the library deletes it from the folder. Deleting the project leaves the folder and its files.
+- Library records, notes, conversations and prepared material stay in the library's data folder. Files the Librarian writes (artifacts) stay there too.
+- Each folder belongs to one project. A folder on a disconnected disk is refused.
+
 ## Open courseware
 
 `npm run courses` lists, downloads and imports courses whose material is openly licensed. The first source is Stanford Engineering Everywhere (`see`), licensed CC BY-NC-SA 4.0 unless an item says otherwise.
@@ -73,7 +84,7 @@ npm run courses -- import "/Volumes/MyDisk/courses/see/EE261 – The Fourier Tra
 
 - `download` takes every handout, assignment, exam and transcript, and the videos of the lectures named with `--lectures` (`1-3`, `1,4,7`, `all`; none by default). `--no-transcripts` and `--no-materials` leave those out. It checks free space first, resumes interrupted files, and remembers the `--to` folder.
 - A course folder holds `Handouts/`, `Assignments/`, `Exams/` and `Lectures/Lecture 01/…` as the course page lists them, plus `course.json` (what was downloaded) and `SOURCE.md` (source, instructor and license). Links to other sites are not downloaded.
-- `import` needs the app running. It creates a project named after the course (or uses `--project <name>`), recreates the folders and uploads each file the library reads; other kinds (zip, gif) are listed and skipped. Files already present are left alone, so an import can be repeated after downloading more lectures. `--prepare videos` or `--prepare all` queues preparation, which uses your Meta key; follow it in the preparation queue.
+- `import` needs the app running. It creates a project named after the course whose folder is the course folder, and lists the downloaded files where they are, with nothing copied; other kinds (zip, gif) are left out. Running it again after downloading more lectures adds the new files. `--project <name>` instead uploads copies into an existing project. `--prepare videos` or `--prepare all` queues preparation of the new files, which uses your Meta key; follow it in the preparation queue.
 
 Downloaded courses stay on your disk and are never part of the repository. Attribute the course and its source when you show the material, for example in a demo.
 

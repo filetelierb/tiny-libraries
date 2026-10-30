@@ -329,3 +329,17 @@ Verification: type checks and 317 tests pass. A browser check of the change coul
 The first move to the owner's external disk stopped with "the copy does not match its source". On exFAT and FAT disks macOS stores each copied file's extended attributes in a hidden `._` companion file, so the copy had more files than the source. The check now leaves `._` files out of the count and still compares every real file and byte.
 
 Verification: the incomplete first copy was set aside; the library was then copied to the external disk (181 state files and 532 working files, counts and sizes matching), and the app started from it with both projects, their sessions and the saved key.
+
+### Projects that keep their files in a folder of their own
+
+A new project can keep its files as ordinary files in a folder on this computer, chosen when it is created, instead of the library's internal object storage. The Worker cannot reach the disk, so the companion gained `/disk` routes, all confined to the project's folder: check a folder (mounted disk, writable), browse folders, scan for readable files, write an upload at the first free name, stream a file with byte ranges, move a file and remove folders it leaves empty, create a folder, and delete a file. The project record keeps the folder; each file kept there records its `path` inside it.
+
+- Uploads in such a project are written under their library folder. Reading an original (the reader, the player, preparation, question attachments) goes through the companion, ranges included.
+- Creating the project can add the files already in the folder where they are; **Add new files from its folder** on the home page, and `POST /api/files/scan`, add later ones.
+- After a file or folder is renamed or moved in the library, the files follow on disk; a move that fails leaves the file's recorded path, so it stays readable.
+- Deleting a file deletes it from the folder; deleting the project leaves the folder. Tutor artifacts and every library record stay in the data folder.
+- `npm run courses -- import` now creates a project on the course folder and adds the downloaded files in place, so a course is not stored twice.
+
+The home page's **New project** opens a dialog with the name, the choice of storage, a folder path with a folder browser, and the option to add existing files.
+
+Verification: type checks and 320 tests pass, including path containment, scanning (hidden, empty and unreadable files left out) and moves that keep an existing file. Through the API, with a temporary folder holding a note, a hidden file and a short video: creating the project added the two readable files in place (the hidden one was left out); a range request for the video answered 206 with `bytes 0-99/8332`; an upload landed at `Notes/upload.md`; renaming it moved it on disk; renaming the `Notes` folder to `Apuntes` moved both notes; a file added on disk was found by a scan; deleting a file removed it from the folder; deleting the project left the folder in place; a folder on an unmounted disk was refused (409). The dialog could not be checked in the automated browser, which showed an error page for the local app.

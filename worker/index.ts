@@ -5,6 +5,7 @@ import { z } from 'zod';
 import {
   MAX_FILE_BYTES,
   kindFor,
+  mimeFor,
   localeSchema,
   sessionSchema,
   sourceSchema,
@@ -87,6 +88,19 @@ import {
 } from './conversations';
 import { TutorJournalError } from './tutor-journal';
 import { deleteKeys, deletePrefix, purgePrefix } from './purge';
+import {
+  browseFolders,
+  checkFolder,
+  deleteOriginal,
+  DiskError,
+  diskPath,
+  makeFolder,
+  moveOriginal,
+  readOriginal,
+  scanFolder,
+  withFolderOriginals,
+  writeOriginal,
+} from './disk';
 import type { Annotation } from '../shared/annotations';
 import { attachmentRoute } from './attachment-route';
 import { AttachmentError } from './tutor-attachments';
@@ -137,6 +151,7 @@ import {
   libraryObjectName,
   projectIdSchema,
   projectInputSchema,
+  projectCreateSchema,
   withoutProject,
   type StoredActivityDay,
   type Project,
@@ -234,7 +249,7 @@ async function existingProject(env: Env, project: ProjectId) {
   return project;
 }
 /** Routes that belong to the app as a whole rather than to one project's library. */
-const appRoute = (path: string) => /^\/api\/(settings|projects|activity)(\/|$)/.test(path);
+const appRoute = (path: string) => /^\/api\/(settings|projects|activity|folders)(\/|$)/.test(path);
 async function boundedJson(request: Request) {
   const reader = request.body?.getReader();
   if (!reader) return {};
@@ -395,6 +410,99 @@ export class Library extends DurableObject<Env> {
   private get project(): ProjectId {
     return this.home ? 'default' : (this.ctx.id.name!.slice('project:'.length) as ProjectId);
   }
+  private folderLookup?: Promise<string | null>;
+  /** The folder where this project keeps its files as ordinary files, if it has one. */
+  private projectFolder() {
+    this.folderLookup ??= this.home
+      ? Promise.resolve(null)
+      : internal<{ folder: string | null }>(this.env, `/internal/projects/${this.project}`).then(
+          (value) => value.folder,
+        );
+    return this.folderLookup;
+  }
+  /** Object storage that also reads originals kept in the project's folder. */
+  private originals() {
+    return withFolderOriginals(this.env.FILES, this.env, async (id) => {
+      const [root, file] = await Promise.all([
+        this.projectFolder(),
+        this.ctx.storage.get<Source>(`file:${id}`),
+      ]);
+      return root && file?.path ? { root, path: file.path } : null;
+    });
+  }
+  /**
+   * Moves files kept in the project's folder to where the library now shows them, after a
+   * rename or move. A file whose move fails keeps its recorded place, so it stays readable.
+   */
+  private async followOnDisk(files: Source[], directories: string[] = []) {
+    const root = await this.projectFolder();
+    if (!root) return files;
+    for (const path of directories) await makeFolder(this.env, root, path).catch(() => {});
+    const moved: Source[] = [];
+    for (const file of files) {
+      if (!file.path || file.path === diskPath(file)) {
+        moved.push(file);
+        continue;
+      }
+      try {
+        const { path } = await moveOriginal(this.env, root, file.path, diskPath(file));
+        const next = { ...file, path };
+        await this.ctx.storage.transaction(async (storage) => {
+          const current = await storage.get<Source>(`file:${file.id}`);
+          if (current) await storage.put(`file:${file.id}`, { ...current, path });
+        });
+        moved.push(next);
+      } catch {
+        moved.push(file);
+      }
+    }
+    return moved;
+  }
+  /** Adds the files in the project's folder that the library does not list yet, where they are. */
+  private async adoptFolderFiles() {
+    const root = await this.projectFolder();
+    if (!root) throw new ApiError('This project does not keep its files in a folder', 409);
+    const { files: found } = await scanFolder(this.env, root);
+    return this.ctx.storage.transaction(async (storage) => {
+      const snapshot = await this.directorySnapshot(storage);
+      const known = new Set(snapshot.files.map((file) => file.path).filter(Boolean));
+      const added: Source[] = [];
+      for (const entry of found) {
+        if (known.has(entry.path)) continue;
+        const parts = entry.path.split('/'),
+          name = parts.pop()!,
+          folder = normalizePath(parts.join('/')),
+          kind = kindFor(name);
+        if (!kind || kind === 'artifact' || name.length > 240 || folder.length > 240) continue;
+        // Files under an archived or deleted library folder are left for the student to restore.
+        try {
+          assertWritableDirectory(folder, snapshot.directories);
+        } catch {
+          continue;
+        }
+        for (const entry of ensureDirectories(snapshot.directories, [folder])) {
+          snapshot.directories.push(entry);
+          await storage.put(`directory:${entry.id}`, entry);
+        }
+        const file: Source = {
+          id: crypto.randomUUID(),
+          version: 1,
+          name,
+          folder,
+          kind,
+          mime: mimeFor(name),
+          size: entry.size,
+          archived: false,
+          reviewed: false,
+          createdAt: new Date().toISOString(),
+          path: entry.path,
+        };
+        await storage.put(`file:${file.id}`, file);
+        added.push(file);
+      }
+      return { added };
+    });
+  }
   private async apiKey() {
     if (this.home) return this.ctx.storage.get<string>('apiKey');
     return (await internal<{ key: string | null }>(this.env, '/internal/key')).key || undefined;
@@ -417,8 +525,14 @@ export class Library extends DurableObject<Env> {
       return entries;
     };
     const existsMatch = path.match(/^\/internal\/projects\/([\w-]+)$/);
-    if (existsMatch)
-      return json({ exists: !!(await storage.get<Project>(`project:${existsMatch[1]}`)) });
+    if (existsMatch) {
+      const record = await storage.get<Project>(`project:${existsMatch[1]}`);
+      return json({ exists: !!record, folder: record?.folder ?? null });
+    }
+    if (path === '/api/folders' && request.method === 'GET')
+      return json(
+        await browseFolders(this.env, new URL(request.url).searchParams.get('path') || undefined),
+      );
     if (path === '/internal/activity' && request.method === 'POST') {
       const { project, day, events } = z
         .object({
@@ -449,15 +563,25 @@ export class Library extends DurableObject<Env> {
     }
     if (path === '/api/projects') {
       if (request.method === 'POST') {
-        const { name } = projectInputSchema.parse(await boundedJson(request));
+        const input = projectCreateSchema.parse(await boundedJson(request));
+        // A folder holds one project's files, so two projects never rename each other's.
+        const folder = input.folder ? (await checkFolder(this.env, input.folder)).folder : null;
+        if (folder && (await projects()).some((project) => project.folder === folder))
+          throw new ApiError('Another project already keeps its files in this folder', 409);
         const project: Project = {
           id: crypto.randomUUID(),
-          name,
+          name: input.name,
           createdAt: new Date().toISOString(),
           lastActiveAt: null,
+          ...(folder ? { folder } : {}),
         };
         await storage.put(`project:${project.id}`, project);
-        return json(project, 201);
+        const added =
+          folder && input.adopt
+            ? (await internal<{ added: Source[] }>(this.env, '/internal/scan', {}, project.id))
+                .added
+            : [];
+        return json({ ...project, added: added.length }, 201);
       }
       const summaries: ProjectSummary[] = await Promise.all(
         (await projects()).map(async (project) => ({
@@ -856,6 +980,7 @@ export class Library extends DurableObject<Env> {
           attempts: [...attempts.values()],
           concepts,
           settings: await this.settings(),
+          folder: await this.projectFolder(),
         } satisfies Catalog);
       }
       if (path === '/internal/destination' && request.method === 'POST') {
@@ -924,8 +1049,13 @@ export class Library extends DurableObject<Env> {
           return target;
         });
         return json({
-          files: removed.files.map((file) => ({ id: file.id, version: file.version })),
+          files: removed.files.map((file) => ({
+            id: file.id,
+            version: file.version,
+            ...(file.path ? { path: file.path } : {}),
+          })),
           directories: removed.directories.length,
+          folder: await this.projectFolder(),
         });
       }
       if (
@@ -957,12 +1087,25 @@ export class Library extends DurableObject<Env> {
           const next = changeDirectory(snapshot.directories, snapshot.files, operation);
           for (const directory of next.directories)
             await storage.put(`directory:${directory.id}`, directory);
-          for (const file of next.files)
-            if (snapshot.files.find((original) => original.id === file.id) !== file)
-              await storage.put(`file:${file.id}`, file);
-          return next;
+          const changed = next.files.filter(
+            (file) => snapshot.files.find((original) => original.id === file.id) !== file,
+          );
+          for (const file of changed) await storage.put(`file:${file.id}`, file);
+          const paths = new Map(snapshot.directories.map((entry) => [entry.id, entry.path]));
+          return {
+            next,
+            changed,
+            // New and renamed folders also appear in the project's folder, even when empty.
+            folders: next.directories
+              .filter((entry) => paths.get(entry.id) !== entry.path)
+              .map((entry) => entry.path),
+          };
         });
-        return json(value, directoryMatch ? 200 : 201);
+        const moved = await this.followOnDisk(value.changed, value.folders);
+        const files = value.next.files.map(
+          (file) => moved.find((entry) => entry.id === file.id) || file,
+        );
+        return json({ ...value.next, files }, directoryMatch ? 200 : 201);
       }
       if (path === '/api/settings') {
         if (request.method === 'GET') return json(await this.settings());
@@ -982,6 +1125,9 @@ export class Library extends DurableObject<Env> {
         if (value.webAuto !== undefined) await this.ctx.storage.put('webAuto', value.webAuto);
         return json(await this.settings());
       }
+      if (path === '/internal/folder') return json({ folder: await this.projectFolder() });
+      if ((path === '/internal/scan' || path === '/api/files/scan') && request.method === 'POST')
+        return json(await this.adoptFolderFiles());
       if (path === '/internal/file') {
         const { directoryId, ...file } = sourceSchema
           .extend({ directoryId: z.string().uuid().optional() })
@@ -1035,7 +1181,7 @@ export class Library extends DurableObject<Env> {
             await storage.put(`file:${file.id}`, value);
             return value;
           });
-          return json(next);
+          return json((await this.followOnDisk([next]))[0]);
         }
         return json(file);
       }
@@ -1456,8 +1602,11 @@ export class Library extends DurableObject<Env> {
           ),
         );
       }
-      const attachmentResponse = await attachmentRoute(request, this.env, this.ctx.storage, () =>
-        boundedJson(request),
+      const attachmentResponse = await attachmentRoute(
+        request,
+        { ...this.env, FILES: this.originals() as R2Bucket },
+        this.ctx.storage,
+        () => boundedJson(request),
       );
       if (attachmentResponse) return attachmentResponse;
       const conversationResponse = await conversationRoute({
@@ -1498,7 +1647,8 @@ export class Library extends DurableObject<Env> {
         error instanceof ReinforcementError ||
         error instanceof AssessmentError ||
         error instanceof TutorJournalError ||
-        error instanceof PracticeError
+        error instanceof PracticeError ||
+        error instanceof DiskError
       )
         return json({ error: error.message }, error.status);
       if (error instanceof MetaError)
@@ -1631,6 +1781,26 @@ async function serve(request: Request, env: Env, url: URL): Promise<Response> {
           reviewed: false,
           createdAt: new Date().toISOString(),
         };
+        // A project with a folder of its own keeps the file there, under its library folder.
+        const { folder: root } = await call<{ folder: string | null }>('/internal/folder');
+        if (root) {
+          const written = await writeOriginal(env, root, diskPath(file), request.body);
+          if (written.size !== size) {
+            await deleteOriginal(env, root, written.path).catch(() => {});
+            throw new ApiError('Upload interrupted', 400);
+          }
+          try {
+            const stored = await call<Source>('/internal/file', {
+              ...file,
+              path: written.path,
+              directoryId,
+            });
+            return json(stored, 201);
+          } catch (error) {
+            await deleteOriginal(env, root, written.path).catch(() => {});
+            throw error;
+          }
+        }
         try {
           await env.FILES.put(`original/${file.id}/1`, request.body, {
             httpMetadata: { contentType: file.mime },
@@ -1660,10 +1830,6 @@ async function serve(request: Request, env: Env, url: URL): Promise<Response> {
           if (expected !== file.version)
             throw new ApiError('This source version changed. Choose the file again.', 409);
         }
-        const object = await env.FILES.get(`original/${file.id}/${file.version}`, {
-          range: request.headers,
-        });
-        if (!object) throw new ApiError('Original missing', 404);
         const headers = new Headers({
           'Content-Type': file.mime,
           'Accept-Ranges': 'bytes',
@@ -1673,6 +1839,22 @@ async function serve(request: Request, env: Env, url: URL): Promise<Response> {
           'X-Source-Version': String(file.version),
           'Content-Disposition': `inline; filename*=UTF-8''${encodeURIComponent(file.name)}`,
         });
+        if (file.path) {
+          // Kept in the project's folder: the companion streams it, ranges included.
+          const { folder: root } = await call<{ folder: string | null }>('/internal/folder');
+          if (!root) throw new ApiError('Original missing', 404);
+          const response = await readOriginal(env, root, file.path, request);
+          for (const name of ['Content-Length', 'Content-Range'])
+            if (response.headers.has(name)) headers.set(name, response.headers.get(name)!);
+          return new Response(request.method === 'HEAD' ? null : response.body, {
+            status: response.status,
+            headers,
+          });
+        }
+        const object = await env.FILES.get(`original/${file.id}/${file.version}`, {
+          range: request.headers,
+        });
+        if (!object) throw new ApiError('Original missing', 404);
         let status = 200;
         if (object.range && 'offset' in object.range && object.range.offset !== undefined) {
           const length =
@@ -1783,16 +1965,24 @@ async function serve(request: Request, env: Env, url: URL): Promise<Response> {
         const response = await library(env, project).fetch(request);
         if (!response.ok) return response;
         const removed = await response.json<{
-          files: Array<{ id: string; version: number }>;
+          files: Array<{ id: string; version: number; path?: string }>;
           directories: number;
+          folder: string | null;
         }>();
         // Stored bytes go after the records, so a failure here never leaves a visible file without content.
-        await purgeStoredFiles(env, removed.files);
-        return json(removed);
+        await purgeStoredFiles(
+          env,
+          removed.files.filter((file) => !file.path),
+        );
+        for (const file of removed.files)
+          if (file.path && removed.folder)
+            await deleteOriginal(env, removed.folder, file.path).catch(() => {});
+        return json({ files: removed.files, directories: removed.directories });
       }
       return library(env, project).fetch(request);
     } catch (error) {
-      if (error instanceof ApiError) return json({ error: error.message }, error.status);
+      if (error instanceof ApiError || error instanceof DiskError)
+        return json({ error: error.message }, error.status);
       if (error instanceof z.ZodError || error instanceof SyntaxError)
         return json({ error: 'Invalid request' }, 400);
       console.error(

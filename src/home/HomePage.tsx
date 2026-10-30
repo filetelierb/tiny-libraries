@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { BookOpen, Check, FolderPlus, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { BookOpen, Check, FolderOpen, FolderSync, Pencil, Plus, Trash2, X } from 'lucide-react';
 import {
   heatmapStart,
   localDay,
@@ -11,6 +11,7 @@ import { api } from '../api';
 import { Button, IconButton, LoadingRow, Modal } from '../design/components';
 import { dictionaries, type T } from '../i18n';
 import { ActivityHeatmap } from './ActivityHeatmap';
+import { NewProjectModal } from './NewProjectModal';
 
 function relativeTime(value: string, locale: Locale) {
   const format = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }),
@@ -29,7 +30,8 @@ export function HomePage() {
     [projects, setProjects] = useState<ProjectSummary[] | null>(null),
     [activity, setActivity] = useState<ActivityDay[]>([]),
     [error, setError] = useState(''),
-    [creating, setCreating] = useState<string | null>(null),
+    [creating, setCreating] = useState(false),
+    [notice, setNotice] = useState(''),
     [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null),
     [deleting, setDeleting] = useState<ProjectSummary | null>(null),
     [confirmation, setConfirmation] = useState(''),
@@ -66,15 +68,27 @@ export function HomePage() {
       setBusy(false);
     }
   }
-  async function create(event: FormEvent) {
-    event.preventDefault();
-    if (!creating?.trim() || busy) return;
+  /** Adds the files that appeared in a project's folder since they were last listed. */
+  async function scan(project: ProjectSummary) {
+    if (busy) return;
     setBusy(true);
+    setNotice('');
     try {
-      const project = await api<ProjectSummary>('/projects', 'POST', { name: creating });
-      location.href = `/projects/${project.id}`;
+      const { added } = await api<{ added: unknown[] }>(
+        '/files/scan',
+        'POST',
+        {},
+        {
+          'X-Project': project.id,
+        },
+      );
+      setNotice(
+        t.scannedFolder.replace('{n}', String(added.length)).replace('{name}', project.name),
+      );
+      setProjects(await api<ProjectSummary[]>('/projects'));
     } catch (e) {
       setError((e as Error).message);
+    } finally {
       setBusy(false);
     }
   }
@@ -115,53 +129,23 @@ export function HomePage() {
           {error}
         </p>
       )}
+      {notice && (
+        <p role="status" className="notice">
+          {notice}
+        </p>
+      )}
       <section className="home-section" aria-labelledby="home-projects">
         <div className="home-section-heading">
           <h2 id="home-projects">{t.projects}</h2>
-          {creating === null && (
-            <Button size="sm" onClick={() => setCreating('')}>
-              <Plus size={14} />
-              {t.newProject}
-            </Button>
-          )}
+          <Button size="sm" onClick={() => setCreating(true)}>
+            <Plus size={14} />
+            {t.newProject}
+          </Button>
         </div>
         {!projects ? (
           <LoadingRow>{t.loading}</LoadingRow>
         ) : (
           <ul className="home-projects">
-            {creating !== null && (
-              <li className="home-project home-project-new">
-                <form onSubmit={(e) => void create(e)}>
-                  <span className="home-project-icon" aria-hidden="true">
-                    <FolderPlus size={16} />
-                  </span>
-                  <label>
-                    <span className="sr-only">{t.projectName}</span>
-                    <input
-                      autoFocus
-                      value={creating}
-                      maxLength={120}
-                      placeholder={t.projectNamePlaceholder}
-                      onChange={(e) => setCreating(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Escape' && setCreating(null)}
-                    />
-                  </label>
-                  <div className="home-project-actions">
-                    <Button variant="ghost" size="sm" onClick={() => setCreating(null)}>
-                      {t.cancel}
-                    </Button>
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      type="submit"
-                      disabled={!creating.trim() || busy}
-                    >
-                      {t.createProject}
-                    </Button>
-                  </div>
-                </form>
-              </li>
-            )}
             {sorted.map((project) => (
               <li key={project.id} className="home-project">
                 {renaming?.id === project.id ? (
@@ -202,6 +186,12 @@ export function HomePage() {
                         {plural(project.files, t.projectFile, t.projectFiles)} ·{' '}
                         {plural(project.sessions, t.projectSession, t.projectSessions)}
                       </span>
+                      {project.folder && (
+                        <span className="home-project-folder" title={project.folder}>
+                          <FolderOpen size={12} aria-hidden="true" />
+                          {project.folder}
+                        </span>
+                      )}
                       <small>
                         {project.lastActiveAt
                           ? t.projectLastActive.replace(
@@ -212,6 +202,15 @@ export function HomePage() {
                       </small>
                     </a>
                     <div className="home-project-tools">
+                      {project.folder && (
+                        <IconButton
+                          label={t.scanProjectFolder}
+                          disabled={busy}
+                          onClick={() => void scan(project)}
+                        >
+                          <FolderSync size={14} />
+                        </IconButton>
+                      )}
                       <IconButton
                         label={t.renameProject}
                         onClick={() => setRenaming({ id: project.id, name: project.name })}
@@ -251,6 +250,13 @@ export function HomePage() {
           />
         </div>
       </section>
+      {creating && (
+        <NewProjectModal
+          t={t}
+          close={() => setCreating(false)}
+          created={(project) => (location.href = `/projects/${project.id}`)}
+        />
+      )}
       {deleting && (
         <Modal
           title={t.deleteProjectTitle.replace('{name}', deleting.name)}
@@ -273,6 +279,11 @@ export function HomePage() {
                   plural(deleting.sessions, t.projectSession, t.projectSessions),
                 )}
             </p>
+            {deleting.folder && (
+              <p className="muted">
+                {t.deleteProjectFolderKept.replace('{folder}', deleting.folder)}
+              </p>
+            )}
             <label>
               <span>{t.deleteProjectConfirm.replace('{name}', deleting.name)}</span>
               <input
