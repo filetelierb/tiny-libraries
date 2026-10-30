@@ -30,6 +30,7 @@ import { resolveTutorGeneration } from '../shared/tutor-generation';
 import { TutorObjects, TutorJournalError } from './tutor-journal';
 import type { FrozenTutorContext } from './tutor-runner';
 import type { ProjectId } from '../shared/projects';
+import { deleteKeys, purgePrefix } from './purge';
 
 export function coordinator(env: Env, id: string) {
   return env.TUTOR.getByName(id);
@@ -80,6 +81,31 @@ export async function conversationSnapshot(
       return enrich ? enrich(parsed) : parsed;
     }),
   );
+}
+
+/**
+ * Deletes a conversation for good: its journal, its stored replies, and the actions and
+ * artifact requests it made. Artifacts it already added to the library stay. A conversation
+ * still answering a question is kept until that reply stops.
+ */
+export async function deleteConversation(
+  env: Env,
+  storage: DurableObjectStorage,
+  conversation: Conversation,
+) {
+  if ((await conversationDetail(env, conversation)).pending)
+    throw new TutorJournalError(`Stop the reply in "${conversation.name}" before deleting it`);
+  const owned = async (prefix: string) =>
+    [...(await storage.list<{ conversationId?: string }>({ prefix })).entries()]
+      .filter(([, value]) => value.conversationId === conversation.id)
+      .map(([key]) => key);
+  await deleteKeys(storage, [
+    ...(await owned('tutor-action:')),
+    ...(await owned('tutor-artifact-job:')),
+  ]);
+  await coordinator(env, conversation.id).purge();
+  await purgePrefix(env, `tutor/${encodeURIComponent(conversation.id)}/`);
+  await storage.delete(`conversation:${conversation.id}`);
 }
 
 export async function assessmentConversations(
@@ -380,6 +406,19 @@ export async function conversationRoute({
   }
   if (!match![2]) {
     if (request.method === 'GET') return json(await conversationDetail(env, conversation));
+    if (request.method === 'DELETE') {
+      await deleteConversation(env, storage, conversation);
+      // A conversation brought over from an older session record would otherwise come back.
+      if (conversation.id.startsWith('history-'))
+        await storage.transaction(async (tx) => {
+          const session = await tx.get<StudySession>(`session:${conversation.sessionId}`);
+          const sourceId = conversation.sourceIds[0];
+          if (!session?.conversations?.[sourceId]) return;
+          const { [sourceId]: _removed, ...rest } = session.conversations;
+          await tx.put(`session:${session.id}`, { ...session, conversations: rest });
+        });
+      return json({ deleted: true });
+    }
     if (request.method !== 'PATCH') return json({ error: 'Method not allowed' }, 405);
     const input = z
       .object({

@@ -21,6 +21,7 @@ import {
   StickyNote,
   Pause,
   Play,
+  Trash2,
 } from 'lucide-react';
 import { readWebDraft, type WebDraft } from '../../shared/tutor-web';
 import {
@@ -145,7 +146,9 @@ export function ConversationPanel({
     [query, setQuery] = useState(''),
     [loading, setLoading] = useState(true),
     // A new conversation lives only here until its first message is sent, which saves it.
-    [draft, setDraft] = useState<ConversationDetail | null>(null);
+    [draft, setDraft] = useState<ConversationDetail | null>(null),
+    [deleting, setDeleting] = useState<string | null>(null),
+    [removing, setRemoving] = useState(false);
   const alive = useRef(true),
     draftRef = useRef(draft);
   draftRef.current = draft;
@@ -240,6 +243,25 @@ export function ConversationPanel({
     if (alive.current) setDraft(null);
     await receive(created);
   };
+  /** Deletes a saved conversation; with it selected, the next one opens, or a new draft. */
+  const remove = async (id: string) => {
+    setRemoving(true);
+    try {
+      await api(`/conversations/${id}`, 'DELETE');
+      const rest = threads.filter((item) => item.id !== id);
+      if (alive.current) {
+        setThreads(rest);
+        setDeleting(null);
+        if (selected === id)
+          select([...rest].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0]?.id || '');
+      }
+      await changed();
+    } catch (error) {
+      onError(error instanceof Error ? error.message : t.error);
+    } finally {
+      if (alive.current) setRemoving(false);
+    }
+  };
   return (
     <div className="conversation-panel">
       {history ? (
@@ -313,6 +335,37 @@ export function ConversationPanel({
                 >
                   <Pencil />
                 </IconButton>
+                <IconButton
+                  label={`${t.deleteConversation}: ${item.name}`}
+                  disabled={item.pending || removing}
+                  onClick={() => setDeleting(item.id)}
+                >
+                  <Trash2 />
+                </IconButton>
+                {deleting === item.id && (
+                  <div className="conversation-delete-confirm" role="group">
+                    <p>{t.deleteConversationConfirm}</p>
+                    <div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={removing}
+                        onClick={() => setDeleting(null)}
+                      >
+                        {t.cancel}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        disabled={removing}
+                        onClick={() => void remove(item.id)}
+                      >
+                        <Trash2 />
+                        {t.delete}
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           {!threads.length && <p className="small-empty">{t.noMessages}</p>}

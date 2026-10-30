@@ -294,3 +294,18 @@ The new conversation button no longer creates a conversation. It opens a draft t
 The assistant is named the Librarian ("Bibliotecario" in Spanish) in every label, and the model is told it is the Librarian. Code names and these notes still say tutor.
 
 Verification: type checks and 314 tests pass. Through the API, saving twice with the same id added one conversation. In the browser, the new conversation button left the saved conversations at 1 and showed the hint; sending a question saved "Conversation 2" before sending it. Without an API key the question waited to be resent, and the hint gave way to it.
+
+### Deleting sessions and conversations
+
+A conversation can be deleted from the conversation history: its trash button asks for confirmation on the card. Deleting it removes its journal and stored replies, and the actions and artifact requests it made; artifacts it already added to the library stay. With the deleted conversation open, the most recent other one opens, or a new draft.
+
+A session can be deleted from its menu in the session list. A dialog says how many conversations it has and that its notes, bookmarks and tests go with it, while files, artifacts and the glossary stay. The deletion removes:
+
+- its conversations, as above;
+- its notes and bookmarks, file notes included, with their captures (a note cannot be edited once its session is gone);
+- its tests, with their questions, answers, grades and reports;
+- the question attachments added in it.
+
+The session record goes last, so a deletion that fails part way leaves the session listed and can be repeated. While the Librarian is still answering in a conversation, neither it nor its session can be deleted. Deleting the open session first switches to the most recent other one, or to a new one when it was the last, so no pending save reaches the deleted session. Points already earned stay in the activity graph.
+
+Verification: type checks and 314 tests pass. Through the API, in a throwaway project: deleting a conversation removed it (a second delete returned 404) and left the session's other conversation; deleting the session removed its remaining conversation and its note (404), kept the other session and its conversation, and the project was deleted afterwards. In the browser, the two test conversations were deleted from the history (0 left on the server), and deleting the open test session switched to the remaining session.

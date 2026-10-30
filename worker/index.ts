@@ -83,8 +83,11 @@ import {
   conversationSnapshot,
   conversationDetail,
   assessmentConversations,
+  deleteConversation,
 } from './conversations';
 import { TutorJournalError } from './tutor-journal';
+import { deleteKeys, deletePrefix, purgePrefix } from './purge';
+import type { Annotation } from '../shared/annotations';
 import { attachmentRoute } from './attachment-route';
 import { AttachmentError } from './tutor-attachments';
 import { captureRoute } from './capture-route';
@@ -95,6 +98,7 @@ import {
   AnnotationError,
   ensureSharedAnnotations,
   createSuggestedBookmark,
+  deleteAnnotation,
 } from './annotations';
 import {
   glossaryRoute,
@@ -142,14 +146,6 @@ import {
 
 /** Stored bytes of permanently deleted files go after their records. */
 /** Removes every stored object under a prefix, a page at a time. */
-async function purgePrefix(env: Env, prefix: string) {
-  let cursor: string | undefined;
-  do {
-    const page = await env.FILES.list({ prefix, cursor });
-    if (page.objects.length) await env.FILES.delete(page.objects.map((object) => object.key));
-    cursor = page.truncated ? page.cursor : undefined;
-  } while (cursor);
-}
 async function purgeStoredFiles(env: Env, files: Array<{ id: string; version: number }>) {
   for (const file of files) {
     const keys = Array.from(
@@ -538,6 +534,57 @@ export class Library extends DurableObject<Env> {
           ).fetch(new Request('http://internal/purge', { method: 'POST' }));
     await storage.deleteAlarm();
     await storage.deleteAll();
+  }
+  /**
+   * Deletes a session with everything made in it: its conversations, notes and bookmarks
+   * (with their captures), tests and question attachments. Files, artifacts, the glossary
+   * and practice history belong to the library and stay. The session goes last, so a deletion
+   * that fails part way leaves it listed and can be repeated.
+   */
+  private async deleteSession(id: string) {
+    const storage = this.ctx.storage;
+    const session = await storage.get<StudySession>(`session:${id}`);
+    if (!session) throw new ApiError('Session not found', 404);
+    const conversations = (await conversationSnapshot(storage, [session])).filter(
+      (value) => value.sessionId === id,
+    );
+    for (const conversation of conversations)
+      if ((await conversationDetail(this.env, conversation)).pending)
+        throw new ApiError(
+          `Stop the reply in "${conversation.name}" before deleting the session`,
+          409,
+        );
+    for (const conversation of conversations)
+      await deleteConversation(this.env, storage, conversation);
+    await ensureSharedAnnotations(storage);
+    for (const key of (await storage.list({ prefix: `annotation-summary:${id}:` })).keys()) {
+      const annotation = await storage.get<Annotation>(`annotation:${key.split(':')[2]}`);
+      if (annotation) await deleteAnnotation(this.env, storage, annotation);
+      else await storage.delete(key);
+    }
+    // Every record of a test is keyed by the test's id after its kind.
+    const tests = new Set(
+      [...(await storage.list<{ sessionId?: string }>({ prefix: 'assessment:' })).entries()]
+        .filter(([key, value]) => key.split(':').length === 2 && value.sessionId === id)
+        .map(([key]) => key.split(':')[1]),
+    );
+    if (tests.size)
+      await deleteKeys(
+        storage,
+        [...(await storage.list({ prefix: 'assessment' })).keys()].filter((key) =>
+          tests.has(key.split(':')[1]),
+        ),
+      );
+    for (const [key, attachment] of await storage.list<{ id: string; sessionId: string }>({
+      prefix: 'tutor-attachment:',
+    }))
+      if (attachment.sessionId === id) {
+        await deletePrefix(storage, `tutor-attachment-part:${attachment.id}:`);
+        await purgePrefix(this.env, `tutor-attachment/${attachment.id}/`);
+        await storage.delete(key);
+      }
+    await storage.delete(`session:${id}`);
+    await storage.delete(`annotation-note-import:${id}`);
   }
   async settings(): Promise<Settings> {
     if (!this.home) return internal<Settings>(this.env, '/api/settings');
@@ -1012,6 +1059,10 @@ export class Library extends DurableObject<Env> {
         return json(session, 201);
       }
       const sessionMatch = path.match(/^\/api\/sessions\/([a-f0-9-]+)$/);
+      if (sessionMatch && request.method === 'DELETE') {
+        await this.deleteSession(sessionMatch[1]);
+        return json({ deleted: true });
+      }
       if (sessionMatch && request.method === 'PUT') {
         const value = sessionSchema.parse(await boundedJson(request));
         if (value.id !== sessionMatch[1]) throw new ApiError('Session identity mismatch');

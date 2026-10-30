@@ -229,6 +229,9 @@ export function App() {
     });
   }
   const [renamingSession, setRenamingSession] = useState<StudySession | null>(null);
+  const [deletingSession, setDeletingSession] = useState<StudySession | null>(null),
+    [removingSession, setRemovingSession] = useState(false),
+    [sessionDeleteError, setSessionDeleteError] = useState('');
   const [directoryDialog, setDirectoryDialog] = useState<DirectoryDialog | null>(null);
   const [uploadDirectoryId, setUploadDirectoryId] = useState<string | null>(null);
   const [returnToSplit, setReturnToSplit] = useState(false);
@@ -456,6 +459,47 @@ export function App() {
     setArtifact(false);
     setLearning(null);
     setSeek(null);
+  }
+  /**
+   * Deletes a session with what was made in it. The open session is left first, for the most
+   * recent other one or a new one, so no pending save reaches the deleted session.
+   */
+  async function removeSession(target: StudySession) {
+    setRemovingSession(true);
+    setSessionDeleteError('');
+    try {
+      if (sessionRef.current?.id === target.id) {
+        const next =
+          [...(catalog?.sessions || [])]
+            .filter((item) => item.id !== target.id)
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ||
+          (await api<StudySession>('/sessions', 'POST', { name: t.sessionName }));
+        setCatalog((c) =>
+          c && !c.sessions.some((item) => item.id === next.id)
+            ? { ...c, sessions: [...c.sessions, next] }
+            : c,
+        );
+        selectSession(next);
+      }
+      await saveChain.current;
+      await api(`/sessions/${target.id}`, 'DELETE');
+      setCatalog((c) =>
+        c
+          ? {
+              ...c,
+              sessions: c.sessions.filter((item) => item.id !== target.id),
+              conversations: c.conversations.filter((item) => item.sessionId !== target.id),
+            }
+          : c,
+      );
+      localStorage.removeItem(`tl:conversation:${target.id}`);
+      setDeletingSession(null);
+      await refresh();
+    } catch (e) {
+      setSessionDeleteError(e instanceof Error ? e.message : t.error);
+    } finally {
+      setRemovingSession(false);
+    }
   }
   function commitWorkspace(next: ResourceWorkspace) {
     if (next.resourceTabs.length > MAX_RESOURCE_TABS) {
@@ -1134,6 +1178,14 @@ export function App() {
                           label={`${t.sessionOptions}: ${item.name}`}
                           actions={[
                             { label: t.renameSession, run: () => setRenamingSession(item) },
+                            {
+                              label: t.deleteSession,
+                              danger: true,
+                              run: () => {
+                                setSessionDeleteError('');
+                                setDeletingSession(item);
+                              },
+                            },
                           ]}
                         />
                       </div>
@@ -2531,6 +2583,58 @@ export function App() {
           }}
         />
       )}
+      {deletingSession &&
+        (() => {
+          const threads = (catalog?.conversations || []).filter(
+              (item) => item.sessionId === deletingSession.id,
+            ),
+            answering = threads.find(conversationHasWork);
+          return (
+            <Modal
+              title={t.deleteSessionTitle.replace('{name}', deletingSession.name)}
+              close={() => !removingSession && setDeletingSession(null)}
+              closeLabel={t.cancel}
+            >
+              <div className="home-delete">
+                <p>
+                  {t.deleteSessionWarning.replace(
+                    '{conversations}',
+                    `${threads.length} ${
+                      threads.length === 1 ? t.sessionConversation : t.sessionConversations
+                    }`,
+                  )}
+                </p>
+                {sessionDeleteError && (
+                  <p role="alert" className="notice">
+                    {sessionDeleteError}
+                  </p>
+                )}
+                {answering && (
+                  <p role="alert" className="notice">
+                    {t.deleteSessionAnswering.replace('{name}', answering.name)}
+                  </p>
+                )}
+                <div className="home-delete-actions">
+                  <Button
+                    variant="ghost"
+                    disabled={removingSession}
+                    onClick={() => setDeletingSession(null)}
+                  >
+                    {t.cancel}
+                  </Button>
+                  <Button
+                    variant="danger"
+                    disabled={removingSession || !!answering}
+                    onClick={() => void removeSession(deletingSession)}
+                  >
+                    <Trash2 size={14} />
+                    {removingSession ? t.deletingSession : t.deleteSessionAction}
+                  </Button>
+                </div>
+              </div>
+            </Modal>
+          );
+        })()}
       {modal === 'session' && (
         <TextModal
           title={t.newSession}

@@ -9986,9 +9986,31 @@ body:has(.panel-resizer.resizing) {
   align-items: flex-start;
   gap: 4px;
 }
+.conversation-row-host {
+  flex-wrap: wrap;
+}
 .conversation-row-host > .conversation-row {
   flex: 1;
   min-width: 0;
+}
+.conversation-delete-confirm {
+  flex-basis: 100%;
+  padding: 10px;
+  border: 1px solid color-mix(in oklch, var(--danger) 20%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklch, var(--danger) 5%, transparent);
+}
+.conversation-delete-confirm > p {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--danger);
+}
+.conversation-delete-confirm > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
 }
 /* Room under the floating history and new-conversation buttons. */
 .conversation-panel > .assistant > .conversation-messages {
