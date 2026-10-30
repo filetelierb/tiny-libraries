@@ -31,6 +31,8 @@ async function measure(folder: string): Promise<{ files: number; bytes: number }
   let files = 0,
     bytes = 0;
   for (const entry of await readdir(folder, { withFileTypes: true }).catch(() => [])) {
+    // On exFAT and FAT disks macOS keeps each file's extended attributes in a "._" companion.
+    if (entry.name.startsWith('._')) continue;
     const path = join(folder, entry.name);
     if (entry.isDirectory()) {
       const inner = await measure(path);

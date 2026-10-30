@@ -323,3 +323,9 @@ Verification: type checks and 317 tests pass, including the course page parser o
 An open conversation is checked every few seconds for new replies. When it was deleted elsewhere (another tab, or with its project), each check answered 404 and the checks went on indefinitely, filling the runtime log. A 404 now ends the checks and refreshes the library, so the panel moves to another conversation or a new draft; other failures still show the reconnecting notice and retry.
 
 Verification: type checks and 317 tests pass. A browser check of the change could not run in this session: the automated browser showed an error page for the local app while the app answered normally from the command line.
+
+### Moving the library to an exFAT disk
+
+The first move to the owner's external disk stopped with "the copy does not match its source". On exFAT and FAT disks macOS stores each copied file's extended attributes in a hidden `._` companion file, so the copy had more files than the source. The check now leaves `._` files out of the count and still compares every real file and byte.
+
+Verification: the incomplete first copy was set aside; the library was then copied to the external disk (181 state files and 532 working files, counts and sizes matching), and the app started from it with both projects, their sessions and the saved key.
