@@ -185,13 +185,20 @@ export async function startBridge(
             sourceId: z.string().uuid(),
             sourceVersion: z.number().int().positive(),
             mime: z.string().max(160),
+            project: z.union([z.literal('default'), z.string().uuid()]).default('default'),
           })
           .parse(JSON.parse(Buffer.concat(parts).toString()));
-        const metadata = await fetch(`http://127.0.0.1:9876/api/files/${source.sourceId}`);
+        // The file is read from the library of the project it belongs to.
+        const headers = { 'X-Project': source.project };
+        const metadata = await fetch(`http://127.0.0.1:9876/api/files/${source.sourceId}`, {
+          headers,
+        });
         if (!metadata.ok) throw new Error('Source metadata is unavailable');
         if (((await metadata.json()) as { version: number }).version !== source.sourceVersion)
           throw new Error('Source version changed');
-        const original = await fetch(`http://127.0.0.1:9876/api/files/${source.sourceId}/content`);
+        const original = await fetch(`http://127.0.0.1:9876/api/files/${source.sourceId}/content`, {
+          headers,
+        });
         if (!original.ok || !original.body) throw new Error('Original source is unavailable');
         const handle = await open(join(directory, 'upload.tmp'), 'w', 0o600);
         let bytes = 0;

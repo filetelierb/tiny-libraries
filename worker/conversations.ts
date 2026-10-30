@@ -29,6 +29,7 @@ import { readQuestionAttachments, attachmentImagesData } from './tutor-attachmen
 import { resolveTutorGeneration } from '../shared/tutor-generation';
 import { TutorObjects, TutorJournalError } from './tutor-journal';
 import type { FrozenTutorContext } from './tutor-runner';
+import type { ProjectId } from '../shared/projects';
 
 export function coordinator(env: Env, id: string) {
   return env.TUTOR.getByName(id);
@@ -271,6 +272,7 @@ export async function conversationRoute({
   storage,
   body,
   settings,
+  project = 'default',
 }: {
   request: Request;
   env: Env;
@@ -278,6 +280,7 @@ export async function conversationRoute({
   body: () => Promise<unknown>;
   settings: () => Promise<Settings>;
   executionId: string;
+  project?: ProjectId;
 }): Promise<Response | null> {
   const url = new URL(request.url),
     path = url.pathname;
@@ -424,7 +427,7 @@ export async function conversationRoute({
       fingerprint,
       await settings(),
     );
-    unwrap(await actor.seed(conversation));
+    unwrap(await actor.seed(conversation, project));
     unwrap(await actor.accept(intent, fingerprint));
   }
   return json(

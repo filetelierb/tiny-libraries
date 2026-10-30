@@ -123,6 +123,17 @@ import {
   purgeTargets,
   sourceState,
 } from '../shared/directories';
+import {
+  activityDaySchema,
+  countsAsActivity,
+  libraryObjectName,
+  projectIdSchema,
+  projectInputSchema,
+  type ActivityDay,
+  type Project,
+  type ProjectId,
+  type ProjectSummary,
+} from '../shared/projects';
 
 /** Stored bytes of permanently deleted files go after their records. */
 async function purgeStoredFiles(env: Env, files: Array<{ id: string; version: number }>) {
@@ -152,11 +163,16 @@ export class ApiError extends Error {
     super(message);
   }
 }
-export function library(env: Env) {
-  return env.LIBRARY.get(env.LIBRARY.idFromName('local-user'));
+export function library(env: Env, project: ProjectId = 'default') {
+  return env.LIBRARY.getByName(libraryObjectName(project));
 }
-export async function internal<T>(env: Env, path: string, body?: unknown): Promise<T> {
-  const response = await library(env).fetch(
+export async function internal<T>(
+  env: Env,
+  path: string,
+  body?: unknown,
+  project: ProjectId = 'default',
+): Promise<T> {
+  const response = await library(env, project).fetch(
     new Request(`http://internal${path}`, {
       method: body === undefined ? 'GET' : 'POST',
       ...(body === undefined
@@ -168,15 +184,38 @@ export async function internal<T>(env: Env, path: string, body?: unknown): Promi
   return response.json<T>();
 }
 /** Queues a file's preparation in one language; an existing job is returned unchanged. */
-function startJob(env: Env, file: Source, locale: z.infer<typeof localeSchema>) {
+function startJob(
+  env: Env,
+  file: Source,
+  locale: z.infer<typeof localeSchema>,
+  project: ProjectId,
+) {
   const id = `${file.id}-v${file.version}-${locale}`;
   return env.JOBS.get(env.JOBS.idFromName(id)).fetch(
     new Request('http://internal/start', {
       method: 'POST',
-      body: JSON.stringify({ id, file, locale }),
+      body: JSON.stringify({ id, file, locale, project }),
     }),
   );
 }
+/** The project a request works in: the app's header, then the cookie that media links carry. */
+function requestProject(request: Request, url: URL): ProjectId {
+  const cookie = request.headers.get('Cookie')?.match(/(?:^|;\s*)tl-project=([^;]+)/)?.[1];
+  const value = request.headers.get('X-Project') || url.searchParams.get('project') || cookie;
+  const parsed = projectIdSchema.safeParse(value || 'default');
+  if (!parsed.success) throw new ApiError('Unknown project', 400);
+  return parsed.data;
+}
+const knownProjects = new Set<ProjectId>(['default']);
+async function existingProject(env: Env, project: ProjectId) {
+  if (knownProjects.has(project)) return project;
+  const { exists } = await internal<{ exists: boolean }>(env, `/internal/projects/${project}`);
+  if (!exists) throw new ApiError('Project not found', 404);
+  knownProjects.add(project);
+  return project;
+}
+/** Routes that belong to the app as a whole rather than to one project's library. */
+const appRoute = (path: string) => /^\/api\/(settings|projects|activity)(\/|$)/.test(path);
 async function boundedJson(request: Request) {
   const reader = request.body?.getReader();
   if (!reader) return {};
@@ -227,7 +266,7 @@ export class Library extends DurableObject<Env> {
   /** Model calls, previous versions and saving for the tutor's artifact generations. */
   private artifactServices(): TutorArtifactServices {
     const key = async () => {
-      const value = await this.ctx.storage.get<string>('apiKey');
+      const value = await this.apiKey();
       if (!value) throw new TutorArtifactError('Add a Meta API key in Settings', 409);
       return value;
     };
@@ -330,7 +369,100 @@ export class Library extends DurableObject<Env> {
     if (!conversation) throw new ApiError('Conversation not found', 404);
     return conversation.sessionId;
   }
+  /** The first library also keeps the app's settings, the project list and the activity log. */
+  private get home() {
+    return this.ctx.id.name === libraryObjectName('default');
+  }
+  private get project(): ProjectId {
+    return this.home ? 'default' : (this.ctx.id.name!.slice('project:'.length) as ProjectId);
+  }
+  private async apiKey() {
+    if (this.home) return this.ctx.storage.get<string>('apiKey');
+    return (await internal<{ key: string | null }>(this.env, '/internal/key')).key || undefined;
+  }
+  /** Projects and the activity log, kept by the first library for the whole app. */
+  private async homeRoute(request: Request, path: string): Promise<Response | null> {
+    const storage = this.ctx.storage;
+    const projects = async () => {
+      const entries = [...(await storage.list<Project>({ prefix: 'project:' })).values()];
+      if (!entries.some((project) => project.id === 'default')) {
+        const first: Project = {
+          id: 'default',
+          name: (await storage.get<string>('locale')) === 'es' ? 'Mi biblioteca' : 'My library',
+          createdAt: new Date().toISOString(),
+          lastActiveAt: null,
+        };
+        await storage.put('project:default', first);
+        entries.unshift(first);
+      }
+      return entries;
+    };
+    const existsMatch = path.match(/^\/internal\/projects\/([\w-]+)$/);
+    if (existsMatch)
+      return json({ exists: !!(await storage.get<Project>(`project:${existsMatch[1]}`)) });
+    if (path === '/internal/activity' && request.method === 'POST') {
+      const { project, day } = z
+        .object({ project: projectIdSchema, day: activityDaySchema })
+        .parse(await boundedJson(request));
+      await storage.transaction(async (tx) => {
+        const current = (await tx.get<ActivityDay>(`activity:${day}`)) || {
+          day,
+          total: 0,
+          projects: {},
+        };
+        current.total += 1;
+        current.projects[project] = (current.projects[project] || 0) + 1;
+        await tx.put(`activity:${day}`, current);
+        const record = await tx.get<Project>(`project:${project}`);
+        if (record)
+          await tx.put(`project:${project}`, { ...record, lastActiveAt: new Date().toISOString() });
+      });
+      return json({ ok: true });
+    }
+    if (path === '/api/activity' && request.method === 'GET') {
+      const since = activityDaySchema.safeParse(new URL(request.url).searchParams.get('since'));
+      const days = [...(await storage.list<ActivityDay>({ prefix: 'activity:' })).values()];
+      return json(since.success ? days.filter((day) => day.day >= since.data) : days);
+    }
+    if (path === '/api/projects') {
+      if (request.method === 'POST') {
+        const { name } = projectInputSchema.parse(await boundedJson(request));
+        const project: Project = {
+          id: crypto.randomUUID(),
+          name,
+          createdAt: new Date().toISOString(),
+          lastActiveAt: null,
+        };
+        await storage.put(`project:${project.id}`, project);
+        return json(project, 201);
+      }
+      const summaries: ProjectSummary[] = await Promise.all(
+        (await projects()).map(async (project) => ({
+          ...project,
+          ...(await internal<{ files: number; sessions: number }>(
+            this.env,
+            '/internal/summary',
+            undefined,
+            project.id,
+          )),
+        })),
+      );
+      return json(summaries);
+    }
+    const projectMatch = path.match(/^\/api\/projects\/([\w-]+)$/);
+    if (projectMatch && request.method === 'PATCH') {
+      const id = projectIdSchema.parse(projectMatch[1]);
+      await projects();
+      const record = await storage.get<Project>(`project:${id}`);
+      if (!record) throw new ApiError('Project not found', 404);
+      const next = { ...record, ...projectInputSchema.parse(await boundedJson(request)) };
+      await storage.put(`project:${id}`, next);
+      return json(next);
+    }
+    return null;
+  }
   async settings(): Promise<Settings> {
+    if (!this.home) return internal<Settings>(this.env, '/api/settings');
     const key = await this.ctx.storage.get<string>('apiKey');
     return {
       configured: !!key,
@@ -350,8 +482,18 @@ export class Library extends DurableObject<Env> {
             key.slice('learning:'.length),
           ),
         );
-      if (path === '/internal/key')
-        return json({ key: (await this.ctx.storage.get<string>('apiKey')) || null });
+      if (path === '/internal/key') return json({ key: (await this.apiKey()) || null });
+      if (path === '/internal/summary')
+        return json({
+          files: [...(await this.ctx.storage.list<Source>({ prefix: 'file:' })).values()].filter(
+            (file) => !file.trashed,
+          ).length,
+          sessions: (await this.ctx.storage.list({ prefix: 'session:' })).size,
+        });
+      if (this.home) {
+        const response = await this.homeRoute(request, path);
+        if (response) return response;
+      }
       // The glossary review reconciles a file's terms with the concepts already kept.
       if (path === '/internal/glossary-terms' && request.method === 'POST') {
         const { names } = z
@@ -814,7 +956,7 @@ export class Library extends DurableObject<Env> {
             locale: Settings['locale'],
             model: string,
           ) => {
-            const key = await this.ctx.storage.get<string>('apiKey');
+            const key = await this.apiKey();
             if (!key) throw new ApiError('Add a Meta API key in Settings', 409);
             return generateAssessmentBatch(
               key,
@@ -835,7 +977,7 @@ export class Library extends DurableObject<Env> {
             locale: Settings['locale'],
             model: string,
           ) => {
-            const key = await this.ctx.storage.get<string>('apiKey');
+            const key = await this.apiKey();
             if (!key) throw new ApiError('Add a Meta API key in Settings', 409);
             return analyzeAssessment(
               key,
@@ -971,7 +1113,7 @@ export class Library extends DurableObject<Env> {
             owner: this.executionId,
             start: (task) => this.ctx.waitUntil(task),
             generate: async (learning, chapters) => {
-              const key = await this.ctx.storage.get<string>('apiKey');
+              const key = await this.apiKey();
               if (!key) throw new ApiError('Add a Meta API key in Settings', 409);
               return generateArtifactStudy(
                 key,
@@ -1062,7 +1204,7 @@ export class Library extends DurableObject<Env> {
             settings: await this.settings(),
             start: (task) => this.ctx.waitUntil(task),
             generate: async (context, locale, model) => {
-              const key = await this.ctx.storage.get<string>('apiKey');
+              const key = await this.apiKey();
               if (!key) throw new ApiError('Add a Meta API key in Settings', 409);
               return generateReinforcement(key, model, context, locale, bridgedFetch(this.env));
             },
@@ -1079,7 +1221,7 @@ export class Library extends DurableObject<Env> {
             settings,
             start: (task) => this.ctx.waitUntil(task),
             generate: async (learning, chapterId) => {
-              const key = await this.ctx.storage.get<string>('apiKey');
+              const key = await this.apiKey();
               if (!key) throw new ApiError('Add a Meta API key in Settings', 409);
               return generateCards(
                 key,
@@ -1105,7 +1247,7 @@ export class Library extends DurableObject<Env> {
           await boundedJson(request),
           this.executionId,
           async (question, answer, segments) => {
-            const key = await this.ctx.storage.get<string>('apiKey');
+            const key = await this.apiKey();
             if (!key) throw new ApiError('Add a Meta API key in Settings', 409);
             return gradeShortAnswer(
               key,
@@ -1134,7 +1276,7 @@ export class Library extends DurableObject<Env> {
           .parse(await boundedJson(request));
         const learning = await this.ctx.storage.get<Learning>(`learning:${chatMatch[1]}`);
         if (!learning) throw new ApiError('Prepare this source first', 409);
-        const key = await this.ctx.storage.get<string>('apiKey');
+        const key = await this.apiKey();
         if (!key) throw new ApiError('Add a Meta API key in Settings', 409);
         const attempts = [
           ...(await this.ctx.storage.list<Attempt>({ prefix: 'attempt:' })).values(),
@@ -1160,6 +1302,7 @@ export class Library extends DurableObject<Env> {
         env: this.env,
         storage: this.ctx.storage,
         executionId: this.executionId,
+        project: this.project,
         body: () => boundedJson(request),
         settings: () => this.settings(),
       });
@@ -1204,9 +1347,25 @@ export class Library extends DurableObject<Env> {
   }
 }
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
+    const response = await serve(request, env, url);
+    // Changes the student makes are counted per local day for the activity heatmap.
+    if (response.ok && countsAsActivity(request.method, url.pathname)) {
+      const day = activityDaySchema.safeParse(request.headers.get('X-Local-Day'));
+      ctx.waitUntil(
+        internal(env, '/internal/activity', {
+          project: requestProject(request, url),
+          day: day.success ? day.data : new Date().toISOString().slice(0, 10),
+        }).catch(() => {}),
+      );
+    }
+    return response;
+  },
+} satisfies ExportedHandler<Env>;
+async function serve(request: Request, env: Env, url: URL): Promise<Response> {
+  {
     try {
       if (!['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname))
         throw new ApiError('Local access only', 403);
@@ -1226,6 +1385,10 @@ export default {
       if (request.method === 'OPTIONS') return new Response(null, { status: 403 });
       if (url.pathname === '/api/health')
         return json({ ok: true, runtime: 'workerd', version: '0.1.0' });
+      const project = appRoute(url.pathname)
+        ? 'default'
+        : await existingProject(env, requestProject(request, url));
+      const call = <T>(path: string, body?: unknown) => internal<T>(env, path, body, project);
       const toolsMatch = url.pathname.match(
         /^\/api\/tutor-tools\/([a-f0-9-]{36})\/([a-f0-9]{64})$/,
       );
@@ -1249,7 +1412,7 @@ export default {
         const name = decodeURIComponent(request.headers.get('X-File-Name') || '');
         const inputFolder = decodeURIComponent(request.headers.get('X-File-Folder') || '');
         const directoryId = request.headers.get('X-Directory-Id') || undefined;
-        const { folder } = await internal<{ folder: string }>(env, '/internal/destination', {
+        const { folder } = await call<{ folder: string }>('/internal/destination', {
           folder: inputFolder,
           directoryId,
         });
@@ -1288,7 +1451,7 @@ export default {
           throw error;
         }
         try {
-          const stored = await internal<Source>(env, '/internal/file', { ...file, directoryId });
+          const stored = await call<Source>('/internal/file', { ...file, directoryId });
           return json(stored, 201);
         } catch (error) {
           await env.FILES.delete(`original/${file.id}/1`);
@@ -1297,7 +1460,7 @@ export default {
       }
       const contentMatch = url.pathname.match(/^\/api\/files\/([a-f0-9-]+)\/content$/);
       if (contentMatch) {
-        const file = await internal<Source>(env, `/api/files/${contentMatch[1]}`);
+        const file = await call<Source>(`/api/files/${contentMatch[1]}`);
         if (url.searchParams.has('version')) {
           const expected = z.coerce
             .number()
@@ -1349,15 +1512,12 @@ export default {
             ? url.searchParams.get('locale')
             : (await boundedJson(request)).locale,
         );
-        const catalog = await internal<{ files: Source[]; directories: Directory[] }>(
-          env,
-          '/api/catalog',
-        );
+        const catalog = await call<{ files: Source[]; directories: Directory[] }>('/api/catalog');
         // Tutor artifacts are written, not prepared.
         const files = catalog.files.filter(
           (file) => sourceState(file, catalog.directories) === 'files' && file.kind !== 'artifact',
         );
-        const prepared = new Set(await internal<string[]>(env, '/internal/prepared'));
+        const prepared = new Set(await call<string[]>('/internal/prepared'));
         const items = await Promise.all(
           files.map(async (file) => {
             const id = `${file.id}-v${file.version}-${locale}`;
@@ -1378,21 +1538,21 @@ export default {
         // Pending files were never prepared, in any language, and have no job in this one.
         const pending = items.filter(({ prepared, job }) => !prepared && !job);
         if (pending.length) {
-          const { key } = await internal<{ key: string | null }>(env, '/internal/key');
+          const { key } = await call<{ key: string | null }>('/internal/key');
           if (!key) throw new ApiError('Add a Meta API key in Settings', 409);
         }
-        for (const { file } of pending) await startJob(env, file, locale);
+        for (const { file } of pending) await startJob(env, file, locale, project);
         return json({ queued: pending.map(({ file }) => file.id) });
       }
       if (url.pathname === '/api/jobs' && request.method === 'POST') {
         const data = z
           .object({ sourceId: z.string().uuid(), locale: localeSchema })
           .parse(await boundedJson(request));
-        const file = await internal<Source>(env, `/api/files/${data.sourceId}`),
-          { key } = await internal<{ key: string | null }>(env, '/internal/key');
+        const file = await call<Source>(`/api/files/${data.sourceId}`),
+          { key } = await call<{ key: string | null }>('/internal/key');
         if (file.kind === 'artifact') throw new ApiError('Tutor artifacts are not prepared', 400);
         if (!key) throw new ApiError('Add a Meta API key in Settings', 409);
-        return startJob(env, file, data.locale);
+        return startJob(env, file, data.locale, project);
       }
       const visualMatch = url.pathname.match(/^\/api\/visuals\/([a-f0-9-]+)\/(\d+)\/([^/]+)$/);
       if (visualMatch && request.method === 'GET') {
@@ -1430,7 +1590,7 @@ export default {
         request.method === 'DELETE' &&
         /^\/api\/(files|directories)\/[a-f0-9-]+$/.test(url.pathname)
       ) {
-        const response = await library(env).fetch(request);
+        const response = await library(env, project).fetch(request);
         if (!response.ok) return response;
         const removed = await response.json<{
           files: Array<{ id: string; version: number }>;
@@ -1440,7 +1600,7 @@ export default {
         await purgeStoredFiles(env, removed.files);
         return json(removed);
       }
-      return library(env).fetch(request);
+      return library(env, project).fetch(request);
     } catch (error) {
       if (error instanceof ApiError) return json({ error: error.message }, error.status);
       if (error instanceof z.ZodError || error instanceof SyntaxError)
@@ -1457,5 +1617,5 @@ export default {
         500,
       );
     }
-  },
-} satisfies ExportedHandler<Env>;
+  }
+}

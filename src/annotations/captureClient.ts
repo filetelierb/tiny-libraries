@@ -1,4 +1,4 @@
-import { api, ApiResponseError } from '../api';
+import { api, ApiResponseError, projectHeaders } from '../api';
 import {
   captureRecordSchema,
   publishedCaptureSchema,
@@ -22,7 +22,7 @@ export const captureBaseUrl = (owner: string, id: string) => `/api${capturePath(
 async function uploadBase(path: string, blob: Blob): Promise<CaptureRecord> {
   const response = await fetch(`/api${path}/base`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'image/png' },
+    headers: { ...projectHeaders(), 'Content-Type': 'image/png' },
     body: blob,
   });
   const body = await response.json();

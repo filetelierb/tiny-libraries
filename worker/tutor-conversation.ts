@@ -8,6 +8,7 @@ import { TutorRunner, type TutorRunnerServices } from './tutor-runner';
 import { tutorMcp } from './tutor-mcp';
 import { ToolRejection } from './tutor-agent';
 import type { GlossaryEntry } from '../shared/glossary';
+import { libraryObjectName, type ProjectId } from '../shared/projects';
 
 /** A UUID-shaped identity derived from a stable name. */
 async function stableId(name: string) {
@@ -74,7 +75,9 @@ export class TutorConversation extends DurableObject<Env> {
       throw error;
     }
   }
-  async seed(conversation: Conversation) {
+  /** The conversation remembers the project whose library its tools work in. */
+  async seed(conversation: Conversation, project: ProjectId = 'default') {
+    await this.ctx.storage.put('project', project);
     return this.checked(() => this.journal().seed(conversation));
   }
   async receipt(id: string, fingerprint: string) {
@@ -142,7 +145,8 @@ export class TutorConversation extends DurableObject<Env> {
     });
   }
   private async library<T>(path: string, body?: unknown): Promise<T> {
-    const response = await this.env.LIBRARY.getByName('local-user').fetch(
+    const project = (await this.ctx.storage.get<ProjectId>('project')) || 'default';
+    const response = await this.env.LIBRARY.getByName(libraryObjectName(project)).fetch(
       new Request(`http://internal${path}`, {
         method: body === undefined ? 'GET' : 'POST',
         ...(body === undefined

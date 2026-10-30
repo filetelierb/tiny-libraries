@@ -38,6 +38,7 @@ import {
   Highlighter,
   MessageCircleQuestion,
   Workflow,
+  House,
 } from 'lucide-react';
 import {
   type Catalog,
@@ -918,7 +919,14 @@ export function App() {
       <div className="loading" role="status">
         {!error && <LoaderCircle size={16} className="spin" aria-hidden="true" />}
         <p>{error || t.loading}</p>
-        {error && <Button onClick={() => location.reload()}>{t.retry}</Button>}
+        {error && (
+          <div className="loading-actions">
+            <Button onClick={() => location.reload()}>{t.retry}</Button>
+            <a className="button button-ghost" href="/">
+              {t.home}
+            </a>
+          </div>
+        )}
       </div>
     );
   return (
@@ -963,6 +971,14 @@ export function App() {
             }}
           />
           <div className="panel-heading-actions">
+            <a
+              className="button button-ghost icon-button"
+              href="/"
+              title={t.home}
+              aria-label={t.home}
+            >
+              <House />
+            </a>
             {panels.narrow ? (
               <IconButton label={t.showStudy} onClick={() => setRight(true)}>
                 <PanelRightOpen />

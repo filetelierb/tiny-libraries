@@ -1,3 +1,4 @@
+import { localDay, type ProjectId } from '../shared/projects';
 export class ApiResponseError extends Error {
   constructor(
     message: string,
@@ -8,10 +9,30 @@ export class ApiResponseError extends Error {
 }
 /** The sign-in behind the library expired; only a page reload renews it. */
 export class SessionExpiredError extends ApiResponseError {}
+let project: ProjectId = 'default';
+/**
+ * Every request works in the open project. Fetches name it in a header; links and media the
+ * browser loads by itself carry it in a cookie, renewed whenever this tab comes back into view.
+ */
+export function openProject(id: ProjectId) {
+  project = id;
+  document.cookie = `tl-project=${id}; path=/; SameSite=Strict`;
+}
+if (typeof window !== 'undefined')
+  window.addEventListener('focus', () => {
+    document.cookie = `tl-project=${project}; path=/; SameSite=Strict`;
+  });
+/** The project and the student's local day, for the activity count. */
+export function projectHeaders(): Record<string, string> {
+  return { 'X-Project': project, 'X-Local-Day': localDay() };
+}
 export async function api<T>(path: string, method = 'GET', value?: unknown): Promise<T> {
   const response = await fetch(`/api${path}`, {
     method,
-    headers: value === undefined ? {} : { 'Content-Type': 'application/json' },
+    headers: {
+      ...projectHeaders(),
+      ...(value === undefined ? {} : { 'Content-Type': 'application/json' }),
+    },
     ...(value === undefined ? {} : { body: JSON.stringify(value) }),
   });
   if (response.status === 401 || response.status === 419)
@@ -37,6 +58,8 @@ export function uploadFile(
     signal?.addEventListener('abort', () => request.abort(), { once: true });
     request.onabort = () => reject(new DOMException('Upload cancelled', 'AbortError'));
     request.open('POST', '/api/files');
+    for (const [name, value] of Object.entries(projectHeaders()))
+      request.setRequestHeader(name, value);
     request.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
     request.setRequestHeader('X-File-Name', encodeURIComponent(file.name));
     request.setRequestHeader('X-File-Folder', encodeURIComponent(folder));

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
 import { FileWarning } from 'lucide-react';
+import { projectHeaders } from './api';
 import { parseCsv } from '../shared/csv';
 import { StudyMarkdown } from './study/StudyMarkdown';
 import type { Source, PublicLearning, Bookmark, Segment } from '../shared/domain';
@@ -167,7 +168,7 @@ export function Viewer({
     setFailed(false);
     if (source.kind === 'text' || source.kind === 'markdown') {
       const controller = new AbortController();
-      fetch(url, { signal: controller.signal })
+      fetch(url, { signal: controller.signal, headers: projectHeaders() })
         .then((r) => {
           if (!r.ok) throw new Error(r.statusText);
           return r.text();

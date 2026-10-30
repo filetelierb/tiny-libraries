@@ -14,6 +14,7 @@ import {
   type NormalizedSource,
 } from '../shared/domain';
 import { internal } from './index';
+import type { ProjectId } from '../shared/projects';
 import {
   GLOSSARY_ROUNDS,
   applyFill,
@@ -48,10 +49,11 @@ export class ProcessingJob extends DurableObject<Env> {
     let job = await this.ctx.storage.get<Job>('job');
     if (path === '/start' && request.method === 'POST') {
       if (job) return Response.json(job);
-      const { id, file, locale } = await request.json<{
+      const { id, file, locale, project } = await request.json<{
         id: string;
         file: Source;
         locale: Locale;
+        project?: ProjectId;
       }>();
       job = {
         id,
@@ -65,7 +67,7 @@ export class ProcessingJob extends DurableObject<Env> {
         attempts: 0,
         createdAt: new Date().toISOString(),
       };
-      await this.ctx.storage.put({ job, file });
+      await this.ctx.storage.put({ job, file, project: project || 'default' });
       await this.ctx.storage.setAlarm(Date.now() + 100);
       return Response.json(job, { status: 201 });
     }
@@ -87,6 +89,11 @@ export class ProcessingJob extends DurableObject<Env> {
       { ...job, segments: segments || [] },
       { headers: { 'Cache-Control': 'no-store' } },
     );
+  }
+  /** The library of the project the file belongs to. */
+  private async library<T>(path: string, body?: unknown) {
+    const project = (await this.ctx.storage.get<ProjectId>('project')) || 'default';
+    return internal<T>(this.env, path, body, project);
   }
   async bridge(path: string, options: RequestInit = {}) {
     const response = await fetch(`${this.env.MEDIA_BRIDGE_URL}${path}`, {
@@ -138,7 +145,7 @@ export class ProcessingJob extends DurableObject<Env> {
     };
     // Publish under a stable source version; repeated publication replaces the same record.
     if ((await this.ctx.storage.get<Job>('job'))?.status === 'cancelled') return true;
-    await internal(this.env, `/internal/learning/${file.id}`, learning);
+    await this.library(`/internal/learning/${file.id}`, learning);
     return false;
   }
   /**
@@ -188,10 +195,10 @@ export class ProcessingJob extends DurableObject<Env> {
         : { ...state, terms, phase: 'match', missing: undefined };
     }
     const names = state.terms.map((term) => [term.term, ...term.aliases]);
-    const { index, byName } = await internal<{
+    const { index, byName } = await this.library<{
       index: ConceptIndexItem[];
       byName: Array<string | null>;
-    }>(this.env, '/internal/glossary-terms', { names });
+    }>('/internal/glossary-terms', { names });
     if (state.phase === 'match') {
       const unnamed = state.terms
         .map((term, i) => ({
@@ -214,7 +221,7 @@ export class ProcessingJob extends DurableObject<Env> {
     const matches = state.matches || state.terms.map(() => null),
       ids = [...new Set(matches.filter((id) => id !== null))];
     const { concepts } = ids.length
-      ? await internal<{ concepts: ConceptContext[] }>(this.env, '/internal/glossary-context', {
+      ? await this.library<{ concepts: ConceptContext[] }>('/internal/glossary-context', {
           ids,
         })
       : { concepts: [] };
@@ -245,15 +252,20 @@ export class ProcessingJob extends DurableObject<Env> {
       job = { ...job, status: 'running', error: undefined };
       await this.ctx.storage.put('job', job);
       const file = (await this.ctx.storage.get<Source>('file'))!;
-      const { key } = await internal<{ key: string | null }>(this.env, '/internal/key');
+      const { key } = await this.library<{ key: string | null }>('/internal/key');
       if (!key) throw new MetaError('Add a Meta API key in Settings, then retry.', false);
-      const settings = await internal<{ model: string }>(this.env, '/api/settings');
+      const settings = await this.library<{ model: string }>('/api/settings');
       if (job.stage === 'normalize') {
         // Let Node stream the immutable original from the loopback API, so the Worker never
         // pipes a stored body into an outbound request.
         const response = await this.bridge(`/normalize/${job.id}?kind=${file.kind}`, {
           method: 'POST',
-          body: JSON.stringify({ sourceId: file.id, sourceVersion: file.version, mime: file.mime }),
+          body: JSON.stringify({
+            sourceId: file.id,
+            sourceVersion: file.version,
+            mime: file.mime,
+            project: (await this.ctx.storage.get<ProjectId>('project')) || 'default',
+          }),
           headers: { 'Content-Type': 'application/json' },
         });
         const normalized = await response.json<Normalized>();
