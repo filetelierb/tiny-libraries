@@ -71,6 +71,17 @@ Or start a new library there with `npm run dev -- --data "/Volumes/MyDisk/course
 - Library records, notes, conversations and prepared material stay in the library's data folder. Files the Librarian writes (artifacts) stay there too.
 - Each folder belongs to one project. A folder on a disconnected disk is refused.
 
+## A project from a course
+
+**New project → From a course** lists the courses in the courses folder (`coursesDir` in `.local/config.json`, set when courses are downloaded): each sub-folder with readable files, and each course inside a site folder such as `see/`. The name starts as the course title. Then choose what to bring in:
+
+- **Files only**: the course's folders and files, listed where they are, ready to prepare from scratch. **Start preparing the videos now** queues them one after another, which uses your Meta key.
+- **With prepared material**: offered when the course folder carries prepared material. Transcripts, subtitles, chapters with their mini quizzes, the glossary, the artifact, pictures and flashcards come ready; nothing is prepared again. Files the material does not cover stay ready to prepare.
+
+Prepared material is saved into a course folder from a project that keeps its files there: **Save prepared material in the folder** on the project's card writes it to `.tailored-library/` inside the folder (hidden, so it is never listed as a course file). It is matched to files by their path in the folder and their size, so a file that changed is prepared again. Your progress, notes, conversations, card reviews and edits to the glossary are never part of it; saving again replaces the earlier copy.
+
+A course that is already a project is shown but cannot be chosen; delete that project first (its folder stays) to start again from the course.
+
 ## Open courseware
 
 `npm run courses` lists, downloads and imports courses whose material is openly licensed. The first source is Stanford Engineering Everywhere (`see`), licensed CC BY-NC-SA 4.0 unless an item says otherwise.

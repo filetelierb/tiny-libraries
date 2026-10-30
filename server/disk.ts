@@ -1,5 +1,15 @@
 import { createReadStream, createWriteStream } from 'node:fs';
-import { mkdir, readdir, rename, rmdir, stat, unlink, writeFile } from 'node:fs/promises';
+import {
+  mkdir,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  rmdir,
+  stat,
+  unlink,
+  writeFile,
+} from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -226,6 +236,113 @@ export async function remove(root: string, path: string) {
   return { deleted: path };
 }
 
+/** Where a course keeps the material the library prepared for it, so it can be imported ready. */
+export const PACK_FOLDER = '.tailored-library';
+export type CourseFolder = {
+  path: string;
+  title: string;
+  files: number;
+  videos: number;
+  documents: number;
+  bytes: number;
+  pack: { files: number; locale: string; exportedAt: string } | null;
+};
+const exists = async (path: string) => !!(await stat(path).catch(() => null));
+const readJson = async <T>(path: string): Promise<T | null> => {
+  try {
+    return JSON.parse(await readFile(path, 'utf8')) as T;
+  } catch {
+    return null;
+  }
+};
+
+/** A course folder's title, size and prepared pack, if it has one. */
+async function describeCourse(path: string): Promise<CourseFolder | null> {
+  const { files } = await scan(path);
+  if (!files.length) return null;
+  const record = await readJson<{ code?: string; title?: string }>(join(path, 'course.json'));
+  const pack = await readJson<{ files: unknown[]; locale: string; exportedAt: string }>(
+    join(path, PACK_FOLDER, 'manifest.json'),
+  );
+  const kinds = files.map((file) => kindFor(file.path));
+  return {
+    path,
+    title: record?.title
+      ? `${record.code ? `${record.code} – ` : ''}${record.title}`
+      : (path.split(sep).pop() || path).replace(/_/g, ' '),
+    files: files.length,
+    videos: kinds.filter((kind) => kind === 'video' || kind === 'audio').length,
+    documents: kinds.filter((kind) => kind === 'pdf' || kind === 'markdown' || kind === 'text')
+      .length,
+    bytes: files.reduce((sum, file) => sum + file.size, 0),
+    pack: pack
+      ? { files: pack.files.length, locale: pack.locale, exportedAt: pack.exportedAt }
+      : null,
+  };
+}
+
+/**
+ * The courses in a folder: each sub-folder with readable files, or, for a folder that groups
+ * downloaded courses by site (`see/…`), each of its courses. A library data folder is skipped.
+ */
+export async function listCourses(root: string) {
+  await assertVolumeMounted(root);
+  const courses: CourseFolder[] = [];
+  const children = async (folder: string) =>
+    (await readdir(folder, { withFileTypes: true }).catch(() => []))
+      .filter((entry) => entry.isDirectory() && !hidden(entry.name))
+      .map((entry) => join(folder, entry.name));
+  for (const folder of await children(root)) {
+    if (await exists(join(folder, 'tailored-library.json'))) continue;
+    const marked = async (path: string) =>
+      (await exists(join(path, 'course.json'))) || (await exists(join(path, PACK_FOLDER)));
+    const inner = await children(folder);
+    const grouped = !(await marked(folder)) && (await Promise.all(inner.map(marked))).some(Boolean);
+    for (const path of grouped ? inner : [folder]) {
+      const course = await describeCourse(path);
+      if (course) courses.push(course);
+    }
+  }
+  return { root, courses: courses.sort((a, b) => a.title.localeCompare(b.title)) };
+}
+
+/**
+ * A prepared pack is written into a folder named for the export, then its manifest names that
+ * folder and earlier exports are removed, so an interrupted export leaves the last one intact.
+ */
+const packed = (root: string, path: string) => inside(inside(root, PACK_FOLDER), path);
+export async function writePack(root: string, path: string, body: IncomingMessage) {
+  const target = packed(root, path);
+  await mkdir(dirname(target), { recursive: true });
+  try {
+    await pipeline(body, createWriteStream(`${target}.part`));
+    await rename(`${target}.part`, target);
+  } catch (error) {
+    await unlink(`${target}.part`).catch(() => {});
+    throw error;
+  }
+  return { path };
+}
+export async function readPack(root: string, path: string, res: ServerResponse) {
+  const target = packed(root, path);
+  const info = await stat(target).catch(() => null);
+  if (!info?.isFile()) throw new DiskFolderError('Not in the prepared material', 404);
+  res.writeHead(200, { 'Content-Length': info.size });
+  await pipeline(createReadStream(target), res);
+}
+export async function commitPack(root: string, manifest: { dir: string }) {
+  if (!/^files-[\w-]+$/.test(manifest.dir)) throw new DiskFolderError('Unknown export', 400);
+  const folder = inside(root, PACK_FOLDER);
+  if (!(await exists(join(folder, manifest.dir))))
+    throw new DiskFolderError('The export wrote no files', 400);
+  await writeFile(join(folder, 'manifest.json.part'), JSON.stringify(manifest, null, 2));
+  await rename(join(folder, 'manifest.json.part'), join(folder, 'manifest.json'));
+  for (const entry of await readdir(folder, { withFileTypes: true }))
+    if (entry.isDirectory() && entry.name.startsWith('files-') && entry.name !== manifest.dir)
+      await rm(join(folder, entry.name), { recursive: true, force: true });
+  return { dir: manifest.dir };
+}
+
 const rootQuery = z.object({ root: z.string().min(1).max(1024), path: z.string().max(1024) });
 
 /** The companion's /disk routes, used by the library through the loopback. */
@@ -249,6 +366,8 @@ export async function diskRoute(url: URL, req: IncomingMessage, res: ServerRespo
       return send(
         await checkFolder(z.object({ root: z.string().min(1).max(1024) }).parse(await body()).root),
       );
+    if (url.pathname === '/disk/courses' && req.method === 'GET')
+      return send(await listCourses(query().root));
     if (url.pathname === '/disk/browse' && req.method === 'GET')
       return send(await browse(url.searchParams.get('path') || undefined));
     if (url.pathname === '/disk/scan' && req.method === 'GET') {
@@ -262,6 +381,19 @@ export async function diskRoute(url: URL, req: IncomingMessage, res: ServerRespo
       if (req.method === 'PUT') return send(await write(root, path, req), 201);
       if (req.method === 'GET' || req.method === 'HEAD') return await read(root, path, req, res);
       if (req.method === 'DELETE') return send(await remove(root, path));
+    }
+    if (url.pathname === '/disk/pack') {
+      const { root, path } = query();
+      await assertVolumeMounted(root);
+      if (req.method === 'PUT') return send(await writePack(root, path, req), 201);
+      if (req.method === 'GET') return await readPack(root, path, res);
+    }
+    if (url.pathname === '/disk/pack/commit' && req.method === 'POST') {
+      const input = z
+        .object({ root: z.string().min(1), manifest: z.object({ dir: z.string() }).passthrough() })
+        .parse(await body());
+      await assertVolumeMounted(input.root);
+      return send(await commitPack(input.root, input.manifest));
     }
     if (url.pathname === '/disk/move' && req.method === 'POST') {
       const input = z

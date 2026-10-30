@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { inside, move, remove, scan } from '../server/disk';
+import { commitPack, inside, move, PACK_FOLDER, remove, scan } from '../server/disk';
 
 test('paths stay inside the project folder', () => {
   assert.equal(inside('/data/course', 'Lectures/a.mp4'), '/data/course/Lectures/a.mp4');
@@ -34,4 +34,19 @@ test('a move keeps a file already there and removes the folder it emptied', asyn
   assert.deepEqual((await readdir(root)).sort(), ['New']);
   await remove(root, 'New/a (2).md');
   assert.deepEqual(await readdir(join(root, 'New')), ['a.md']);
+});
+
+test('a committed pack keeps only the export its manifest names', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'tl-disk-'));
+  await mkdir(join(root, PACK_FOLDER, 'files-old', '1'), { recursive: true });
+  await mkdir(join(root, PACK_FOLDER, 'files-new', '1'), { recursive: true });
+  await assert.rejects(commitPack(root, { dir: '../x' }), /Unknown export/);
+  await assert.rejects(commitPack(root, { dir: 'files-gone' }), /no files/);
+  await commitPack(root, { dir: 'files-new' });
+  assert.deepEqual((await readdir(join(root, PACK_FOLDER))).sort(), ['files-new', 'manifest.json']);
+  assert.equal(
+    JSON.parse(await readFile(join(root, PACK_FOLDER, 'manifest.json'), 'utf8')).dir,
+    'files-new',
+  );
+  assert.deepEqual((await scan(root)).files, []);
 });

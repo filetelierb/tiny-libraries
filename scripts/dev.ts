@@ -4,7 +4,7 @@ import { mkdir, readFile, writeFile, access, chmod } from 'node:fs/promises';
 import { join, delimiter } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { startBridge } from '../server/bridge';
-import { DataFolderError, resolveDataLocation } from './data-dir';
+import { DataFolderError, readConfig, resolveDataLocation } from './data-dir';
 
 process.umask(0o077);
 const root = process.cwd(),
@@ -54,6 +54,7 @@ try {
   process.exit(1);
 }
 if (data.folder) console.log(`Library data: ${data.folder}`);
+const config = await readConfig(root);
 const bridge = await startBridge(token, data.processing);
 const port = 9876;
 const args = [
@@ -68,6 +69,8 @@ const args = [
   data.state,
   // Shown in Settings, so the library's location is visible from the app.
   ...(data.folder ? ['--var', `DATA_DIR:${data.folder}`] : []),
+  // Where downloaded courses are, so a new project can start from one.
+  ...(config.coursesDir ? ['--var', `COURSES_DIR:${config.coursesDir}`] : []),
 ];
 // If the runtime stops unexpectedly, the bridge keeps running and the runtime is started again,
 // a bounded number of times.

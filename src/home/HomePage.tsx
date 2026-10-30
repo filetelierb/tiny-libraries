@@ -1,5 +1,15 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { BookOpen, Check, FolderOpen, FolderSync, Pencil, Plus, Trash2, X } from 'lucide-react';
+import {
+  BookOpen,
+  Check,
+  FolderOpen,
+  FolderSync,
+  PackageOpen,
+  Pencil,
+  Plus,
+  Trash2,
+  X,
+} from 'lucide-react';
 import {
   heatmapStart,
   localDay,
@@ -86,6 +96,26 @@ export function HomePage() {
         t.scannedFolder.replace('{n}', String(added.length)).replace('{name}', project.name),
       );
       setProjects(await api<ProjectSummary[]>('/projects'));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  /** Saves the project's prepared material in its folder, for projects made from it later. */
+  async function exportPack(project: ProjectSummary) {
+    if (busy) return;
+    setBusy(true);
+    setNotice('');
+    setError('');
+    try {
+      const { files } = await api<{ files: number }>(
+        '/pack/export',
+        'POST',
+        {},
+        { 'X-Project': project.id },
+      );
+      setNotice(t.exportedPack.replace('{n}', String(files)).replace('{name}', project.name));
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -211,6 +241,15 @@ export function HomePage() {
                           <FolderSync size={14} />
                         </IconButton>
                       )}
+                      {project.folder && (
+                        <IconButton
+                          label={t.exportPack}
+                          disabled={busy}
+                          onClick={() => void exportPack(project)}
+                        >
+                          <PackageOpen size={14} />
+                        </IconButton>
+                      )}
                       <IconButton
                         label={t.renameProject}
                         onClick={() => setRenaming({ id: project.id, name: project.name })}
@@ -253,6 +292,7 @@ export function HomePage() {
       {creating && (
         <NewProjectModal
           t={t}
+          locale={locale}
           close={() => setCreating(false)}
           created={(project) => (location.href = `/projects/${project.id}`)}
         />

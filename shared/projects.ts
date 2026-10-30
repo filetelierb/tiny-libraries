@@ -21,6 +21,11 @@ export const projectCreateSchema = projectInputSchema
     folder: z.string().trim().min(1).max(1024).optional(),
     /** Adds the files already in the folder, where they are. */
     adopt: z.boolean().default(true),
+    /** Brings in the prepared material a course folder carries, matched to its files. */
+    pack: z.boolean().default(false),
+    /** Queues the adopted videos for preparation in `locale` right away. */
+    prepare: z.enum(['none', 'videos']).default('none'),
+    locale: z.enum(['en', 'es']).default('en'),
   })
   .strict();
 /** A project with what the home page shows on its card. */

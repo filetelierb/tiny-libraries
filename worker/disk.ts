@@ -39,6 +39,17 @@ const post = (body: unknown): RequestInit => ({
 /** Creates the folder if needed and checks it can be written. */
 export const checkFolder = async (env: Bridge, root: string) =>
   (await disk(env, '/check', post({ root }))).json<{ folder: string }>();
+export type CourseFolder = {
+  path: string;
+  title: string;
+  files: number;
+  videos: number;
+  documents: number;
+  bytes: number;
+  pack: { files: number; locale: string; exportedAt: string } | null;
+};
+export const listCourses = async (env: Bridge, root: string) =>
+  (await disk(env, `/courses${at(root)}`)).json<{ root: string; courses: CourseFolder[] }>();
 export const browseFolders = async (env: Bridge, path?: string) =>
   (await disk(env, `/browse${path ? `?path=${encodeURIComponent(path)}` : ''}`)).json<{
     path: string | null;
@@ -101,3 +112,22 @@ export function withFolderOriginals(
     }) as R2Bucket['get'],
   };
 }
+
+/** A course's prepared material, kept beside its files in `.tailored-library/`. */
+export const writePack = async (
+  env: Bridge,
+  root: string,
+  path: string,
+  body: ReadableStream | string,
+) => void (await disk(env, `/pack${at(root, path)}`, { method: 'PUT', body }));
+/** A file of the pack, or null when the pack does not have it. */
+export const readPack = async (env: Bridge, root: string, path: string) => {
+  try {
+    return await disk(env, `/pack${at(root, path)}`);
+  } catch (error) {
+    if (error instanceof DiskError && error.status === 404) return null;
+    throw error;
+  }
+};
+export const commitPack = async (env: Bridge, root: string, manifest: { dir: string }) =>
+  void (await disk(env, '/pack/commit', post({ root, manifest })));

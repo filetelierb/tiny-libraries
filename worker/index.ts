@@ -91,6 +91,7 @@ import { deleteKeys, deletePrefix, purgePrefix } from './purge';
 import {
   browseFolders,
   checkFolder,
+  listCourses,
   deleteOriginal,
   DiskError,
   diskPath,
@@ -101,6 +102,7 @@ import {
   withFolderOriginals,
   writeOriginal,
 } from './disk';
+import { exportPack, importPack, PackError } from './pack';
 import type { Annotation } from '../shared/annotations';
 import { attachmentRoute } from './attachment-route';
 import { AttachmentError } from './tutor-attachments';
@@ -249,7 +251,8 @@ async function existingProject(env: Env, project: ProjectId) {
   return project;
 }
 /** Routes that belong to the app as a whole rather than to one project's library. */
-const appRoute = (path: string) => /^\/api\/(settings|projects|activity|folders)(\/|$)/.test(path);
+const appRoute = (path: string) =>
+  /^\/api\/(settings|projects|activity|folders|courses)(\/|$)/.test(path);
 async function boundedJson(request: Request) {
   const reader = request.body?.getReader();
   if (!reader) return {};
@@ -458,6 +461,25 @@ export class Library extends DurableObject<Env> {
     }
     return moved;
   }
+  /** Stores a file's prepared material, as its preparation or a course's pack hands it over. */
+  private async publishLearning(value: Learning) {
+    const file = await this.ctx.storage.get<Source>(`file:${value.sourceId}`);
+    if (!file || file.version !== value.sourceVersion)
+      throw new ApiError('Source version changed', 409);
+    await this.ctx.storage.put(`learning:${value.sourceId}`, value);
+    await recordGenerated(this.ctx.storage, value);
+    // The file's glossary terms become concepts without a review step.
+    await ingestLearning(this.ctx.storage, value).catch((error) =>
+      console.error('Concept creation after preparation failed', error),
+    );
+  }
+  /** The project's folder and the files kept in it, for its prepared material. */
+  private async folderFiles() {
+    const root = await this.projectFolder();
+    if (!root) throw new ApiError('This project does not keep its files in a folder', 409);
+    const files = [...(await this.ctx.storage.list<Source>({ prefix: 'file:' })).values()];
+    return { root, files: files.filter((file) => file.path && !file.archived) };
+  }
   /** Adds the files in the project's folder that the library does not list yet, where they are. */
   private async adoptFolderFiles() {
     const root = await this.projectFolder();
@@ -529,6 +551,18 @@ export class Library extends DurableObject<Env> {
       const record = await storage.get<Project>(`project:${existsMatch[1]}`);
       return json({ exists: !!record, folder: record?.folder ?? null });
     }
+    if (path === '/api/courses' && request.method === 'GET') {
+      if (!this.env.COURSES_DIR) return json({ root: null, courses: [] });
+      const listed = await listCourses(this.env, this.env.COURSES_DIR);
+      const used = new Map((await projects()).map((project) => [project.folder, project.id]));
+      return json({
+        ...listed,
+        courses: listed.courses.map((course) => ({
+          ...course,
+          project: used.get(course.path) ?? null,
+        })),
+      });
+    }
     if (path === '/api/folders' && request.method === 'GET')
       return json(
         await browseFolders(this.env, new URL(request.url).searchParams.get('path') || undefined),
@@ -581,7 +615,22 @@ export class Library extends DurableObject<Env> {
             ? (await internal<{ added: Source[] }>(this.env, '/internal/scan', {}, project.id))
                 .added
             : [];
-        return json({ ...project, added: added.length }, 201);
+        // The project exists by now, so a pack that cannot be read leaves its files to prepare.
+        const imported =
+          folder && input.pack
+            ? await internal<{ files: number }>(this.env, '/internal/pack/import', {}, project.id)
+                .then((value) => value.files)
+                .catch(() => 0)
+            : 0;
+        // Videos are prepared one after another by their jobs; without a key none can start.
+        let queued = 0;
+        if (input.prepare === 'videos' && (await this.apiKey())) {
+          for (const file of added.filter((file) => file.kind === 'video')) {
+            await startJob(this.env, file, input.locale, project.id);
+            queued++;
+          }
+        }
+        return json({ ...project, added: added.length, imported, queued }, 201);
       }
       const summaries: ProjectSummary[] = await Promise.all(
         (await projects()).map(async (project) => ({
@@ -1128,6 +1177,22 @@ export class Library extends DurableObject<Env> {
       if (path === '/internal/folder') return json({ folder: await this.projectFolder() });
       if ((path === '/internal/scan' || path === '/api/files/scan') && request.method === 'POST')
         return json(await this.adoptFolderFiles());
+      if (path === '/api/pack/export' && request.method === 'POST') {
+        const { root, files } = await this.folderFiles();
+        const manifest = await exportPack(this.ctx.storage, this.env, root, files);
+        return json({ files: manifest.files.length, locale: manifest.locale });
+      }
+      if (
+        (path === '/internal/pack/import' || path === '/api/pack/import') &&
+        request.method === 'POST'
+      ) {
+        const { root, files } = await this.folderFiles();
+        return json(
+          await importPack(this.ctx.storage, this.env, root, files, (value) =>
+            this.publishLearning(value),
+          ),
+        );
+      }
       if (path === '/internal/file') {
         const { directoryId, ...file } = sourceSchema
           .extend({ directoryId: z.string().uuid().optional() })
@@ -1368,15 +1433,8 @@ export class Library extends DurableObject<Env> {
         const id = learningMatch[2];
         if (request.method === 'POST' && learningMatch[1] === 'internal') {
           const value = (await boundedJson(request)) as Learning;
-          const file = await this.ctx.storage.get<Source>(`file:${id}`);
-          if (!file || file.version !== value.sourceVersion)
-            throw new ApiError('Source version changed', 409);
-          await this.ctx.storage.put(`learning:${id}`, value);
-          await recordGenerated(this.ctx.storage, value);
-          // The file's glossary terms become concepts without a review step.
-          await ingestLearning(this.ctx.storage, value).catch((error) =>
-            console.error('Concept creation after preparation failed', error),
-          );
+          if (value.sourceId !== id) throw new ApiError('Source changed', 409);
+          await this.publishLearning(value);
           return json({ ok: true });
         }
         const value = await this.ctx.storage.get<Learning>(`learning:${id}`);
@@ -1648,7 +1706,8 @@ export class Library extends DurableObject<Env> {
         error instanceof AssessmentError ||
         error instanceof TutorJournalError ||
         error instanceof PracticeError ||
-        error instanceof DiskError
+        error instanceof DiskError ||
+        error instanceof PackError
       )
         return json({ error: error.message }, error.status);
       if (error instanceof MetaError)
