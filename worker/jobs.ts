@@ -46,6 +46,12 @@ export type Normalized = NormalizedSource;
 export class ProcessingJob extends DurableObject<Env> {
   async fetch(request: Request) {
     const path = new URL(request.url).pathname;
+    // A deleted project's jobs are removed with it.
+    if (path === '/purge' && request.method === 'POST') {
+      await this.ctx.storage.deleteAlarm();
+      await this.ctx.storage.deleteAll();
+      return Response.json({ ok: true });
+    }
     let job = await this.ctx.storage.get<Job>('job');
     if (path === '/start' && request.method === 'POST') {
       if (job) return Response.json(job);

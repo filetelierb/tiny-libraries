@@ -7,6 +7,7 @@ import {
   activityWeights,
   classifyActivity,
   scoreActivity,
+  withoutProject,
   heatmapStart,
   libraryObjectName,
   localDay,
@@ -117,4 +118,28 @@ test('a mini quiz or a deck counts once, when all of it is done that day', () =>
   assert.deepEqual(day.kinds, { quiz: 1, deck: 1 });
   const next = scoreActivity({ day: '2026-10-31', total: 0, projects: {} }, 'default', [card('a')]);
   assert.equal(next.total, 0);
+});
+
+test("a deleted project's points leave the days it shared, and its own days go", () => {
+  const other = crypto.randomUUID();
+  let day = scoreActivity({ day: '2026-10-30', total: 0, projects: {} }, 'default', [
+    { kind: 'progress', key: 'f1' },
+  ]);
+  day = scoreActivity(day, other, [
+    { kind: 'progress', key: 'f2' },
+    { kind: 'test', key: 't:q1' },
+  ]);
+  const kept = withoutProject(day, other)!;
+  assert.equal(kept.total, activityWeights.progress);
+  assert.deepEqual(kept.projects, { default: activityWeights.progress });
+  assert.deepEqual(kept.kinds, { progress: 1 });
+  assert.equal(
+    kept.seen!.some((identity) => identity.startsWith(`${other}:`)),
+    false,
+  );
+  const alone = scoreActivity({ day: '2026-10-29', total: 0, projects: {} }, other, [
+    { kind: 'note', key: 'note:n1' },
+  ]);
+  assert.equal(withoutProject(alone, other), null);
+  assert.equal(withoutProject(kept, other), kept);
 });

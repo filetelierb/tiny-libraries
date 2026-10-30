@@ -274,3 +274,15 @@ A mini quiz and a flashcard set count as a whole rather than per question or car
 Under the activity graph the home page now shows the points logged on a day: today by default, or any day chosen by clicking its square (arrow keys move between days). It lists each interaction with how many times it counted and its points, and the points per project. The scoring rules moved to a "How points are counted" dialog opened from below the graph.
 
 Verification: type checks and 313 tests pass. In the browser, today's log showed 3 points from file progress in one project; clicking 27 October showed its 1 point, the down arrow moved to 28 October with "No points logged on this day", and the dialog listed the six interactions with their rules and points.
+
+### Deleting a project
+
+A project can be deleted from its card on the home page. A dialog says what will be lost (its files and sessions, notes, bookmarks, glossary, artifacts, flashcards, tests and tutor conversations, and its points) and asks for the project's name before deleting. The deletion clears everything the project holds:
+
+- its stored objects: originals, captions, images, note captures, tutor attachments and conversation journals;
+- the tutor conversations and processing jobs that belong to it;
+- its library storage, then its points in every day of the activity log (a day only that project had is removed) and its entry in the project list.
+
+The library is emptied first, so a deletion that fails part way leaves the project listed and can be repeated. The first library keeps the app settings, the project list and the activity log, so it cannot be deleted.
+
+Verification: type checks and 314 tests pass, including a test that removes a project's points from a shared day and drops a day it had alone. Through the API, deleting a new project with a file, a session and a logged point removed the file's stored object (1 to 0), made the project unknown (404), dropped it from the list and lowered the day from 4 to 3 points; deleting the first library was refused (409). In the browser, the dialog kept the delete button disabled until the name was typed, and the project left the list.

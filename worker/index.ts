@@ -133,13 +133,23 @@ import {
   libraryObjectName,
   projectIdSchema,
   projectInputSchema,
-  type ActivityDay,
+  withoutProject,
+  type StoredActivityDay,
   type Project,
   type ProjectId,
   type ProjectSummary,
 } from '../shared/projects';
 
 /** Stored bytes of permanently deleted files go after their records. */
+/** Removes every stored object under a prefix, a page at a time. */
+async function purgePrefix(env: Env, prefix: string) {
+  let cursor: string | undefined;
+  do {
+    const page = await env.FILES.list({ prefix, cursor });
+    if (page.objects.length) await env.FILES.delete(page.objects.map((object) => object.key));
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+}
 async function purgeStoredFiles(env: Env, files: Array<{ id: string; version: number }>) {
   for (const file of files) {
     const keys = Array.from(
@@ -422,9 +432,7 @@ export class Library extends DurableObject<Env> {
         })
         .parse(await boundedJson(request));
       await storage.transaction(async (tx) => {
-        const current = (await tx.get<ActivityDay & { seen?: string[] }>(
-          `activity-day:${day}`,
-        )) || {
+        const current = (await tx.get<StoredActivityDay>(`activity-day:${day}`)) || {
           day,
           total: 0,
           projects: {},
@@ -439,10 +447,8 @@ export class Library extends DurableObject<Env> {
     if (path === '/api/activity' && request.method === 'GET') {
       const since = activityDaySchema.safeParse(new URL(request.url).searchParams.get('since'));
       const days = [
-        ...(
-          await storage.list<ActivityDay & { seen?: string[] }>({ prefix: 'activity-day:' })
-        ).values(),
-      ].map(({ seen: _seen, ...day }) => day);
+        ...(await storage.list<StoredActivityDay>({ prefix: 'activity-day:' })).values(),
+      ].map(({ seen: _seen, projectKinds: _kinds, ...day }) => day);
       return json(since.success ? days.filter((day) => day.day >= since.data) : days);
     }
     if (path === '/api/projects') {
@@ -480,7 +486,58 @@ export class Library extends DurableObject<Env> {
       await storage.put(`project:${id}`, next);
       return json(next);
     }
+    if (projectMatch && request.method === 'DELETE') {
+      const id = projectIdSchema.parse(projectMatch[1]);
+      if (id === 'default')
+        throw new ApiError('The first library keeps the app settings and cannot be deleted', 409);
+      if (!(await storage.get<Project>(`project:${id}`)))
+        throw new ApiError('Project not found', 404);
+      // The project's library is emptied first; it stays listed if that fails, so it can be retried.
+      await internal(this.env, '/internal/purge', {}, id);
+      await storage.transaction(async (tx) => {
+        for (const [key, day] of await tx.list<StoredActivityDay>({ prefix: 'activity-day:' })) {
+          const next = withoutProject(day, id);
+          if (!next) await tx.delete(key);
+          else if (next !== day) await tx.put(key, next);
+        }
+        await tx.delete(`project:${id}`);
+      });
+      return json({ deleted: id });
+    }
     return null;
+  }
+  /**
+   * Deletes everything a project holds: its stored objects, its tutor conversations and
+   * processing jobs, and finally its own storage.
+   */
+  private async purgeProject() {
+    if (this.home) throw new ApiError('The first library cannot be deleted', 409);
+    const storage = this.ctx.storage;
+    const ids = async (prefix: string) =>
+      [...(await storage.list({ prefix })).keys()].map((key) => key.slice(prefix.length));
+    const files = [...(await storage.list<Source>({ prefix: 'file:' })).values()],
+      conversations = await ids('conversation:');
+    const prefixes = [
+      ...files.flatMap((file) => [
+        `original/${file.id}/`,
+        `captions/${file.id}/`,
+        `visuals/${file.id}/`,
+      ]),
+      ...(await ids('annotation:')).map((id) => `annotation/${id}/`),
+      ...(await ids('capture-base:')).map((key) => `capture/${key.split(':')[0]}/`),
+      ...(await ids('tutor-attachment:')).map((id) => `tutor-attachment/${id}/`),
+      ...conversations.map((id) => `tutor/${encodeURIComponent(id)}/`),
+    ];
+    for (const prefix of new Set(prefixes)) await purgePrefix(this.env, prefix);
+    for (const id of conversations) await this.env.TUTOR.getByName(id).purge();
+    for (const file of files)
+      for (let version = 1; version <= file.version; version++)
+        for (const locale of localeSchema.options)
+          await this.env.JOBS.get(
+            this.env.JOBS.idFromName(`${file.id}-v${version}-${locale}`),
+          ).fetch(new Request('http://internal/purge', { method: 'POST' }));
+    await storage.deleteAlarm();
+    await storage.deleteAll();
   }
   async settings(): Promise<Settings> {
     if (!this.home) return internal<Settings>(this.env, '/api/settings');
@@ -511,6 +568,10 @@ export class Library extends DurableObject<Env> {
           ).length,
           sessions: (await this.ctx.storage.list({ prefix: 'session:' })).size,
         });
+      if (path === '/internal/purge' && request.method === 'POST') {
+        await this.purgeProject();
+        return json({ ok: true });
+      }
       if (this.home) {
         const response = await this.homeRoute(request, path);
         if (response) return response;
@@ -1409,6 +1470,9 @@ export default {
       : null;
     const response = await serve(request, env, url);
     if (!response.ok) return response;
+    const deleted =
+      request.method === 'DELETE' && url.pathname.match(/^\/api\/projects\/([\w-]+)$/);
+    if (deleted) knownProjects.delete(deleted[1] as ProjectId);
     // Scored interactions go to the activity log per local day, with those the library reports.
     const events: ActivityEvent[] = [
       ...classifyActivity(request.method, url.pathname, body),

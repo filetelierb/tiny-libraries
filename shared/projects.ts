@@ -53,6 +53,11 @@ export type ActivityDay = {
   projects: Record<string, number>;
   kinds?: Partial<Record<ActivityKind, number>>;
 };
+/** What the activity log stores for a day: the counted identities and each project's kinds. */
+export type StoredActivityDay = ActivityDay & {
+  seen?: string[];
+  projectKinds?: Record<string, Partial<Record<ActivityKind, number>>>;
+};
 
 /** The local calendar day of a date, as YYYY-MM-DD. */
 export function localDay(date = new Date()) {
@@ -107,15 +112,17 @@ export function classifyActivity(method: string, path: string, body: unknown): A
  * questions or cards done that day, and counts when the last one arrives.
  */
 export function scoreActivity(
-  current: ActivityDay & { seen?: string[] },
+  current: StoredActivityDay,
   project: ProjectId,
   events: ActivityEvent[],
 ) {
   const seen = new Set(current.seen || []),
+    own = { ...current.projectKinds?.[project] },
     next = {
       ...current,
       projects: { ...current.projects },
       kinds: { ...current.kinds },
+      projectKinds: { ...current.projectKinds, [project]: own },
     };
   for (const event of events) {
     const identity = `${project}:${event.kind}:${event.key}`;
@@ -130,8 +137,31 @@ export function scoreActivity(
     next.total += weight;
     next.projects[project] = (next.projects[project] || 0) + weight;
     next.kinds[event.kind] = (next.kinds[event.kind] || 0) + 1;
+    own[event.kind] = (own[event.kind] || 0) + 1;
   }
   return { ...next, seen: [...seen] };
+}
+
+/** A day without a deleted project's points; null when nothing else was logged that day. */
+export function withoutProject(day: StoredActivityDay, project: ProjectId) {
+  if (day.projects[project] === undefined) return day;
+  const { [project]: points, ...projects } = day.projects,
+    { [project]: removed, ...projectKinds } = day.projectKinds || {},
+    kinds = { ...day.kinds };
+  for (const kind of activityKinds) {
+    kinds[kind] = (kinds[kind] || 0) - (removed?.[kind] || 0);
+    if (!kinds[kind] || kinds[kind]! <= 0) delete kinds[kind];
+  }
+  const total = day.total - points;
+  if (total <= 0 || !Object.keys(projects).length) return null;
+  return {
+    ...day,
+    total,
+    projects,
+    kinds,
+    projectKinds,
+    seen: (day.seen || []).filter((identity) => !identity.startsWith(`${project}:`)),
+  };
 }
 
 /** Activity points on a 0–4 scale, relative to the busiest day shown. */

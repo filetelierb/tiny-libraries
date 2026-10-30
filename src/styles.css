@@ -2677,6 +2677,7 @@ body:has(.panel-resizer.resizing) {
 }
 
 .modal:has(.settings-form),
+.modal:has(.home-delete),
 .modal:has(.tutor-turn-editor),
 .modal:has(.activity-scoring) {
   --modal-w: 448px;
@@ -10078,7 +10079,7 @@ body:has(.panel-resizer.resizing) {
   column-gap: 12px;
   row-gap: 2px;
   height: 100%;
-  padding: 16px 48px 16px 16px;
+  padding: 16px 80px 16px 16px;
   border-radius: inherit;
   color: inherit;
   text-decoration: none;
@@ -10112,21 +10113,46 @@ body:has(.panel-resizer.resizing) {
   font-size: var(--font-size-small);
   color: var(--muted-text);
 }
-.home-project-edit {
+.home-project-tools {
   position: absolute;
   top: 10px;
   right: 10px;
+  display: flex;
+  gap: 2px;
   opacity: 0;
   transition: opacity 120ms;
 }
-.home-project:hover .home-project-edit,
-.home-project-edit:focus-visible {
+.home-project:hover .home-project-tools,
+.home-project-tools:focus-within {
   opacity: 1;
 }
 @media (hover: none) {
-  .home-project-edit {
+  .home-project-tools {
     opacity: 1;
   }
+}
+.home-delete {
+  display: grid;
+  gap: 16px;
+}
+.home-delete p {
+  margin: 0;
+  font-size: var(--font-size-control);
+  line-height: 1.6;
+}
+.home-delete label {
+  display: grid;
+  gap: 8px;
+  font-size: var(--font-size-control);
+  font-weight: var(--font-weight-medium);
+}
+.home-delete input {
+  margin: 0;
+}
+.home-delete-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 .home-project-new form,
 .home-project-rename {

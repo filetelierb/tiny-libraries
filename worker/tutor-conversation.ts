@@ -75,6 +75,11 @@ export class TutorConversation extends DurableObject<Env> {
       throw error;
     }
   }
+  /** Deletes the conversation's journal when its project is deleted. */
+  async purge() {
+    await this.ctx.storage.deleteAlarm();
+    await this.ctx.storage.deleteAll();
+  }
   /** The conversation remembers the project whose library its tools work in. */
   async seed(conversation: Conversation, project: ProjectId = 'default') {
     await this.ctx.storage.put('project', project);

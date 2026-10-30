@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { BookOpen, Check, FolderPlus, Pencil, Plus, X } from 'lucide-react';
+import { BookOpen, Check, FolderPlus, Pencil, Plus, Trash2, X } from 'lucide-react';
 import {
   heatmapStart,
   localDay,
@@ -8,7 +8,7 @@ import {
 } from '../../shared/projects';
 import type { Locale, Settings } from '../../shared/domain';
 import { api } from '../api';
-import { Button, IconButton, LoadingRow } from '../design/components';
+import { Button, IconButton, LoadingRow, Modal } from '../design/components';
 import { dictionaries, type T } from '../i18n';
 import { ActivityHeatmap } from './ActivityHeatmap';
 
@@ -31,23 +31,41 @@ export function HomePage() {
     [error, setError] = useState(''),
     [creating, setCreating] = useState<string | null>(null),
     [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null),
+    [deleting, setDeleting] = useState<ProjectSummary | null>(null),
+    [confirmation, setConfirmation] = useState(''),
     [busy, setBusy] = useState(false);
   const t: T = dictionaries[locale];
   useEffect(() => {
     document.documentElement.lang = locale;
     document.title = 'Tailored Library';
   }, [locale]);
-  useEffect(() => {
+  function loadActivity() {
     // A week of margin covers either first day of the week.
     const start = heatmapStart(new Date(), 0);
     start.setDate(start.getDate() - 7);
-    const since = localDay(start);
+    return api<ActivityDay[]>(`/activity?since=${localDay(start)}`).then(setActivity);
+  }
+  useEffect(() => {
     void Promise.all([
       api<Settings>('/settings').then((settings) => setLocale(settings.locale)),
       api<ProjectSummary[]>('/projects').then(setProjects),
-      api<ActivityDay[]>(`/activity?since=${since}`).then(setActivity),
+      loadActivity(),
     ]).catch((e) => setError((e as Error).message));
   }, []);
+  async function remove() {
+    if (!deleting || confirmation.trim() !== deleting.name.trim() || busy) return;
+    setBusy(true);
+    try {
+      await api(`/projects/${deleting.id}`, 'DELETE');
+      setProjects((current) => current!.filter((item) => item.id !== deleting.id));
+      setDeleting(null);
+      await loadActivity();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
   async function create(event: FormEvent) {
     event.preventDefault();
     if (!creating?.trim() || busy) return;
@@ -193,13 +211,26 @@ export function HomePage() {
                           : t.projectNoActivity}
                       </small>
                     </a>
-                    <IconButton
-                      className="icon-button home-project-edit"
-                      label={t.renameProject}
-                      onClick={() => setRenaming({ id: project.id, name: project.name })}
-                    >
-                      <Pencil size={14} />
-                    </IconButton>
+                    <div className="home-project-tools">
+                      <IconButton
+                        label={t.renameProject}
+                        onClick={() => setRenaming({ id: project.id, name: project.name })}
+                      >
+                        <Pencil size={14} />
+                      </IconButton>
+                      {/* The first library keeps the app settings, so it cannot be deleted. */}
+                      {project.id !== 'default' && (
+                        <IconButton
+                          label={t.deleteProject}
+                          onClick={() => {
+                            setConfirmation('');
+                            setDeleting(project);
+                          }}
+                        >
+                          <Trash2 size={14} />
+                        </IconButton>
+                      )}
+                    </div>
                   </>
                 )}
               </li>
@@ -220,6 +251,53 @@ export function HomePage() {
           />
         </div>
       </section>
+      {deleting && (
+        <Modal
+          title={t.deleteProjectTitle.replace('{name}', deleting.name)}
+          close={() => !busy && setDeleting(null)}
+          closeLabel={t.cancel}
+          className="home-delete-modal"
+        >
+          <form
+            className="home-delete"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void remove();
+            }}
+          >
+            <p>
+              {t.deleteProjectWarning
+                .replace('{files}', plural(deleting.files, t.projectFile, t.projectFiles))
+                .replace(
+                  '{sessions}',
+                  plural(deleting.sessions, t.projectSession, t.projectSessions),
+                )}
+            </p>
+            <label>
+              <span>{t.deleteProjectConfirm.replace('{name}', deleting.name)}</span>
+              <input
+                autoFocus
+                autoComplete="off"
+                value={confirmation}
+                onChange={(e) => setConfirmation(e.target.value)}
+              />
+            </label>
+            <div className="home-delete-actions">
+              <Button variant="ghost" disabled={busy} onClick={() => setDeleting(null)}>
+                {t.cancel}
+              </Button>
+              <Button
+                type="submit"
+                variant="danger"
+                disabled={busy || confirmation.trim() !== deleting.name.trim()}
+              >
+                <Trash2 size={14} />
+                {busy ? t.deletingProject : t.deleteProjectAction}
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
     </main>
   );
 }
