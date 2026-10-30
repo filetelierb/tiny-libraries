@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import { Info } from 'lucide-react';
 import {
   activityKinds,
   activityLevel,
@@ -10,6 +11,7 @@ import {
 } from '../../shared/projects';
 import type { Locale } from '../../shared/domain';
 import type { T } from '../i18n';
+import { Modal } from '../design/components';
 
 /** One square per day for the last year, across every project, like a contribution graph. */
 export function ActivityHeatmap({
@@ -23,7 +25,10 @@ export function ActivityHeatmap({
   locale: Locale;
   t: T;
 }) {
-  const [hovered, setHovered] = useState<{ day: string; x: number; y: number } | null>(null);
+  const [hovered, setHovered] = useState<{ day: string; x: number; y: number } | null>(null),
+    [selected, setSelected] = useState(() => localDay()),
+    [scoring, setScoring] = useState(false);
+  const grid = useRef<HTMLDivElement>(null);
   const weekStart = locale === 'es' ? 1 : 0;
   const { days, counts, max, total, months, weekdays } = useMemo(() => {
     const today = new Date(),
@@ -67,7 +72,17 @@ export function ActivityHeatmap({
       .replace('{date}', date);
   };
   const unit = (n: number) => `${n} ${n === 1 ? t.activityDayUnit : t.activityDaysUnit}`;
-  const hoveredDay = hovered && activity.find((day) => day.day === hovered.day);
+  const points = (n: number) => `${n} ${n === 1 ? t.activityPointUnit : t.activityPointsUnit}`;
+  const log = activity.find((day) => day.day === selected);
+  /** Arrow keys move the chosen day: a row is a weekday and a column a week. */
+  function move(day: string, key: string) {
+    const step = { ArrowUp: -1, ArrowDown: 1, ArrowLeft: -7, ArrowRight: 7 }[key];
+    if (!step) return false;
+    const next = keys[Math.min(keys.length - 1, Math.max(0, keys.indexOf(day) + step))];
+    setSelected(next);
+    grid.current?.querySelector<HTMLButtonElement>(`[data-day="${next}"]`)?.focus();
+    return true;
+  }
   return (
     <div className="activity">
       <dl className="activity-stats">
@@ -103,15 +118,25 @@ export function ActivityHeatmap({
             ))}
           </div>
           <div
+            ref={grid}
             className="activity-grid"
-            role="img"
+            role="group"
             aria-label={t.activityTotal.replace('{n}', String(total))}
           >
             {keys.map((day) => (
-              <span
+              <button
                 key={day}
+                type="button"
+                data-day={day}
                 data-level={activityLevel(counts.get(day) || 0, max)}
                 data-today={day === keys[keys.length - 1] || undefined}
+                aria-label={describe(day)}
+                aria-pressed={selected === day}
+                tabIndex={selected === day ? 0 : -1}
+                onClick={() => setSelected(day)}
+                onKeyDown={(event) => {
+                  if (move(day, event.key)) event.preventDefault();
+                }}
                 onMouseEnter={(event) => {
                   const cell = event.currentTarget.getBoundingClientRect(),
                     chart = event.currentTarget.closest('.activity-chart')!.getBoundingClientRect();
@@ -130,32 +155,16 @@ export function ActivityHeatmap({
               role="tooltip"
               style={{ left: hovered.x, top: hovered.y }}
             >
-              <strong>{describe(hovered.day)}</strong>
-              {hoveredDay &&
-                activityKinds
-                  .filter((kind) => hoveredDay.kinds?.[kind])
-                  .map((kind) => (
-                    <span key={kind}>
-                      {t[`activityKind_${kind}`]} × {hoveredDay.kinds![kind]}
-                    </span>
-                  ))}
-              {hoveredDay && Object.keys(hoveredDay.projects).length > 0 && (
-                <span className="activity-tooltip-rule" aria-hidden="true" />
-              )}
-              {hoveredDay &&
-                Object.entries(hoveredDay.projects)
-                  .sort((a, b) => b[1] - a[1])
-                  .map(([id, count]) => (
-                    <span key={id}>
-                      {projectNames.get(id) || '—'} · {count}
-                    </span>
-                  ))}
+              {describe(hovered.day)}
             </div>
           )}
         </div>
       </div>
       <div className="activity-footer">
-        <p className="muted">{t.activityHint}</p>
+        <button type="button" className="activity-scoring-open" onClick={() => setScoring(true)}>
+          <Info size={14} aria-hidden="true" />
+          {t.activityScoring}
+        </button>
         <div className="activity-legend" aria-hidden="true">
           <span>{t.activityLess}</span>
           {[0, 1, 2, 3, 4].map((level) => (
@@ -164,23 +173,63 @@ export function ActivityHeatmap({
           <span>{t.activityMore}</span>
         </div>
       </div>
-      <details className="activity-scoring">
-        <summary>{t.activityScoring}</summary>
-        <ul>
-          {activityKinds.map((kind) => (
-            <li key={kind}>
-              <span>
-                {t[`activityKind_${kind}`]}
-                <small>{t[`activityRule_${kind}`]}</small>
-              </span>
-              <strong>
-                +{activityWeights[kind]}{' '}
-                {activityWeights[kind] === 1 ? t.activityPointUnit : t.activityPointsUnit}
-              </strong>
-            </li>
-          ))}
-        </ul>
-      </details>
+      <section className="activity-log" aria-live="polite" aria-labelledby="activity-log-title">
+        <header>
+          <h3 id="activity-log-title">
+            {selected === localDay()
+              ? t.activityToday
+              : dateName.format(new Date(`${selected}T12:00:00`))}
+          </h3>
+          <strong>{points(log?.total || 0)}</strong>
+        </header>
+        {log?.total ? (
+          <>
+            <ul className="activity-log-kinds">
+              {activityKinds
+                .filter((kind) => log.kinds?.[kind])
+                .map((kind) => (
+                  <li key={kind}>
+                    <span>{t[`activityKind_${kind}`]}</span>
+                    <small>× {log.kinds![kind]}</small>
+                    <strong>+{log.kinds![kind]! * activityWeights[kind]}</strong>
+                  </li>
+                ))}
+            </ul>
+            <p className="activity-log-projects">
+              {Object.entries(log.projects)
+                .sort((a, b) => b[1] - a[1])
+                .map(([id, value]) => (
+                  <span key={id}>
+                    {projectNames.get(id) || '—'} · {points(value)}
+                  </span>
+                ))}
+            </p>
+          </>
+        ) : (
+          <p className="muted">{t.activityLogEmpty}</p>
+        )}
+      </section>
+      {scoring && (
+        <Modal
+          title={t.activityScoring}
+          close={() => setScoring(false)}
+          closeLabel={t.close}
+          className="activity-scoring-modal"
+        >
+          <p className="muted">{t.activityScoringIntro}</p>
+          <ul className="activity-scoring">
+            {activityKinds.map((kind) => (
+              <li key={kind}>
+                <span>
+                  {t[`activityKind_${kind}`]}
+                  <small>{t[`activityRule_${kind}`]}</small>
+                </span>
+                <strong>+{points(activityWeights[kind])}</strong>
+              </li>
+            ))}
+          </ul>
+        </Modal>
+      )}
     </div>
   );
 }

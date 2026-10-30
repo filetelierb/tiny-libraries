@@ -268,3 +268,9 @@ The Worker classifies each successful request from its route (and, for a few rou
 Verification: type checks and 312 tests pass, including the classification of each interaction and once-a-day scoring across kinds and projects. Through the API: two position changes and marking the same file reviewed gave 1 point; an unchanged position, an upload, a folder and a rename gave none; marking a second file reviewed added 1. In the browser, the tooltip showed the points with "Progress saved in a file × 2" and the project, and the scoring list showed the six interactions.
 
 A mini quiz and a flashcard set count as a whole rather than per question or card. With each answer or review, the library reports the quiz or set and how many questions or cards it has (`quizOf`, `deckSize`); the day's record keeps the ones done and adds the points when the last arrives. Saved positions travel the same way, so the library reports all of these in one `X-Activity` header. Verification: 313 tests pass, including a quiz that counts only on its third question and once after that, a set that counts on its second card, and a new day starting over; a position change on a new file still added 1 point through the header.
+
+### The day's points instead of the explanation
+
+Under the activity graph the home page now shows the points logged on a day: today by default, or any day chosen by clicking its square (arrow keys move between days). It lists each interaction with how many times it counted and its points, and the points per project. The scoring rules moved to a "How points are counted" dialog opened from below the graph.
+
+Verification: type checks and 313 tests pass. In the browser, today's log showed 3 points from file progress in one project; clicking 27 October showed its 1 point, the down arrow moved to 28 October with "No points logged on this day", and the dialog listed the six interactions with their rules and points.
