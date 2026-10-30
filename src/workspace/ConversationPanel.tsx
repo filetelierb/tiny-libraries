@@ -830,11 +830,12 @@ function ConversationThread({
   useEffect(() => {
     let cancelled = false,
       loading = false,
+      gone = false,
       timer: number | undefined;
     // A draft has nothing on the server to follow yet.
     if (!persisted) return;
     const load = async () => {
-      if (loading || cancelled) return;
+      if (loading || cancelled || gone) return;
       loading = true;
       window.clearTimeout(timer);
       try {
@@ -855,11 +856,15 @@ function ConversationThread({
         )
           void changedRef.current().catch(() => {});
         await reconcileRef.current().catch(() => {});
-      } catch {
-        if (!cancelled) setDisconnected(true);
+      } catch (error) {
+        // Deleted elsewhere, or with its project: stop following it and let the list move on.
+        if (error instanceof ApiResponseError && error.status === 404) {
+          gone = true;
+          void changedRef.current().catch(() => {});
+        } else if (!cancelled) setDisconnected(true);
       } finally {
         loading = false;
-        if (!cancelled)
+        if (!cancelled && !gone)
           timer = window.setTimeout(
             () => void load(),
             detailRef.current.pending || readTutorSubmission(stored(retryKey)) ? 750 : 2500,
