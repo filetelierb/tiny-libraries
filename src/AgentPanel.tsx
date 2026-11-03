@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity,
   BookOpen,
+  FilePlus,
   ChevronDown,
   ChevronUp,
   CircleDashed,
@@ -35,6 +36,7 @@ const toolIcons: Record<AgentTool, React.ComponentType<{ size?: number }>> = {
 };
 
 const actionIcons: Record<string, React.ComponentType<{ size?: number }>> = {
+  'library.upload': FilePlus,
   'preparation.queued': CircleDashed,
   'normalize.start': Film,
   'normalize.done': Film,

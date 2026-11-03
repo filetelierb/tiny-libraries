@@ -1821,10 +1821,17 @@ async function serve(request: Request, env: Env, url: URL): Promise<Response> {
             ...(path ? { path } : {}),
             directoryId,
           });
+          void recordEvent(env, project, {
+            tool: 'preparation',
+            action: 'library.upload',
+            fileId: stored.id,
+            fileName: stored.name,
+            summary: `Added ${stored.name}${stored.folder ? ` to ${stored.folder}` : ''}`,
+            detail: `${Math.round(stored.size / 1024)} KB · ${stored.kind}${path ? ` · ${path}` : ''}`,
+          });
           return json(stored, 201);
         } catch (error) {
-          if (projectFolder && path)
-            await deleteOriginal(env, projectFolder, path).catch(() => {});
+          if (projectFolder && path) await deleteOriginal(env, projectFolder, path).catch(() => {});
           else await env.FILES.delete(`original/${file.id}/1`);
           throw error;
         }
