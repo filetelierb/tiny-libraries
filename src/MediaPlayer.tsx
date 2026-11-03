@@ -114,7 +114,7 @@ export function MediaPlayer({
         !(keyboard.current && root.current?.contains(document.activeElement))
       )
         setVisible(false);
-    }, 3000);
+    }, 2200);
   };
   useEffect(() => {
     try {
@@ -174,10 +174,22 @@ export function MediaPlayer({
   const splitLongCues = (track: TextTrack) => {
     for (const cue of Array.from(track.cues || []) as VTTCue[]) {
       const parts = captionCues(cue.text, cue.startTime, cue.endTime);
-      if (parts.length < 2) continue;
+      if (parts.length < 2) {
+        liftCue(cue);
+        continue;
+      }
       track.removeCue(cue);
-      for (const part of parts) track.addCue(new VTTCue(part.start, part.end, part.text));
+      for (const part of parts) {
+        const next = new VTTCue(part.start, part.end, part.text);
+        liftCue(next);
+        track.addCue(next);
+      }
     }
+  };
+  /** Keeps subtitles clear of the bottom edge so the controls bar never covers them. */
+  const liftCue = (cue: VTTCue) => {
+    cue.snapToLines = true;
+    cue.line = -3;
   };
   const configureTracks = () => {
     const tracks = media.current?.textTracks;
@@ -191,7 +203,10 @@ export function MediaPlayer({
             ? 'hidden'
             : 'showing'
           : 'disabled';
-      if (track.mode !== 'disabled') splitLongCues(track);
+      if (track.mode !== 'disabled') {
+        splitLongCues(track);
+        for (const cue of Array.from(track.cues || []) as VTTCue[]) liftCue(cue);
+      }
       track.oncuechange = () => {
         if (source.kind !== 'audio' || track.id !== preferences.track) return;
         setCaption(
@@ -250,6 +265,23 @@ export function MediaPlayer({
     ) {
       event.preventDefault();
       void toggle();
+    } else if (event.key.toLowerCase() === 'm' && event.target === root.current) {
+      event.preventDefault();
+      setPreferences((current) => ({ ...current, muted: !current.muted }));
+    } else if (event.key.toLowerCase() === 'f' && event.target === root.current) {
+      event.preventDefault();
+      if (document.fullscreenElement) void document.exitFullscreen();
+      else void root.current?.requestFullscreen?.();
+    } else if (
+      (event.key === 'ArrowUp' || event.key === 'ArrowDown') &&
+      event.target === root.current
+    ) {
+      event.preventDefault();
+      setPreferences((current) => ({
+        ...current,
+        volume: Math.max(0, Math.min(1, current.volume + (event.key === 'ArrowUp' ? 0.1 : -0.1))),
+        muted: false,
+      }));
     }
   };
   const markedBookmarks = bookmarks.filter(
@@ -423,6 +455,15 @@ export function MediaPlayer({
         playsInline
         aria-label={source.name}
         onClick={source.kind === 'video' ? () => void toggle() : undefined}
+        onDoubleClick={
+          source.kind === 'video'
+            ? (event) => {
+                event.preventDefault();
+                if (document.fullscreenElement) void document.exitFullscreen();
+                else void root.current?.requestFullscreen?.();
+              }
+            : undefined
+        }
         onLoadedMetadata={() => {
           const player = media.current!;
           setDuration(player.duration);
