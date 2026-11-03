@@ -10844,34 +10844,6 @@ body.agent-dragging {
 .flow-stage-head-button:disabled {
   cursor: default;
 }
-.flow-stage.expanded {
-  z-index: 2;
-}
-.flow-stage-events {
-  margin: 10px 0 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  gap: 8px;
-  max-height: 220px;
-  overflow-y: auto;
-}
-.flow-stage-events > li {
-  display: grid;
-  gap: 2px;
-  padding: 8px 10px;
-  border-left: 2px solid var(--primary);
-  background: color-mix(in oklch, var(--primary) 5%, var(--background));
-  border-radius: 4px;
-}
-.flow-stage-events strong {
-  font-size: var(--font-size-control);
-  font-weight: var(--font-weight-medium);
-}
-.flow-stage-events small {
-  color: var(--muted-text);
-  font-size: var(--font-size-xs);
-}
 .flow-stage {
   display: grid;
   gap: 4px;
@@ -10995,4 +10967,55 @@ body.agent-dragging {
   50% {
     box-shadow: 0 0 0 4px color-mix(in oklch, var(--primary) 15%, transparent);
   }
+}
+
+.flow-stage.selected {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+.flow-stage-details {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in oklch, var(--primary) 25%, var(--border));
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklch, var(--primary) 4%, var(--background));
+}
+.flow-stage-details header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: var(--muted-text);
+  font-size: var(--font-size-xs);
+}
+.flow-stage-details header strong {
+  color: inherit;
+  font-size: var(--font-size-control);
+  color: var(--primary);
+  font-weight: var(--font-weight-medium);
+}
+.flow-stage-details > ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.flow-stage-details > ul > li {
+  display: grid;
+  gap: 3px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--primary);
+  background: var(--background);
+  border-radius: 4px;
+}
+.flow-stage-details strong {
+  font-size: var(--font-size-control);
+  font-weight: var(--font-weight-medium);
+}
+.flow-stage-details small {
+  color: var(--muted-text);
+  font-size: var(--font-size-xs);
 }

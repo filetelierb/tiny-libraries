@@ -197,15 +197,15 @@ function StageCard({
   stage,
   state,
   events,
-  expanded,
-  toggle,
+  selected,
+  select,
   t,
 }: {
   stage: Stage;
   state: FileFlow['stages'][Stage];
   events: AgentEvent[];
-  expanded: boolean;
-  toggle: () => void;
+  selected: boolean;
+  select: () => void;
   t: T;
 }) {
   const Icon = stageIcon[stage];
@@ -219,13 +219,13 @@ function StageCard({
           : null;
   const empty = !events.length;
   return (
-    <li className={`flow-stage ${state.status} ${expanded ? 'expanded' : ''}`}>
+    <li className={`flow-stage ${state.status} ${selected ? 'selected' : ''}`}>
       <button
         type="button"
         className="flow-stage-head-button"
-        onClick={toggle}
+        onClick={select}
         disabled={empty}
-        aria-expanded={expanded}
+        aria-pressed={selected}
       >
         <div className="flow-stage-head">
           <Icon size={16} aria-hidden="true" />
@@ -252,60 +252,83 @@ function StageCard({
           </>
         )}
       </button>
-      {expanded && events.length > 0 && (
-        <ul className="flow-stage-events">
-          {events.map((event) => (
-            <li key={event.id}>
-              <strong>{event.summary}</strong>
-              <small>
-                {event.model ? `${event.model} · ` : ''}
-                {event.usage?.input !== undefined ? `${event.usage.input} in · ` : ''}
-                {event.usage?.output !== undefined ? `${event.usage.output} out · ` : ''}
-                {event.usage?.audioSeconds !== undefined
-                  ? `${Math.round(event.usage.audioSeconds)} s audio · `
-                  : ''}
-                {event.elapsedMs !== undefined ? `${elapsed(event.elapsedMs)} · ` : ''}
-                {new Date(event.at).toLocaleTimeString()}
-              </small>
-              {event.detail && <small className="agent-detail">{event.detail}</small>}
-            </li>
-          ))}
-        </ul>
-      )}
     </li>
+  );
+}
+
+/** The actions of the stage currently selected on a file's pipeline, listed below the timeline. */
+function StageDetails({ stage, events, t }: { stage: Stage; events: AgentEvent[]; t: T }) {
+  if (!events.length) return null;
+  const Icon = stageIcon[stage];
+  return (
+    <div className="flow-stage-details">
+      <header>
+        <Icon size={14} aria-hidden="true" />
+        <strong>{t[`agentStage_${stage}` as keyof T] as string}</strong>
+        <small>
+          {events.length} {events.length === 1 ? t.agentDetailStep : t.agentDetailSteps}
+        </small>
+      </header>
+      <ul>
+        {events.map((event) => (
+          <li key={event.id}>
+            <strong>{event.summary}</strong>
+            <small>
+              {event.model ? `${event.model} · ` : ''}
+              {event.usage?.input !== undefined
+                ? `${event.usage.input.toLocaleString()} in · `
+                : ''}
+              {event.usage?.output !== undefined
+                ? `${event.usage.output.toLocaleString()} out · `
+                : ''}
+              {event.usage?.audioSeconds !== undefined
+                ? `${Math.round(event.usage.audioSeconds)} s audio · `
+                : ''}
+              {event.elapsedMs !== undefined ? `${elapsed(event.elapsedMs)} · ` : ''}
+              {new Date(event.at).toLocaleTimeString()}
+            </small>
+            {event.detail && <small className="agent-detail">{event.detail}</small>}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
 /** Diagram view: one pipeline per file, stage cards connected left to right. */
 export function AgentFlow({ events, t }: { events: AgentEvent[]; t: T }) {
   const flows = useMemo(() => fileFlows(events, t), [events, t]);
-  const [expanded, setExpanded] = useState<Record<string, Stage | null>>({});
+  const [selected, setSelected] = useState<Record<string, Stage | null>>({});
   if (!flows.length) return null;
   return (
     <div className="agent-flows">
-      {flows.map((flow) => (
-        <section key={flow.fileId} className="flow-row" aria-label={flow.fileName}>
-          <h3>{flow.fileName}</h3>
-          <ol className="flow-stages">
-            {STAGES.map((stage) => (
-              <StageCard
-                key={stage}
-                stage={stage}
-                state={flow.stages[stage]}
-                events={flow.stageEvents[stage]}
-                expanded={expanded[flow.fileId] === stage}
-                toggle={() =>
-                  setExpanded((prev) => ({
-                    ...prev,
-                    [flow.fileId]: prev[flow.fileId] === stage ? null : stage,
-                  }))
-                }
-                t={t}
-              />
-            ))}
-          </ol>
-        </section>
-      ))}
+      {flows.map((flow) => {
+        const picked = selected[flow.fileId] ?? null;
+        return (
+          <section key={flow.fileId} className="flow-row" aria-label={flow.fileName}>
+            <h3>{flow.fileName}</h3>
+            <ol className="flow-stages">
+              {STAGES.map((stage) => (
+                <StageCard
+                  key={stage}
+                  stage={stage}
+                  state={flow.stages[stage]}
+                  events={flow.stageEvents[stage]}
+                  selected={picked === stage}
+                  select={() =>
+                    setSelected((prev) => ({
+                      ...prev,
+                      [flow.fileId]: prev[flow.fileId] === stage ? null : stage,
+                    }))
+                  }
+                  t={t}
+                />
+              ))}
+            </ol>
+            {picked && <StageDetails stage={picked} events={flow.stageEvents[picked]} t={t} />}
+          </section>
+        );
+      })}
     </div>
   );
 }
