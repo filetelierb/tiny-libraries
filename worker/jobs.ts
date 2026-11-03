@@ -334,7 +334,7 @@ export class ProcessingJob extends DurableObject<Env> {
         const normalized = (await this.ctx.storage.get<Normalized>('normalized'))!;
         // Chunks are at most 300s + 2 × 20s = ~5m 40s and under 31 MB, inside Meta's
         // one-shot limits (10 min, 32 MB), so several can be transcribed in parallel.
-        const PARALLEL = 3;
+        const PARALLEL = 5;
         const jobId = job.id;
         const start = job.completedChunks,
           batch = normalized.chunks.slice(start, start + PARALLEL);
