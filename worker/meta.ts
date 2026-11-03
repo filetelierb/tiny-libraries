@@ -84,12 +84,16 @@ export function bridgedFetch(config: {
     });
   };
 }
+/** What a Meta response reports about the resources the call used. */
+export type MetaUsage = { input?: number; output?: number; audioSeconds?: number };
+export type MetaUsageSink = (usage: MetaUsage) => void;
 export async function metaRequest(
   key: string,
   path: string,
   body: unknown,
   form = false,
   transport: MetaFetch = fetch,
+  onUsage?: MetaUsageSink,
 ): Promise<unknown> {
   let response: Response;
   try {
@@ -134,11 +138,26 @@ export async function metaRequest(
       response.status === 429 || response.status >= 500,
     );
   }
+  let data: unknown;
   try {
-    return JSON.parse(text);
+    data = JSON.parse(text);
   } catch {
     throw new MetaError('Meta returned invalid JSON', false);
   }
+  if (onUsage) {
+    const value = data as {
+      usage?: { prompt_tokens?: number; completion_tokens?: number };
+      audioDurationMs?: number;
+    };
+    const usage: MetaUsage = {};
+    if (typeof value.usage?.prompt_tokens === 'number') usage.input = value.usage.prompt_tokens;
+    if (typeof value.usage?.completion_tokens === 'number')
+      usage.output = value.usage.completion_tokens;
+    if (typeof value.audioDurationMs === 'number')
+      usage.audioSeconds = value.audioDurationMs / 1000;
+    if (Object.keys(usage).length) onUsage(usage);
+  }
+  return data;
 }
 const completionSchema = z.object({
   choices: z
@@ -178,6 +197,7 @@ async function structured<T extends z.ZodType>(
   schema: T,
   messages: unknown[],
   transport: MetaFetch = fetch,
+  onUsage?: MetaUsageSink,
 ): Promise<z.infer<T>> {
   const result = completionSchema.parse(
     await metaRequest(
@@ -193,6 +213,7 @@ async function structured<T extends z.ZodType>(
       },
       false,
       transport,
+      onUsage,
     ),
   );
   const content = result.choices[0].message.content;
@@ -212,6 +233,7 @@ async function studyGuide(
   segments: Segment[],
   images: Array<{ segmentId: string; data: string }>,
   transport: MetaFetch,
+  onUsage?: MetaUsageSink,
 ) {
   const content = images.length
     ? [
@@ -233,6 +255,7 @@ async function studyGuide(
         { role: 'user', content },
       ],
       transport,
+      onUsage,
     ),
     segments,
     new Set(images.map((image) => image.segmentId)),
@@ -246,6 +269,7 @@ export async function synthesize(
   imageData?: string,
   visuals?: Array<{ segmentId: string; data: string }>,
   transport: MetaFetch = fetch,
+  onUsage?: MetaUsageSink,
 ): Promise<Synthesis> {
   const text = JSON.stringify(segments);
   if (text.length > 1500000) throw new MetaError('Source text exceeds the analysis limit', false);
@@ -260,6 +284,7 @@ export async function synthesize(
     segments,
     images,
     transport,
+    onUsage,
   );
 }
 // One window of a long source. The repeated context is readable but is not this part's to cover.
@@ -273,6 +298,7 @@ export async function synthesizePart(
   locale: Locale,
   visuals: Array<{ segmentId: string; data: string }> = [],
   transport: MetaFetch = fetch,
+  onUsage?: MetaUsageSink,
 ): Promise<Synthesis> {
   const context = segments.slice(window.start, window.owned),
     owned = segments.slice(window.owned, window.end),
@@ -286,6 +312,7 @@ export async function synthesizePart(
     available,
     visuals.filter((v) => ids.has(v.segmentId)),
     transport,
+    onUsage,
   );
   return ownedPart(result, segments, window);
 }
@@ -296,6 +323,7 @@ export async function outlineParts(
   parts: Synthesis[],
   locale: Locale,
   transport: MetaFetch = fetch,
+  onUsage?: MetaUsageSink,
 ): Promise<Synthesis> {
   const outline = await structured(
     key,
@@ -310,6 +338,7 @@ export async function outlineParts(
       { role: 'user', content: JSON.stringify(outlineInput(parts)) },
     ],
     transport,
+    onUsage,
   );
   return mergeParts(parts, outline);
 }
@@ -323,6 +352,7 @@ export async function reviewGlossary(
   round: number,
   locale: Locale,
   transport: MetaFetch = fetch,
+  onUsage?: MetaUsageSink,
 ) {
   return structured(
     key,
@@ -337,6 +367,7 @@ export async function reviewGlossary(
       { role: 'user', content: JSON.stringify(reviewInput(terms, synthesis)) },
     ],
     transport,
+    onUsage,
   );
 }
 /** Defines the concepts a review found missing, citing the chapters' own segments. */
@@ -347,6 +378,7 @@ export async function fillGlossary(
   segments: Segment[],
   locale: Locale,
   transport: MetaFetch = fetch,
+  onUsage?: MetaUsageSink,
 ) {
   return structured(
     key,
@@ -361,6 +393,7 @@ export async function fillGlossary(
       { role: 'user', content: JSON.stringify(segments) },
     ],
     transport,
+    onUsage,
   );
 }
 /** Finds, for terms no concept is named after, an existing concept with the same meaning. */
@@ -370,6 +403,7 @@ export async function matchConcepts(
   terms: Array<{ term: number; name: string; aliases: string[]; definition: string }>,
   index: ConceptIndexItem[],
   transport: MetaFetch = fetch,
+  onUsage?: MetaUsageSink,
 ) {
   return structured(
     key,
@@ -384,6 +418,7 @@ export async function matchConcepts(
       { role: 'user', content: JSON.stringify({ terms, concepts: index }) },
     ],
     transport,
+    onUsage,
   );
 }
 /**
@@ -397,6 +432,7 @@ export async function decideConcepts(
   concepts: ConceptContext[],
   locale: Locale,
   transport: MetaFetch = fetch,
+  onUsage?: MetaUsageSink,
 ) {
   return structured(
     key,
@@ -411,6 +447,7 @@ export async function decideConcepts(
       { role: 'user', content: JSON.stringify({ terms, concepts }) },
     ],
     transport,
+    onUsage,
   );
 }
 export async function translate(
@@ -419,6 +456,7 @@ export async function translate(
   segments: Segment[],
   locale: Locale,
   transport: MetaFetch = fetch,
+  onUsage?: MetaUsageSink,
 ): Promise<Segment[]> {
   const schema = z.object({ cues: z.array(z.object({ id: z.string(), text: z.string() })) });
   const translated = await structured(
@@ -434,6 +472,7 @@ export async function translate(
       { role: 'user', content: JSON.stringify(segments.map(({ id, text }) => ({ id, text }))) },
     ],
     transport,
+    onUsage,
   );
   const mapping = new Map(translated.cues.map((c) => [c.id, c.text]));
   if (
@@ -501,6 +540,7 @@ export async function transcribe(
   offset: number,
   duration: number,
   transport: MetaFetch = fetch,
+  onUsage?: MetaUsageSink,
 ): Promise<Segment[]> {
   const form = new FormData();
   form.append(
@@ -517,7 +557,9 @@ export async function transcribe(
     ),
   );
   form.append('audio', new Blob([audio], { type: 'audio/wav' }), `chunk-${index}.wav`);
-  const result = asrSchema.parse(await metaRequest(key, 'asr/transcribe', form, true, transport));
+  const result = asrSchema.parse(
+    await metaRequest(key, 'asr/transcribe', form, true, transport, onUsage),
+  );
   const turns = result.turns || [];
   if (!turns.length && result.transcript.trim())
     return [
@@ -579,6 +621,7 @@ export async function generateCards(
   learning: Learning,
   chapterId: string,
   transport: MetaFetch = fetch,
+  onUsage?: MetaUsageSink,
 ) {
   const chapter = learning.synthesis.chapters.find((c) => c.id === chapterId);
   if (!chapter) throw new MetaError('Chapter not found.', false);
@@ -607,6 +650,7 @@ export async function generateCards(
       { role: 'user', content: context },
     ],
     transport,
+    onUsage,
   );
   return validateCardPlan(value, learning, chapterId);
 }

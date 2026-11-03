@@ -50,6 +50,7 @@ import {
   planTutorArtifact,
   writeTutorArtifactChapter,
   MetaError,
+  type MetaUsage,
 } from './meta';
 import {
   resumeTutorArtifact,
@@ -503,12 +504,20 @@ export class Library extends DurableObject<Env> {
               progress: { current: started, total },
               model: settings.model,
             });
+            let chapterUsage: MetaUsage | undefined;
             const plan = await generateCards(
               key,
               settings.model,
               currentLearning,
               chapterId,
               bridgedFetch(this.env),
+              (u) => {
+                chapterUsage = {
+                  ...(chapterUsage || {}),
+                  input: (chapterUsage?.input || 0) + (u.input || 0) || chapterUsage?.input,
+                  output: (chapterUsage?.output || 0) + (u.output || 0) || chapterUsage?.output,
+                };
+              },
             );
             completed++;
             void recordEvent(this.env, this.project, {
@@ -519,6 +528,7 @@ export class Library extends DurableObject<Env> {
               summary: `Flashcards ready for ${chapter?.title || 'a chapter'}`,
               progress: { current: completed, total },
               model: settings.model,
+              ...(chapterUsage ? { usage: chapterUsage } : {}),
             });
             return plan;
           },

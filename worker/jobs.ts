@@ -41,7 +41,26 @@ import {
   synthesizePart,
   transcribe,
   translate,
+  type MetaUsage,
+  type MetaUsageSink,
 } from './meta';
+
+/** Totals the resources every Meta call it feeds consumed, for one event. */
+function usageTracker() {
+  const total: MetaUsage = {};
+  const sink: MetaUsageSink = (u) => {
+    if (u.input !== undefined) total.input = (total.input || 0) + u.input;
+    if (u.output !== undefined) total.output = (total.output || 0) + u.output;
+    if (u.audioSeconds !== undefined)
+      total.audioSeconds = (total.audioSeconds || 0) + u.audioSeconds;
+  };
+  return {
+    sink,
+    get usage() {
+      return Object.keys(total).length ? total : undefined;
+    },
+  };
+}
 
 export type Normalized = NormalizedSource;
 export class ProcessingJob extends DurableObject<Env> {
@@ -179,6 +198,7 @@ export class ProcessingJob extends DurableObject<Env> {
     synthesis: Synthesis,
     segments: Segment[],
     state: GlossaryState,
+    onUsage?: MetaUsageSink,
   ): Promise<GlossaryState | null> {
     const transport = bridgedFetch(this.env);
     if (!state.terms.length) return null;
@@ -191,6 +211,7 @@ export class ProcessingJob extends DurableObject<Env> {
         state.round,
         locale,
         transport,
+        onUsage,
       );
       const terms = applyReview(state.terms, review);
       // A review that keeps nothing is ignored rather than emptying the glossary.
@@ -205,7 +226,15 @@ export class ProcessingJob extends DurableObject<Env> {
       const { terms, added } = available.length
         ? applyFill(
             state.terms,
-            await fillGlossary(key, model, state.missing || [], available, locale, transport),
+            await fillGlossary(
+              key,
+              model,
+              state.missing || [],
+              available,
+              locale,
+              transport,
+              onUsage,
+            ),
             available,
           )
         : { terms: state.terms, added: 0 };
@@ -230,7 +259,7 @@ export class ProcessingJob extends DurableObject<Env> {
         .filter((term) => !byName[term.term]);
       const picked =
         unnamed.length && index.length
-          ? await matchConcepts(key, model, unnamed, index, transport)
+          ? await matchConcepts(key, model, unnamed, index, transport, onUsage)
           : { matches: [] };
       return {
         ...state,
@@ -254,7 +283,7 @@ export class ProcessingJob extends DurableObject<Env> {
       }))
       .filter((term) => term.conceptId && concepts.some((c) => c.id === term.conceptId));
     const decided = matched.length
-      ? await decideConcepts(key, model, matched, concepts, locale, transport)
+      ? await decideConcepts(key, model, matched, concepts, locale, transport, onUsage)
       : { decisions: [] };
     await this.ctx.storage.put('glossary', {
       ...state,
@@ -343,6 +372,7 @@ export class ProcessingJob extends DurableObject<Env> {
         const jobId = job.id;
         const start = job.completedChunks,
           batch = normalized.chunks.slice(start, start + PARALLEL);
+        const transcribeTracker = usageTracker();
         await Promise.all(
           batch.map(async (chunk) => {
             const cacheKey = `chunk:${chunk.index}`;
@@ -357,6 +387,7 @@ export class ProcessingJob extends DurableObject<Env> {
               chunk.offset,
               chunk.duration,
               bridgedFetch(this.env),
+              transcribeTracker.sink,
             );
             result = ownedTurns(result, chunk, chunk.index === normalized.chunks.length - 1);
             await this.ctx.storage.put(cacheKey, result);
@@ -374,7 +405,7 @@ export class ProcessingJob extends DurableObject<Env> {
             progress: { current: job.completedChunks, total: job.totalChunks },
             elapsedMs: Date.now() - stageStartedAt,
             model: 'muse-voice-transcribe-1.0',
-            usage: {
+            usage: transcribeTracker.usage || {
               audioSeconds: batch.reduce((sum, c) => sum + c.duration, 0),
             },
           },
@@ -394,6 +425,7 @@ export class ProcessingJob extends DurableObject<Env> {
             (s) => !s.id.startsWith('frame-'),
           ),
           translated: Segment[] = [];
+        const translateTracker = usageTracker();
         // Bound translation calls and persist each batch independently.
         for (let i = 0; i < segments.length; i += 80) {
           const cacheKey = `translation:${i}`;
@@ -404,6 +436,7 @@ export class ProcessingJob extends DurableObject<Env> {
               settings.model,
               segments.slice(i, i + 80),
               job.locale,
+              translateTracker.sink,
             );
             await this.ctx.storage.put(cacheKey, batch);
           }
@@ -413,7 +446,11 @@ export class ProcessingJob extends DurableObject<Env> {
         await push(
           'translate.done',
           `Translated subtitles into ${job.locale.toUpperCase()} for ${file.name}`,
-          { elapsedMs: Date.now() - stageStartedAt, model: settings.model },
+          {
+            elapsedMs: Date.now() - stageStartedAt,
+            model: settings.model,
+            usage: translateTracker.usage,
+          },
         );
         job = { ...job, stage: 'synthesize', status: 'partial' };
       } else if (job.stage === 'synthesize') {
@@ -422,6 +459,7 @@ export class ProcessingJob extends DurableObject<Env> {
         const windows = synthesisWindows(segments),
           done = job.completedParts || 0;
         let synthesis: Synthesis | undefined;
+        const synthesizeTracker = usageTracker();
         if (windows.length === 1)
           synthesis = await synthesize(
             key,
@@ -431,6 +469,7 @@ export class ProcessingJob extends DurableObject<Env> {
             normalized.imageData,
             normalized.visuals,
             bridgedFetch(this.env),
+            synthesizeTracker.sink,
           );
         else if (JSON.stringify(segments).length > 1500000)
           throw new MetaError('Source text exceeds the analysis limit', false);
@@ -449,6 +488,7 @@ export class ProcessingJob extends DurableObject<Env> {
                 job.locale,
                 normalized.visuals,
                 bridgedFetch(this.env),
+                synthesizeTracker.sink,
               ),
             );
           job = {
@@ -463,6 +503,7 @@ export class ProcessingJob extends DurableObject<Env> {
             {
               progress: { current: done + 1, total: windows.length + 1 },
               model: settings.model,
+              usage: synthesizeTracker.usage,
             },
           );
         } else {
@@ -470,7 +511,14 @@ export class ProcessingJob extends DurableObject<Env> {
             windows.map(async (_, i) => (await this.ctx.storage.get<Synthesis>(`part:${i}`))!),
           );
           synthesis = validateSynthesis(
-            await outlineParts(key, settings.model, parts, job.locale, bridgedFetch(this.env)),
+            await outlineParts(
+              key,
+              settings.model,
+              parts,
+              job.locale,
+              bridgedFetch(this.env),
+              synthesizeTracker.sink,
+            ),
             segments,
             new Set((normalized.visuals || []).map((v) => v.segmentId)),
           );
@@ -488,7 +536,11 @@ export class ProcessingJob extends DurableObject<Env> {
               (sum, c) => sum + c.questions.length,
               0,
             )} questions, ${synthesis.glossary.length} glossary terms`,
-            { elapsedMs: Date.now() - stageStartedAt, model: settings.model },
+            {
+              elapsedMs: Date.now() - stageStartedAt,
+              model: settings.model,
+              usage: synthesizeTracker.usage,
+            },
           );
           job = { ...job, stage: 'concepts', status: 'partial', completedParts: 0, totalParts: 0 };
         }
@@ -497,6 +549,7 @@ export class ProcessingJob extends DurableObject<Env> {
           segments = (await this.ctx.storage.get<Segment[]>('segments'))!,
           state = (await this.ctx.storage.get<GlossaryState>('glossary'))!;
         let next: GlossaryState | null;
+        const glossaryTracker = usageTracker();
         try {
           next = await this.glossaryStep(
             key,
@@ -505,6 +558,7 @@ export class ProcessingJob extends DurableObject<Env> {
             synthesis,
             segments,
             state,
+            glossaryTracker.sink,
           );
         } catch (error) {
           // The study guide never waits on the glossary: a failed review publishes the terms as they are.
@@ -523,6 +577,7 @@ export class ProcessingJob extends DurableObject<Env> {
               progress: { current: next.round, total: 3 },
               model: settings.model,
               tool: 'glossary',
+              usage: glossaryTracker.usage,
             },
           );
           job = { ...job, status: 'partial', completedParts: next.round };
@@ -594,16 +649,17 @@ export class ProcessingJob extends DurableObject<Env> {
     model: string,
     batch: Segment[],
     locale: Locale,
+    onUsage?: MetaUsageSink,
   ): Promise<Segment[]> {
     try {
-      return await translate(key, model, batch, locale, bridgedFetch(this.env));
+      return await translate(key, model, batch, locale, bridgedFetch(this.env), onUsage);
     } catch (error) {
       if (!(error instanceof MetaError) || error.retryable) throw error;
       if (batch.length === 1) return batch;
       const half = Math.ceil(batch.length / 2);
       return [
-        ...(await this.translateBatch(key, model, batch.slice(0, half), locale)),
-        ...(await this.translateBatch(key, model, batch.slice(half), locale)),
+        ...(await this.translateBatch(key, model, batch.slice(0, half), locale, onUsage)),
+        ...(await this.translateBatch(key, model, batch.slice(half), locale, onUsage)),
       ];
     }
   }
