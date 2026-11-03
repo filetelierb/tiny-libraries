@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { FileText, Pause, Play, Plus, X } from 'lucide-react';
 import type { Catalog } from '../../shared/domain';
 import type { T } from '../i18n';
@@ -16,6 +17,7 @@ export function ReferencesPanel({
   sourceIds,
   paused,
   pending,
+  anchor,
   onPause,
   onRemove,
   onManage,
@@ -26,12 +28,28 @@ export function ReferencesPanel({
   sourceIds: string[];
   paused: Set<string>;
   pending: boolean;
+  anchor: HTMLElement | null;
   onPause: (id: string, pauseIt: boolean) => void;
   onRemove: (id: string) => void;
   onManage: () => void;
   onDismiss: () => void;
 }) {
   const root = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState<{ left: number; bottom: number } | null>(null);
+  useEffect(() => {
+    if (!anchor) return;
+    const update = () => {
+      const rect = anchor.getBoundingClientRect();
+      setBox({ left: rect.left, bottom: window.innerHeight - rect.top + 8 });
+    };
+    update();
+    window.addEventListener('resize', update);
+    window.addEventListener('scroll', update, true);
+    return () => {
+      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', update, true);
+    };
+  }, [anchor]);
   useEffect(() => {
     const onPointer = (event: MouseEvent) => {
       if (!root.current) return;
@@ -51,12 +69,14 @@ export function ReferencesPanel({
     };
   }, [onDismiss]);
   const active = sourceIds.filter((id) => !paused.has(id)).length;
-  return (
+  if (!box) return null;
+  return createPortal(
     <div
       ref={root}
       className="references-panel"
       role="dialog"
       aria-label={t.references}
+      style={{ position: 'fixed', left: box.left, bottom: box.bottom }}
     >
       <header className="references-panel-head">
         <div>
@@ -111,6 +131,7 @@ export function ReferencesPanel({
           {t.references}
         </button>
       </footer>
-    </div>
+    </div>,
+    document.body,
   );
 }

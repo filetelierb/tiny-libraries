@@ -634,6 +634,7 @@ function ConversationThread({
   const contextRef = useRef(context),
     composer = useRef<TipTapComposerHandle>(null);
   const composerAnchor = useRef<HTMLDivElement>(null);
+  const referenceChipAnchor = useRef<HTMLDivElement>(null);
   const [suggestion, setSuggestion] = useState<ComposerSuggestion | null>(null);
   contextRef.current = context;
   const changeContext = (value: QuestionContext | null) => {
@@ -1490,7 +1491,7 @@ function ConversationThread({
         )}
         <div className="composer-card">
           <div className="composer-strip">
-            <div className="reference-chip-wrap">
+            <div className="reference-chip-wrap" ref={referenceChipAnchor}>
               <button
                 type="button"
                 className="reference-chip"
@@ -1528,6 +1529,7 @@ function ConversationThread({
                   sourceIds={conversation.sourceIds}
                   paused={paused}
                   pending={pending}
+                  anchor={referenceChipAnchor.current}
                   onPause={(id, pauseIt) =>
                     void patch({
                       pausedSourceIds: pauseIt

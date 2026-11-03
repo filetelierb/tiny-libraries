@@ -11339,12 +11339,10 @@ body.agent-dragging {
   background: color-mix(in oklch, var(--background) 92%, transparent);
 }
 
-/* References popover anchored to the reference chip in the composer strip. */
-.reference-chip-wrap { position: relative; display: inline-flex; }
+/* References popover portaled to document.body so overflow on the composer-card
+   doesn't clip the shadow or content. Positioned from the trigger chip's rect. */
+.reference-chip-wrap { display: inline-flex; }
 .references-panel {
-  position: absolute;
-  bottom: calc(100% + 6px);
-  left: 0;
   width: min(360px, calc(100vw - 32px));
   max-height: min(70dvh, 480px);
   display: flex;
@@ -11353,7 +11351,7 @@ body.agent-dragging {
   color: var(--foreground);
   border-radius: 12px;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35), inset 0 0 0 1px var(--border);
-  z-index: 55;
+  z-index: 60;
   font-family: var(--font-body);
 }
 .references-panel-head {
