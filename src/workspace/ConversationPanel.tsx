@@ -67,6 +67,7 @@ import {
 import { normalizeConcept, type GlossaryEntry } from '../../shared/glossary';
 import { ConceptInspector } from '../tutor/ConceptInspector';
 import { MentionCommandMenu } from '../tutor/MentionCommandMenu';
+import { ReferencesPanel } from '../tutor/ReferencesPanel';
 import {
   TipTapComposer,
   type ComposerMenuCommands,
@@ -666,6 +667,7 @@ function ConversationThread({
     [disconnected, setDisconnected] = useState(false),
     [mentionPending, setMentionPending] = useState(false),
     [picker, setPicker] = useState(false),
+    [refPanel, setRefPanel] = useState(false),
     [rename, setRename] = useState(false),
     [title, setTitle] = useState(conversation.name),
     [query, setQuery] = useState('');
@@ -1488,33 +1490,64 @@ function ConversationThread({
         )}
         <div className="composer-card">
           <div className="composer-strip">
-            <button
-              type="button"
-              className="reference-chip"
-              title={[
-                ...conversation.sourceIds.map(
-                  (id) => catalog.files.find((item) => item.id === id)?.name || t.missingReference,
-                ),
-                conversation.sourceIds.length
-                  ? t.referencesNotice
-                  : context
-                    ? t.questionContextNotice
-                    : attachments.length
-                      ? t.attachmentQuestionContext
-                      : t.generalTutorNotice,
-              ].join('\n')}
-              onClick={() => setPicker(true)}
-            >
-              <FileStack />
-              <span>
-                {t.references} (
-                {paused.size
-                  ? `${conversation.sourceIds.length - paused.size}/${conversation.sourceIds.length}`
-                  : conversation.sourceIds.length}
-                )
-              </span>
-              <ChevronDown />
-            </button>
+            <div className="reference-chip-wrap">
+              <button
+                type="button"
+                className="reference-chip"
+                aria-expanded={refPanel}
+                aria-haspopup="dialog"
+                title={[
+                  ...conversation.sourceIds.map(
+                    (id) =>
+                      catalog.files.find((item) => item.id === id)?.name || t.missingReference,
+                  ),
+                  conversation.sourceIds.length
+                    ? t.referencesNotice
+                    : context
+                      ? t.questionContextNotice
+                      : attachments.length
+                        ? t.attachmentQuestionContext
+                        : t.generalTutorNotice,
+                ].join('\n')}
+                onClick={() => setRefPanel((value) => !value)}
+              >
+                <FileStack />
+                <span>
+                  {t.references} (
+                  {paused.size
+                    ? `${conversation.sourceIds.length - paused.size}/${conversation.sourceIds.length}`
+                    : conversation.sourceIds.length}
+                  )
+                </span>
+                <ChevronDown />
+              </button>
+              {refPanel && (
+                <ReferencesPanel
+                  t={t}
+                  catalog={catalog}
+                  sourceIds={conversation.sourceIds}
+                  paused={paused}
+                  pending={pending}
+                  onPause={(id, pauseIt) =>
+                    void patch({
+                      pausedSourceIds: pauseIt
+                        ? [...paused, id]
+                        : [...paused].filter((value) => value !== id),
+                    })
+                  }
+                  onRemove={(id) =>
+                    void patch({
+                      sourceIds: conversation.sourceIds.filter((value) => value !== id),
+                    })
+                  }
+                  onManage={() => {
+                    setRefPanel(false);
+                    setPicker(true);
+                  }}
+                  onDismiss={() => setRefPanel(false)}
+                />
+              )}
+            </div>
             {attachments.map((item) => (
               <span className="draft-chip" data-attachment-id={item.id} key={item.id}>
                 <button
