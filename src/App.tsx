@@ -1917,7 +1917,7 @@ export function App() {
               focusRequest={glossaryFocus}
               catalog={catalog}
               source={active}
-              openSourceIds={resources.resourceTabs.flatMap((tab) => tab.sources)}
+              openSourceIds={[...new Set(resources.resourceTabs.flatMap((tab) => tab.sources))]}
               t={t}
               actions={treeActions}
               changed={refresh}
@@ -1931,6 +1931,7 @@ export function App() {
               sessionId={session.id}
               source={active}
               catalog={catalog}
+              openSourceIds={[...new Set(resources.resourceTabs.flatMap((tab) => tab.sources))]}
               t={t}
               onError={setError}
               changed={async () => {

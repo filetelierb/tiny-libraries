@@ -127,6 +127,7 @@ export function ConversationPanel({
   createAttachment,
   openFile,
   openTest,
+  openSourceIds,
 }: {
   sessionId: string;
   source: Source | null;
@@ -146,6 +147,10 @@ export function ConversationPanel({
   cite: (sourceId: string, segment: Segment) => void;
   openFile: (id: string) => void;
   openTest: (sessionId: string, testId: string) => void;
+  /** The session's open resource-tab source ids, deduped. Permanent references for every
+   * conversation in this session derive from this list; closing a tab removes the reference,
+   * opening one adds it. The chip popover only lets students pause or resume them. */
+  openSourceIds: string[];
 }) {
   const selectionKey = `tl:conversation:${sessionId}`;
   const [threads, setThreads] = useState<ConversationDetail[]>([]),
@@ -385,6 +390,7 @@ export function ConversationPanel({
         <ConversationThread
           openFile={openFile}
           openTest={openTest}
+          openSourceIds={openSourceIds}
           key={current.id}
           renameRequest={renameRequest}
           conversation={current}
@@ -435,6 +441,7 @@ function ConversationThread({
   persist,
   openFile,
   openTest,
+  openSourceIds,
 }: {
   conversation: ConversationDetail;
   catalog: Catalog;
@@ -459,6 +466,7 @@ function ConversationThread({
   cite: (sourceId: string, segment: Segment) => void;
   openFile: (id: string) => void;
   openTest: (sessionId: string, testId: string) => void;
+  openSourceIds: string[];
 }) {
   const [historyPages, setHistoryPages] = useState(new Map<number, ChatMessage>());
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -667,7 +675,6 @@ function ConversationThread({
     [submission, setSubmission] = useState(() => readTutorSubmission(stored(retryKey))),
     [disconnected, setDisconnected] = useState(false),
     [mentionPending, setMentionPending] = useState(false),
-    [picker, setPicker] = useState(false),
     [refPanel, setRefPanel] = useState(false),
     [rename, setRename] = useState(false),
     [title, setTitle] = useState(conversation.name),
@@ -894,6 +901,13 @@ function ConversationThread({
     };
   }, [conversation.id, persisted]);
   const paused = new Set(conversation.pausedSourceIds || []);
+  // Permanent references derive from the session's open resource tabs, deduplicated and
+  // pruned to still-existing catalog entries. Pause state is per-conversation and persists
+  // through tab churn; closing a tab removes the reference next render.
+  const permanentReferenceIds = React.useMemo(() => {
+    const valid = new Set(catalog.files.map((file) => file.id));
+    return [...new Set(openSourceIds)].filter((id) => valid.has(id));
+  }, [openSourceIds, catalog.files]);
   const patch = async (value: Partial<Conversation>) => {
     if (!persisted) {
       await receive({ ...conversation, ...value } as ConversationDetail, false);
@@ -968,21 +982,21 @@ function ConversationThread({
       onError(error instanceof Error ? error.message : t.error);
     }
   };
-  // Add the file as a reference (or unpause a paused one). The composer handles writing the
-  // chip itself via the suggestion's `command` callback, so we never touch the draft here.
+  // Mentioning a file opens it as a session tab if it isn't already open, so the next render
+  // sees it as a permanent reference and the agent can use it. If the file is open but paused
+  // we also unpause so the chip reflects the student's intent. The composer writes the chip
+  // itself via the suggestion's `command` callback, so we never touch the draft here.
   const mention = async (file: Source): Promise<boolean> => {
     if (mentionBusy.current) return false;
     mentionBusy.current = true;
     setMentionPending(true);
     try {
-      if (!conversation.sourceIds.includes(file.id)) {
-        if (conversation.sourceIds.length >= 20) {
-          onError(t.referenceLimit);
+      if (!openSourceIds.includes(file.id)) {
+        openFile(file.id);
+      }
+      if (paused.has(file.id)) {
+        if (!(await patch({ pausedSourceIds: [...paused].filter((id) => id !== file.id) })))
           return false;
-        }
-        if (!(await patch({ sourceIds: [...conversation.sourceIds, file.id] }))) return false;
-      } else if (paused.has(file.id)) {
-        if (!(await patch({ pausedSourceIds: [...paused].filter((id) => id !== file.id) }))) return false;
       }
       return true;
     } finally {
@@ -994,19 +1008,16 @@ function ConversationThread({
   const accepts = (event: React.DragEvent) =>
     event.dataTransfer.types.includes(RESOURCE_DRAG_TYPE) ||
     event.dataTransfer.types.includes('Files');
-  /** Tree files become references; files from the computer become attachments. */
+  /** Tree files open as a session tab (becoming a permanent reference); files from the
+   * computer become one-shot attachments. */
   const dropOnComposer = async (event: React.DragEvent) => {
     const resource = event.dataTransfer.getData(RESOURCE_DRAG_TYPE);
     if (resource) {
       const file = catalog.files.find((entry) => entry.id === JSON.parse(resource).id);
       if (!file) return;
-      if (conversation.sourceIds.includes(file.id)) {
-        if (paused.has(file.id))
-          await patch({ pausedSourceIds: [...paused].filter((id) => id !== file.id) });
-        return;
-      }
-      if (conversation.sourceIds.length >= 20) return onError(t.referenceLimit);
-      await patch({ sourceIds: [...conversation.sourceIds, file.id] });
+      if (!openSourceIds.includes(file.id)) openFile(file.id);
+      if (paused.has(file.id))
+        await patch({ pausedSourceIds: [...paused].filter((id) => id !== file.id) });
       return;
     }
     for (const file of [...event.dataTransfer.files]) {
@@ -1186,7 +1197,7 @@ function ConversationThread({
         prompt: text,
         concepts: conceptDraftRef.current.items.map(({ id, version }) => ({ id, version })),
         attachments: attachmentRef.current.map((item) => item.id),
-        references: conversation.sourceIds.filter((id) => !paused.has(id)),
+        references: permanentReferenceIds.filter((id) => !paused.has(id)),
         generation: resolveTutorGeneration(generationRef.current, catalog.settings.model),
         ...(webRef.current.enabled ? { webSearch: true as const } : {}),
         ...(contextRef.current ? { context: contextRef.current } : {}),
@@ -1498,11 +1509,11 @@ function ConversationThread({
                 aria-expanded={refPanel}
                 aria-haspopup="dialog"
                 title={[
-                  ...conversation.sourceIds.map(
+                  ...permanentReferenceIds.map(
                     (id) =>
                       catalog.files.find((item) => item.id === id)?.name || t.missingReference,
                   ),
-                  conversation.sourceIds.length
+                  permanentReferenceIds.length
                     ? t.referencesNotice
                     : context
                       ? t.questionContextNotice
@@ -1516,8 +1527,8 @@ function ConversationThread({
                 <span>
                   {t.references} (
                   {paused.size
-                    ? `${conversation.sourceIds.length - paused.size}/${conversation.sourceIds.length}`
-                    : conversation.sourceIds.length}
+                    ? `${permanentReferenceIds.length - paused.size}/${permanentReferenceIds.length}`
+                    : permanentReferenceIds.length}
                   )
                 </span>
                 <ChevronDown />
@@ -1526,7 +1537,7 @@ function ConversationThread({
                 <ReferencesPanel
                   t={t}
                   catalog={catalog}
-                  sourceIds={conversation.sourceIds}
+                  sourceIds={permanentReferenceIds}
                   paused={paused}
                   pending={pending}
                   anchor={referenceChipAnchor.current}
@@ -1738,83 +1749,6 @@ function ConversationThread({
               <Button onClick={() => setRename(false)}>{t.cancel}</Button>
             </div>
           </form>
-        </Modal>
-      )}
-      {picker && (
-        <Modal title={t.references} close={() => setPicker(false)} closeLabel={t.close}>
-          <p className="muted">{t.referencesNotice}</p>
-          {!!conversation.sourceIds.length && (
-            <ul className="reference-list" aria-label={t.references}>
-              {conversation.sourceIds.map((id) => {
-                const file = catalog.files.find((item) => item.id === id);
-                const off = paused.has(id);
-                return (
-                  <li key={id} className={off ? 'paused' : undefined}>
-                    <FileText />
-                    <span title={file?.name}>{file?.name || t.missingReference}</span>
-                    <IconButton
-                      label={`${off ? t.resumeReference : t.pauseReference}: ${file?.name || id}`}
-                      aria-pressed={off}
-                      disabled={pending}
-                      onClick={() =>
-                        void patch({
-                          pausedSourceIds: off
-                            ? [...paused].filter((value) => value !== id)
-                            : [...paused, id],
-                        })
-                      }
-                    >
-                      {off ? <Play /> : <Pause />}
-                    </IconButton>
-                    <IconButton
-                      label={`${t.removeReference}: ${file?.name || id}`}
-                      disabled={pending}
-                      onClick={() =>
-                        void patch({
-                          sourceIds: conversation.sourceIds.filter((value) => value !== id),
-                        })
-                      }
-                    >
-                      <X />
-                    </IconButton>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-          <label className="search-field">
-            <Search size={16} aria-hidden="true" />
-            <input
-              type="search"
-              aria-label={t.search}
-              placeholder={t.search}
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          </label>
-          <DirectoryTree
-            actions={treeActions}
-            mode="file"
-            directories={catalog.directories}
-            files={catalog.files.filter(
-              (file) =>
-                !conversation.sourceIds.includes(file.id) &&
-                sourceState(file, catalog.directories) !== 'trash',
-            )}
-            t={t}
-            view="files"
-            query={query}
-            storageKey="tl:tree:references"
-            chooseFile={(file) => {
-              if (conversation.sourceIds.length >= 20) {
-                onError(t.referenceLimit);
-                return;
-              }
-              void patch({ sourceIds: [...conversation.sourceIds, file.id] }).then(() =>
-                setPicker(false),
-              );
-            }}
-          />
         </Modal>
       )}
     </div>
