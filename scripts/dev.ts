@@ -56,7 +56,9 @@ try {
 if (data.folder) console.log(`Library data: ${data.folder}`);
 await readConfig(root);
 // The companion keeps every project's files under `projects/` in the data folder.
-const bridge = await startBridge(token, data.processing, undefined, undefined, data.folder || root);
+// Without one, projects go under .local/ so the repo root stays clean.
+const projectsBase = data.folder || join(root, '.local');
+const bridge = await startBridge(token, data.processing, undefined, undefined, projectsBase);
 const port = 9876;
 const args = [
   'dev',

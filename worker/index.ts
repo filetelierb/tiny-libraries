@@ -1072,7 +1072,16 @@ export class Library extends DurableObject<Env> {
               await storage.put(`file:${file.id}`, file);
           return next;
         });
-        return json(value, directoryMatch ? 200 : 201);
+        // Files that just moved to a new library folder follow on disk.
+        const changed = value.files.filter((file) => file.path && file.path !== diskPath(file));
+        const followed = changed.length ? await this.followOnDisk(changed) : [];
+        return json(
+          {
+            ...value,
+            files: value.files.map((file) => followed.find((f) => f.id === file.id) ?? file),
+          },
+          directoryMatch ? 200 : 201,
+        );
       }
       if (path === '/api/settings') {
         if (request.method === 'GET') return json(await this.settings());
@@ -1145,7 +1154,8 @@ export class Library extends DurableObject<Env> {
             await storage.put(`file:${file.id}`, value);
             return value;
           });
-          return json(next);
+          const [followed] = await this.followOnDisk([next]);
+          return json(followed);
         }
         return json(file);
       }
@@ -1735,20 +1745,38 @@ async function serve(request: Request, env: Env, url: URL): Promise<Response> {
           reviewed: false,
           createdAt: new Date().toISOString(),
         };
-        try {
-          await env.FILES.put(`original/${file.id}/1`, request.body, {
-            httpMetadata: { contentType: file.mime },
-          });
-        } catch (error) {
-          // A cancelled upload ends the body early; drop anything partially stored.
-          await env.FILES.delete(`original/${file.id}/1`).catch(() => {});
-          throw error;
+        const { folder: projectFolder } = await internal<{ folder: string | null }>(
+          env,
+          `/internal/projects/${project}`,
+          undefined,
+          'default',
+        );
+        let path: string | undefined;
+        if (projectFolder) {
+          const stored = await writeOriginal(env, projectFolder, diskPath(file), request.body);
+          path = stored.path;
+        } else {
+          try {
+            await env.FILES.put(`original/${file.id}/1`, request.body, {
+              httpMetadata: { contentType: file.mime },
+            });
+          } catch (error) {
+            // A cancelled upload ends the body early; drop anything partially stored.
+            await env.FILES.delete(`original/${file.id}/1`).catch(() => {});
+            throw error;
+          }
         }
         try {
-          const stored = await call<Source>('/internal/file', { ...file, directoryId });
+          const stored = await call<Source>('/internal/file', {
+            ...file,
+            ...(path ? { path } : {}),
+            directoryId,
+          });
           return json(stored, 201);
         } catch (error) {
-          await env.FILES.delete(`original/${file.id}/1`);
+          if (projectFolder && path)
+            await deleteOriginal(env, projectFolder, path).catch(() => {});
+          else await env.FILES.delete(`original/${file.id}/1`);
           throw error;
         }
       }
@@ -1764,10 +1792,12 @@ async function serve(request: Request, env: Env, url: URL): Promise<Response> {
           if (expected !== file.version)
             throw new ApiError('This source version changed. Choose the file again.', 409);
         }
-        const object = await env.FILES.get(`original/${file.id}/${file.version}`, {
-          range: request.headers,
-        });
-        if (!object) throw new ApiError('Original missing', 404);
+        const { folder: projectFolder } = await internal<{ folder: string | null }>(
+          env,
+          `/internal/projects/${project}`,
+          undefined,
+          'default',
+        );
         const headers = new Headers({
           'Content-Type': file.mime,
           'Accept-Ranges': 'bytes',
@@ -1777,6 +1807,21 @@ async function serve(request: Request, env: Env, url: URL): Promise<Response> {
           'X-Source-Version': String(file.version),
           'Content-Disposition': `inline; filename*=UTF-8''${encodeURIComponent(file.name)}`,
         });
+        if (projectFolder && file.path) {
+          const streamed = await readOriginal(env, projectFolder, file.path, request);
+          for (const name of ['Content-Length', 'Content-Range']) {
+            const value = streamed.headers.get(name);
+            if (value) headers.set(name, value);
+          }
+          return new Response(request.method === 'HEAD' ? null : streamed.body, {
+            status: streamed.status,
+            headers,
+          });
+        }
+        const object = await env.FILES.get(`original/${file.id}/${file.version}`, {
+          range: request.headers,
+        });
+        if (!object) throw new ApiError('Original missing', 404);
         let status = 200;
         if (object.range && 'offset' in object.range && object.range.offset !== undefined) {
           const length =
