@@ -56,6 +56,18 @@ export type TutorRunnerServices = {
   look?(record: TurnRecord, query: Parameters<LibraryReader>[0]): Promise<unknown>;
   /** The tool endpoint for a reply that may run as a Muse Code agent. */
   muse?(providerId: string): Promise<TutorCompletion['muse']>;
+  /** Emit an agent-activity event for this turn. The DO wraps recordEvent(); undefined is
+   * fine (events just don't flow to the panel). */
+  emit?(
+    phase: 'start' | 'done' | 'failed',
+    details: {
+      record: TurnRecord;
+      intent: TurnIntent;
+      status?: string;
+      error?: string;
+      elapsedMs?: number;
+    },
+  ): void;
 };
 export class ControlCheckpoint extends Error {}
 
@@ -139,12 +151,25 @@ export class TutorRunner {
     status: 'stopped' | 'failed' | 'interrupted',
     error?: string,
   ) {
-    return this.journal.finish(
+    const outcome = await this.journal.finish(
       record,
       status,
       record.partial ? await this.message(record, record.partial) : undefined,
       error,
     );
+    try {
+      const intent = await this.journal.intent(record);
+      this.services.emit?.(status === 'failed' ? 'failed' : 'done', {
+        record,
+        intent,
+        status,
+        ...(error ? { error } : {}),
+        ...(record.startedAt
+          ? { elapsedMs: Date.now() - new Date(record.startedAt).getTime() }
+          : {}),
+      });
+    } catch {}
+    return outcome;
   }
   async step() {
     const claimed = (await this.journal.active()) || (await this.journal.claim());
@@ -208,6 +233,9 @@ export class TutorRunner {
         const initialObject = await this.journal.objects.put(input);
         const checkpointObject = await this.journal.objects.put(agent.snapshot());
         await this.journal.progress(record, { initialObject, checkpointObject, phase: 'tools' });
+        try {
+          this.services.emit?.('start', { record, intent });
+        } catch {}
         return;
       }
       const input = await this.journal.objects.get<TutorAgentInput>(record.initialObject);
@@ -247,6 +275,16 @@ export class TutorRunner {
             ? { webSearched: result.webSearched === true }
             : {}),
         });
+        try {
+          this.services.emit?.('done', {
+            record,
+            intent,
+            status: 'completed',
+            ...(record.startedAt
+              ? { elapsedMs: Date.now() - new Date(record.startedAt).getTime() }
+              : {}),
+          });
+        } catch {}
         return;
       }
       if (record.phase === 'model' && record.providerId) {

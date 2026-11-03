@@ -11,6 +11,9 @@ import {
   Clock,
   Languages,
   CircleDot,
+  Sparkles,
+  MessageSquare,
+  Wrench,
   SquareStack,
   FileText,
 } from 'lucide-react';
@@ -363,7 +366,89 @@ function StageDetails({
   );
 }
 
-/** Diagram view: one pipeline per file, stage cards connected left to right. */
+/** The stages a tutor turn passes through: the student's prompt arriving, the agent
+ * thinking (model call + optional tool use), and the reply completing or failing. */
+const TUTOR_STAGES = ['received', 'thinking', 'tools', 'completed'] as const;
+type TutorStage = (typeof TUTOR_STAGES)[number];
+const tutorStageIcon: Record<TutorStage, React.ComponentType<{ size?: number }>> = {
+  received: MessageSquare,
+  thinking: Sparkles,
+  tools: Wrench,
+  completed: CircleDot,
+};
+type TutorFlow = {
+  conversationId: string;
+  conversationLabel: string;
+  stages: Record<TutorStage, { status: Status; label: string }>;
+  stageEvents: Record<TutorStage, AgentEvent[]>;
+  lastAt: string;
+};
+
+function tutorFlows(events: AgentEvent[], t: T): TutorFlow[] {
+  const by = new Map<string, TutorFlow>();
+  const label: Record<TutorStage, string> = {
+    received: (t as Record<string, string>).agentTutorStage_received || 'Prompt',
+    thinking: (t as Record<string, string>).agentTutorStage_thinking || 'Thinking',
+    tools: (t as Record<string, string>).agentTutorStage_tools || 'Tools',
+    completed: (t as Record<string, string>).agentTutorStage_completed || 'Reply',
+  };
+  const ensure = (event: AgentEvent): TutorFlow | null => {
+    if (event.tool !== 'tutor' || !event.conversationId) return null;
+    let flow = by.get(event.conversationId);
+    if (!flow) {
+      flow = {
+        conversationId: event.conversationId,
+        conversationLabel: event.conversationName || event.conversationId,
+        stages: Object.fromEntries(
+          TUTOR_STAGES.map((stage) => [stage, { status: 'pending' as Status, label: label[stage] }]),
+        ) as TutorFlow['stages'],
+        stageEvents: Object.fromEntries(
+          TUTOR_STAGES.map((stage) => [stage, [] as AgentEvent[]]),
+        ) as TutorFlow['stageEvents'],
+        lastAt: event.at,
+      };
+      by.set(event.conversationId, flow);
+    }
+    if (event.at > flow.lastAt) flow.lastAt = event.at;
+    if (event.conversationName) flow.conversationLabel = event.conversationName;
+    return flow;
+  };
+  for (const event of [...events].reverse()) {
+    const flow = ensure(event);
+    if (!flow) continue;
+    const mapTo: Partial<Record<string, TutorStage>> = {
+      'tutor.turn.start': 'received',
+      'tutor.turn.done': 'completed',
+      'tutor.turn.failed': 'completed',
+      'tutor.action': 'tools',
+    };
+    const stage = mapTo[event.action];
+    if (stage) flow.stageEvents[stage].unshift(event);
+    switch (event.action) {
+      case 'tutor.turn.start':
+        flow.stages.received = { status: 'done', label: label.received };
+        flow.stages.thinking = { status: 'active', label: label.thinking };
+        break;
+      case 'tutor.action':
+        flow.stages.tools = { status: 'active', label: label.tools };
+        break;
+      case 'tutor.turn.done':
+        flow.stages.received = { status: 'done', label: label.received };
+        flow.stages.thinking = { status: 'done', label: label.thinking };
+        if (flow.stages.tools.status === 'active') flow.stages.tools = { status: 'done', label: label.tools };
+        flow.stages.completed = { status: 'done', label: label.completed };
+        break;
+      case 'tutor.turn.failed':
+        flow.stages.received = { status: 'done', label: label.received };
+        flow.stages.thinking = { status: 'failed', label: label.thinking };
+        flow.stages.completed = { status: 'failed', label: label.completed };
+        break;
+    }
+  }
+  return [...by.values()].sort((a, b) => b.lastAt.localeCompare(a.lastAt));
+}
+
+/** Diagram view: one pipeline per file for preparation, one per conversation for the tutor. */
 export function AgentFlow({
   events,
   locale,
@@ -374,10 +459,119 @@ export function AgentFlow({
   t: T;
 }) {
   const flows = useMemo(() => fileFlows(events, t), [events, t]);
+  const tutorRows = useMemo(() => tutorFlows(events, t), [events, t]);
   const [selected, setSelected] = useState<Record<string, Stage | null>>({});
-  if (!flows.length) return null;
+  const [tutorSelected, setTutorSelected] = useState<Record<string, TutorStage | null>>({});
+  if (!flows.length && !tutorRows.length) return null;
   return (
     <div className="agent-flows">
+      {tutorRows.map((flow) => {
+        const picked = tutorSelected[flow.conversationId] ?? null;
+        return (
+          <section
+            key={`tutor:${flow.conversationId}`}
+            className="flow-row flow-row-tutor"
+            aria-label={flow.conversationLabel}
+          >
+            <h3>
+              <Sparkles size={13} aria-hidden="true" />
+              {(t as Record<string, string>).agentTool_tutor || 'Librarian'} · {flow.conversationLabel}
+            </h3>
+            <ol className="flow-stages">
+              {TUTOR_STAGES.map((stage) => {
+                const state = flow.stages[stage];
+                const Icon = tutorStageIcon[stage];
+                const Mark =
+                  state.status === 'done'
+                    ? Check
+                    : state.status === 'active'
+                      ? LoaderCircle
+                      : state.status === 'failed'
+                        ? CircleAlert
+                        : null;
+                const empty = !flow.stageEvents[stage].length;
+                return (
+                  <li
+                    key={stage}
+                    className={`flow-stage ${state.status} ${picked === stage ? 'selected' : ''}`}
+                  >
+                    <button
+                      type="button"
+                      className="flow-stage-head-button"
+                      disabled={empty}
+                      aria-pressed={picked === stage}
+                      onClick={() =>
+                        setTutorSelected((prev) => ({
+                          ...prev,
+                          [flow.conversationId]: prev[flow.conversationId] === stage ? null : stage,
+                        }))
+                      }
+                    >
+                      <div className="flow-stage-head">
+                        <Icon size={16} aria-hidden="true" />
+                        <span>{state.label}</span>
+                      </div>
+                      <div
+                        className="flow-stage-mark"
+                        aria-label={t[`agentStatus_${state.status}` as keyof T] as string}
+                      >
+                        {Mark && (
+                          <Mark size={14} className={state.status === 'active' ? 'spin' : ''} />
+                        )}
+                      </div>
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
+            {picked && flow.stageEvents[picked].length > 0 && (
+              <div className="flow-stage-details">
+                <header>
+                  {(() => {
+                    const Icon = tutorStageIcon[picked];
+                    return <Icon size={14} aria-hidden="true" />;
+                  })()}
+                  <strong>{flow.stages[picked].label}</strong>
+                  <small>
+                    {flow.stageEvents[picked].length}{' '}
+                    {flow.stageEvents[picked].length === 1 ? t.agentDetailStep : t.agentDetailSteps}
+                  </small>
+                </header>
+                <ol className="flow-timeline">
+                  {flow.stageEvents[picked].map((event) => (
+                    <li key={event.id} className="flow-timeline-item">
+                      <time
+                        className="flow-timeline-time"
+                        dateTime={event.at}
+                        title={new Date(event.at).toLocaleString(locale)}
+                      >
+                        {timeLabel(event.at, locale, t.agentJustNow)}
+                      </time>
+                      <div className="flow-timeline-body">
+                        <strong>{event.summary}</strong>
+                        {event.model && (
+                          <small className="flow-timeline-model">
+                            {event.model}
+                            {event.reasoningEffort
+                              ? ` · ${t.agentEffort}: ${event.reasoningEffort}`
+                              : ''}
+                          </small>
+                        )}
+                        {event.elapsedMs !== undefined && (
+                          <div className="flow-timeline-metrics">
+                            <span>{elapsed(event.elapsedMs)}</span>
+                          </div>
+                        )}
+                        {event.detail && <small className="agent-detail">{event.detail}</small>}
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            )}
+          </section>
+        );
+      })}
       {flows.map((flow) => {
         const picked = selected[flow.fileId] ?? null;
         return (

@@ -9,6 +9,7 @@ import { tutorMcp } from './tutor-mcp';
 import { ToolRejection } from './tutor-agent';
 import type { GlossaryEntry } from '../shared/glossary';
 import { libraryObjectName, type ProjectId } from '../shared/projects';
+import { recordEvent } from './agent-events';
 
 /** A UUID-shaped identity derived from a stable name. */
 async function stableId(name: string) {
@@ -261,6 +262,38 @@ export class TutorConversation extends DurableObject<Env> {
           url: `${this.env.APP_URL}/api/tutor-tools/${id}/${providerId}`,
           token: await toolToken(this.env.MEDIA_BRIDGE_TOKEN, id, providerId),
         };
+      },
+      emit: (phase, { record, intent, status, error, elapsedMs }) => {
+        // Fire-and-forget: the DO already stored `project` at seed time; the tutor turn's
+        // conversation name isn't persisted in this DO but the runner panel keys by project.
+        void (async () => {
+          try {
+            const project = ((await this.ctx.storage.get<string>('project')) as ProjectId) || 'default';
+            const promptPreview = intent.input.prompt.slice(0, 120);
+            const action =
+              phase === 'start' ? 'tutor.turn.start'
+              : phase === 'failed' ? 'tutor.turn.failed'
+              : 'tutor.turn.done';
+            const summary =
+              phase === 'start'
+                ? `Tutor turn: ${promptPreview}${intent.input.prompt.length > 120 ? '…' : ''}`
+                : phase === 'failed'
+                  ? `Tutor turn failed${error ? `: ${error.slice(0, 160)}` : ''}`
+                  : `Tutor turn completed${status && status !== 'completed' ? ` (${status})` : ''}`;
+            await recordEvent(this.env, project, {
+              tool: 'tutor',
+              action,
+              summary,
+              conversationId: record.conversationId,
+              ...(record.generation.model ? { model: record.generation.model } : {}),
+              ...(record.generation.reasoningEffort
+                ? { reasoningEffort: record.generation.reasoningEffort }
+                : {}),
+              ...(elapsedMs !== undefined ? { elapsedMs } : {}),
+              detail: `turn ${record.id} · attempt ${record.attempt}${record.toolNames.length ? ` · tools: ${record.toolNames.join(', ')}` : ''}`,
+            });
+          } catch {}
+        })();
       },
     };
   }

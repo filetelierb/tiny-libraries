@@ -17,6 +17,10 @@ export const agentEventSchema = z.object({
   action: z.string().min(1).max(120),
   fileId: z.string().uuid().optional(),
   fileName: z.string().max(240).optional(),
+  /** For tutor-turn events, the conversation the turn belongs to; the panel groups a
+   * tutor flow row per conversation. */
+  conversationId: z.string().min(1).max(200).optional(),
+  conversationName: z.string().max(240).optional(),
   summary: z.string().max(400),
   detail: z.string().max(2000).optional(),
   progress: z

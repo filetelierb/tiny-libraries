@@ -5,6 +5,7 @@ import {
   FilePlus,
   ChevronDown,
   ChevronUp,
+  CircleAlert,
   CircleDashed,
   CircleDot,
   CircleHelp,
@@ -51,6 +52,9 @@ const actionIcons: Record<string, React.ComponentType<{ size?: number }>> = {
   'glossary.ingest': BookOpen,
   'preparation.done': CircleDot,
   'flashcards.generate': SquareStack,
+  'tutor.turn.start': Sparkles,
+  'tutor.turn.done': CircleDot,
+  'tutor.turn.failed': CircleAlert,
 };
 
 /** How long ago, in words, for the relative time beside each event. */
