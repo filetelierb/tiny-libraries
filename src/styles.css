@@ -191,7 +191,7 @@ hr {
 .app {
   display: flex;
   width: 100%;
-  height: 100dvh;
+  height: calc(100dvh - var(--agent-panel-height, 0px));
   isolation: isolate;
 }
 .library-panel {
@@ -10076,7 +10076,7 @@ body:has(.panel-resizer.resizing) {
 
 /* Home: projects and the activity graph. */
 .home {
-  height: 100%;
+  height: calc(100dvh - var(--agent-panel-height, 0px));
   overflow: auto;
   padding: 48px max(16px, calc((100% - 960px) / 2)) 64px;
 }

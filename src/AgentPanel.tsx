@@ -136,6 +136,14 @@ export function AgentPanel({
   useEffect(() => {
     if (open) localStorage.setItem(HEIGHT_KEY, String(height));
   }, [height, open]);
+  // Pages add their own padding below so the panel never covers content.
+  useEffect(() => {
+    const value = open ? `${height}px` : '44px';
+    document.documentElement.style.setProperty('--agent-panel-height', value);
+    return () => {
+      document.documentElement.style.removeProperty('--agent-panel-height');
+    };
+  }, [open, height]);
   // Drag the top handle to resize the panel between MIN and 80% of the viewport.
   const dragging = useRef(false);
   useEffect(() => {

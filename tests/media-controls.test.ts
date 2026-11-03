@@ -20,18 +20,17 @@ test('media bounds reject nonfinite timing and expose every supported quarter sp
   assert.ok(playbackSpeeds.includes(2.25) && playbackSpeeds.includes(3.75));
 });
 
-test('overlapping chapter ranges occupy separate pointer-accessible lanes', () => {
+test('every chapter shares the single bar lane since ranges are contiguous', () => {
   const lanes = chapterLanes([
     { id: 'first', title: 'First', start: 0, end: 5 },
-    { id: 'overlap', title: 'Overlap', start: 0, end: 5 },
-    { id: 'next', title: 'Next', start: 5, end: 10 },
+    { id: 'second', title: 'Second', start: 5, end: 10 },
   ]);
   assert.deepEqual(
     lanes.map((chapter) => chapter.lane),
-    [0, 1, 0],
+    [0, 0],
   );
 });
-test('chapter timeline uses actual source intervals and excludes document-only evidence', () => {
+test('chapter timeline covers the recording continuously from the first chapter at 0', () => {
   const learning: PublicLearning = {
     sourceId: 'file',
     sourceVersion: 1,
@@ -68,8 +67,38 @@ test('chapter timeline uses actual source intervals and excludes document-only e
     },
   };
   assert.deepEqual(chapterRanges(learning, 12), [
-    { id: 'chapter', title: 'A chapter', start: 3, end: 12 },
+    { id: 'chapter', title: 'A chapter', start: 0, end: 12 },
   ]);
   assert.deepEqual(chapterRanges(learning, 0), []);
   assert.deepEqual(chapterRanges(null, 12), []);
+});
+
+test('a second chapter ends where the next begins and the first always starts at 0', () => {
+  const learning: PublicLearning = {
+    sourceId: 'file',
+    sourceVersion: 1,
+    locale: 'en',
+    model: 'test',
+    createdAt: 'today',
+    segments: [
+      { id: 'a', text: 'intro', start: 15, end: 20 },
+      { id: 'b', text: 'middle', start: 45, end: 60 },
+      { id: 'c', text: 'outro', start: 80, end: 90 },
+    ],
+    synthesis: {
+      title: 'Test',
+      glossary: [],
+      artifact: null,
+      chapters: [
+        { id: 'intro', title: 'Intro', segmentIds: ['a'], summary: '', questions: [] },
+        { id: 'middle', title: 'Middle', segmentIds: ['b'], summary: '', questions: [] },
+        { id: 'outro', title: 'Outro', segmentIds: ['c'], summary: '', questions: [] },
+      ],
+    },
+  };
+  assert.deepEqual(chapterRanges(learning, 100), [
+    { id: 'intro', title: 'Intro', start: 0, end: 45 },
+    { id: 'middle', title: 'Middle', start: 45, end: 80 },
+    { id: 'outro', title: 'Outro', start: 80, end: 100 },
+  ]);
 });

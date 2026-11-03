@@ -16,32 +16,45 @@ export const formatTime = (value: number) => {
     : `${minutes}:${remainder}`;
 };
 
+/**
+ * Each chapter is a start marker on the recording's timeline; its end is where the next
+ * chapter begins, or the end of the video for the last one. The first chapter always starts
+ * at 0, so the whole recording is covered by one continuous bar.
+ */
 export function chapterRanges(learning: PublicLearning | null, duration: number) {
   if (!learning || !Number.isFinite(duration) || duration <= 0) return [];
-  return learning.synthesis.chapters
-    .flatMap((chapter) => {
+  const starts = learning.synthesis.chapters
+    .map((chapter) => {
       const segments = learning.segments.filter(
         (segment) =>
           chapter.segmentIds.includes(segment.id) &&
           segment.start != null &&
           Number.isFinite(segment.start),
       );
-      if (!segments.length) return [];
-      const start = Math.min(...segments.map((segment) => segment.start!));
-      const end = Math.max(...segments.map((segment) => segment.end ?? duration));
-      if (start < 0 || start >= duration || end <= start) return [];
-      return [{ id: chapter.id, title: chapter.title, start, end: Math.min(duration, end) }];
+      if (!segments.length) return null;
+      return {
+        id: chapter.id,
+        title: chapter.title,
+        start: Math.max(0, Math.min(duration, Math.min(...segments.map((s) => s.start!)))),
+      };
     })
+    .filter((chapter): chapter is { id: string; title: string; start: number } => !!chapter)
     .sort((a, b) => a.start - b.start);
+  if (!starts.length) return [];
+  // The first chapter always starts at 0, and later chapters that share a start are kept apart.
+  starts[0] = { ...starts[0], start: 0 };
+  for (let i = 1; i < starts.length; i++)
+    if (starts[i].start <= starts[i - 1].start)
+      starts[i] = { ...starts[i], start: Math.min(duration, starts[i - 1].start + 0.001) };
+  return starts
+    .map((chapter, index) => ({
+      ...chapter,
+      end: index + 1 < starts.length ? starts[index + 1].start : duration,
+    }))
+    .filter((chapter) => chapter.start < chapter.end);
 }
 
-/** Preserve overlapping evidence ranges without hiding one chapter's control. */
+/** The whole bar is one continuous row; every range lives on lane 0. */
 export function chapterLanes(ranges: ReturnType<typeof chapterRanges>) {
-  const ends: number[] = [];
-  return ranges.map((range) => {
-    let lane = ends.findIndex((end) => end <= range.start);
-    if (lane < 0) lane = ends.length;
-    ends[lane] = range.end;
-    return { ...range, lane };
-  });
+  return ranges.map((range) => ({ ...range, lane: 0 }));
 }
