@@ -1339,33 +1339,12 @@ function ConversationThread({
                     openTest={openTest}
                   />
                 ) : null}
-                {message.role === 'assistant' && (
+                {message.role === 'assistant' && message.noteSuggestion?.recommended && (
                   <div className="message-note">
-                    {message.noteSuggestion?.recommended && (
-                      <p>
-                        {t.suggestedByTutor} ·{' '}
-                        {t[`noteCategory_${message.noteSuggestion.category}`]}
-                      </p>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="message-action"
-                      onClick={() =>
-                        annotate(
-                          message.noteSuggestion?.recommended
-                            ? message.noteSuggestion.body
-                            : message.status
-                              ? `${t.partialReplyNotice}\n\n${message.content}`
-                              : message.content,
-                          message.sourceIds || conversation.sourceIds,
-                          contextFor(message),
-                        )
-                      }
-                    >
-                      <StickyNote />
-                      {t.saveAsAnnotation}
-                    </Button>
+                    <p>
+                      {t.suggestedByTutor} ·{' '}
+                      {t[`noteCategory_${message.noteSuggestion.category}`]}
+                    </p>
                   </div>
                 )}
                 {message.tools?.length ? (

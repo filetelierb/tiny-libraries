@@ -9143,7 +9143,6 @@ body:has(.panel-resizer.resizing) {
   margin: 1.3rem 0;
   padding: 0.85rem 1.1rem;
   border: 1px solid var(--border);
-  border-left-width: 4px;
   border-radius: var(--radius);
   background: var(--card);
   color: var(--foreground);

@@ -1119,8 +1119,10 @@ export function App() {
               >
                 <div className="file-tree">
                   <DirectoryTree
-                    directories={catalog.directories}
-                    files={catalog.files}
+                    directories={catalog.directories.filter(
+                      (dir) => !/(?:^|\/)(Artifacts|Artefactos)$/.test(dir.path),
+                    )}
+                    files={catalog.files.filter((file) => file.kind !== 'artifact')}
                     t={t}
                     active={active?.id}
                     view="files"
@@ -1144,8 +1146,10 @@ export function App() {
                   <p className="panel-section-hint">{t.archivedHint}</p>
                   <div className="file-tree">
                     <DirectoryTree
-                      directories={catalog.directories}
-                      files={catalog.files}
+                      directories={catalog.directories.filter(
+                        (dir) => !/(?:^|\/)(Artifacts|Artefactos)$/.test(dir.path),
+                      )}
+                      files={catalog.files.filter((file) => file.kind !== 'artifact')}
                       t={t}
                       active={active?.id}
                       view="archived"
