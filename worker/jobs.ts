@@ -331,31 +331,40 @@ export class ProcessingJob extends DurableObject<Env> {
           { elapsedMs: Date.now() - stageStartedAt },
         );
       } else if (job.stage === 'transcribe') {
-        const normalized = (await this.ctx.storage.get<Normalized>('normalized'))!,
-          chunk = normalized.chunks[job.completedChunks];
-        const cacheKey = `chunk:${chunk.index}`;
-        let result = await this.ctx.storage.get<Segment[]>(cacheKey);
-        if (!result) {
-          const audio = await (await this.bridge(`/chunks/${job.id}/${chunk.index}`)).arrayBuffer();
-          result = await transcribe(
-            key,
-            audio,
-            chunk.index,
-            chunk.offset,
-            chunk.duration,
-            bridgedFetch(this.env),
-          );
-          result = ownedTurns(result, chunk, chunk.index === normalized.chunks.length - 1);
-          await this.ctx.storage.put(cacheKey, result);
-        }
+        const normalized = (await this.ctx.storage.get<Normalized>('normalized'))!;
+        // Chunks are at most 300s + 2 × 20s = ~5m 40s and under 31 MB, inside Meta's
+        // one-shot limits (10 min, 32 MB), so several can be transcribed in parallel.
+        const PARALLEL = 3;
+        const jobId = job.id;
+        const start = job.completedChunks,
+          batch = normalized.chunks.slice(start, start + PARALLEL);
+        await Promise.all(
+          batch.map(async (chunk) => {
+            const cacheKey = `chunk:${chunk.index}`;
+            if (await this.ctx.storage.get<Segment[]>(cacheKey)) return;
+            const audio = await (
+              await this.bridge(`/chunks/${jobId}/${chunk.index}`)
+            ).arrayBuffer();
+            let result = await transcribe(
+              key,
+              audio,
+              chunk.index,
+              chunk.offset,
+              chunk.duration,
+              bridgedFetch(this.env),
+            );
+            result = ownedTurns(result, chunk, chunk.index === normalized.chunks.length - 1);
+            await this.ctx.storage.put(cacheKey, result);
+          }),
+        );
         const segments: Segment[] = [...normalized.segments];
-        for (let i = 0; i <= job.completedChunks; i++)
+        for (let i = 0; i < start + batch.length; i++)
           segments.push(...((await this.ctx.storage.get<Segment[]>(`chunk:${i}`)) || []));
         await this.ctx.storage.put('segments', segments);
-        job = { ...job, completedChunks: job.completedChunks + 1, status: 'partial' };
+        job = { ...job, completedChunks: start + batch.length, status: 'partial' };
         await push(
           'transcribe.chunk',
-          `Transcribed audio chunk ${job.completedChunks} of ${job.totalChunks}`,
+          `Transcribed audio chunks ${job.completedChunks} of ${job.totalChunks}`,
           {
             progress: { current: job.completedChunks, total: job.totalChunks },
             elapsedMs: Date.now() - stageStartedAt,
