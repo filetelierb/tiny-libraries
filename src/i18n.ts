@@ -587,6 +587,9 @@ const en = {
   noteCategory_procedure: 'Procedure',
   noteCategory_example: 'Example',
   noteCategory_summary: 'Summary',
+  saveSuggestedNote: 'Save as note',
+  discardSuggestedNote: 'Discard',
+  suggestedNoteDiscarded: 'Suggestion discarded',
   questionContext: 'For this question',
   removeQuestionContext: 'Remove question context',
   questionContextNotice:
@@ -1928,6 +1931,9 @@ const es: Dictionary = {
   noteCategory_procedure: 'Procedimiento',
   noteCategory_example: 'Ejemplo',
   noteCategory_summary: 'Resumen',
+  saveSuggestedNote: 'Guardar como nota',
+  discardSuggestedNote: 'Descartar',
+  suggestedNoteDiscarded: 'Sugerencia descartada',
   questionContext: 'Para esta pregunta',
   removeQuestionContext: 'Quitar contexto de la pregunta',
   questionContextNotice:

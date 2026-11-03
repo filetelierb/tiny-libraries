@@ -709,6 +709,8 @@ function ConversationThread({
   receiveRef.current = receive;
   changedRef.current = changed;
   const [controlBusy, setControlBusy] = useState(false);
+  // Tutor note suggestions seed a draft; dismissals are per-conversation until reload.
+  const [dismissedSuggestions, setDismissedSuggestions] = useState<Set<string>>(() => new Set());
   const submitLock = useRef(false),
     controlLock = useRef(false);
   const writeDraft = (value: TutorDraft) => {
@@ -1339,14 +1341,45 @@ function ConversationThread({
                     openTest={openTest}
                   />
                 ) : null}
-                {message.role === 'assistant' && message.noteSuggestion?.recommended && (
-                  <div className="message-note">
-                    <p>
-                      {t.suggestedByTutor} ·{' '}
-                      {t[`noteCategory_${message.noteSuggestion.category}`]}
-                    </p>
-                  </div>
-                )}
+                {message.role === 'assistant' &&
+                  message.noteSuggestion?.recommended &&
+                  (() => {
+                    const suggestionKey = message.messageId || `seq:${sequence}`;
+                    if (dismissedSuggestions.has(suggestionKey)) return null;
+                    const suggestion = message.noteSuggestion;
+                    const parentContext = contextFor(message);
+                    return (
+                      <div className="message-note">
+                        <p>
+                          {t.suggestedByTutor} ·{' '}
+                          {t[`noteCategory_${suggestion.category}`]}
+                        </p>
+                        <div className="message-note-actions">
+                          <Button
+                            size="sm"
+                            onClick={() =>
+                              annotate(suggestion.body, [], parentContext)
+                            }
+                          >
+                            {t.saveSuggestedNote}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() =>
+                              setDismissedSuggestions((prev) => {
+                                const next = new Set(prev);
+                                next.add(suggestionKey);
+                                return next;
+                              })
+                            }
+                          >
+                            {t.discardSuggestedNote}
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 {message.tools?.length ? (
                   <small>
                     {t.toolsUsed}:{' '}

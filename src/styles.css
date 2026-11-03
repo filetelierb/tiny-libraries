@@ -2371,8 +2371,6 @@ body:has(.panel-resizer.resizing) {
 }
 .artifact-note {
   margin: 0.6rem 0 0;
-  padding-left: 0.6rem;
-  border-left: 3px solid var(--chart-2);
   font-size: 0.9rem;
   line-height: 1.5;
 }
@@ -2577,6 +2575,12 @@ body:has(.panel-resizer.resizing) {
 .message-note > .message-action {
   font-size: var(--font-size-small);
   color: var(--muted-text);
+}
+.message-note-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
 }
 .tutor-artifact-card {
   display: flex;
@@ -3980,7 +3984,8 @@ body:has(.panel-resizer.resizing) {
 }
 .concept-coverage {
   padding: 10px;
-  border-left: 2px solid var(--primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   background: var(--background);
 }
 .suggestion-bulk,
@@ -4267,8 +4272,9 @@ body:has(.panel-resizer.resizing) {
   font-size: var(--font-size-control);
 }
 .concept-version-notice {
-  border-left: 2px solid var(--primary);
-  padding-left: 10px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
 }
 .reader-study {
   flex: 1;
@@ -9665,8 +9671,6 @@ body:has(.panel-resizer.resizing) {
 }
 .artifact-explorable-note {
   margin: 0.6rem 0 0;
-  padding-left: 0.7rem;
-  border-left: 3px solid var(--chart-2);
   font-size: 0.9rem;
 }
 .artifact-chart {
