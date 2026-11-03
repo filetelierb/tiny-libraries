@@ -20,11 +20,14 @@ import {
 import type { AgentEvent, AgentTool } from '../shared/agent-events';
 import type { ProjectSummary } from '../shared/projects';
 import { api } from './api';
+import { AgentFlow } from './AgentFlow';
 import { useAgentEvents } from './useAgentEvents';
 import type { T } from './i18n';
 
 const OPEN_KEY = 'tl:agent-panel:open';
 const HEIGHT_KEY = 'tl:agent-panel:height';
+const VIEW_KEY = 'tl:agent-panel:view';
+type View = 'list' | 'flow';
 const MIN = 120,
   DEFAULT = Math.round(window.innerHeight / 3);
 
@@ -114,6 +117,12 @@ export function AgentPanel({
 }) {
   const [open, setOpen] = useState(() => localStorage.getItem(OPEN_KEY) === 'yes');
   const [height, setHeight] = useState(() => Number(localStorage.getItem(HEIGHT_KEY)) || DEFAULT);
+  const [view, setView] = useState<View>(
+    () => (localStorage.getItem(VIEW_KEY) as View | null) || 'flow',
+  );
+  useEffect(() => {
+    localStorage.setItem(VIEW_KEY, view);
+  }, [view]);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const events = useAgentEvents(open);
   useEffect(() => {
@@ -196,28 +205,69 @@ export function AgentPanel({
           if (event.key === 'ArrowDown') setHeight((h) => Math.max(MIN, h - 40));
         }}
       />
-      <button type="button" className="agent-header" onClick={toggle} aria-expanded={open}>
-        <Activity size={14} aria-hidden="true" />
-        <strong>{t.agentPanel}</strong>
-        <span className="agent-counts">
-          {activeFiles > 0 ? (
-            <>
-              <LoaderCircle size={12} className="spin" aria-hidden="true" />
-              {t.agentActive.replace('{n}', String(activeFiles))}
-            </>
-          ) : scoped.length ? (
-            t.agentIdle.replace('{n}', String(scoped.length))
-          ) : (
-            t.agentWaiting
-          )}
-        </span>
-        {open ? (
-          <ChevronDown size={16} aria-hidden="true" />
-        ) : (
-          <ChevronUp size={16} aria-hidden="true" />
+      <div className="agent-header">
+        <button
+          type="button"
+          className="agent-header-toggle"
+          onClick={toggle}
+          aria-expanded={open}
+        >
+          <Activity size={14} aria-hidden="true" />
+          <strong>{t.agentPanel}</strong>
+          <span className="agent-counts">
+            {activeFiles > 0 ? (
+              <>
+                <LoaderCircle size={12} className="spin" aria-hidden="true" />
+                {t.agentActive.replace('{n}', String(activeFiles))}
+              </>
+            ) : scoped.length ? (
+              t.agentIdle.replace('{n}', String(scoped.length))
+            ) : (
+              t.agentWaiting
+            )}
+          </span>
+        </button>
+        {open && (
+          <div className="agent-view-switch" role="tablist" aria-label={t.agentView}>
+            {(['flow', 'list'] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                role="tab"
+                aria-selected={view === option}
+                onClick={() => setView(option)}
+              >
+                {option === 'flow' ? t.agentViewFlow : t.agentViewList}
+              </button>
+            ))}
+          </div>
         )}
-      </button>
-      {open && (
+        <button
+          type="button"
+          className="agent-header-chevron"
+          onClick={toggle}
+          aria-label={open ? t.collapse : t.expand}
+        >
+          {open ? (
+            <ChevronDown size={16} aria-hidden="true" />
+          ) : (
+            <ChevronUp size={16} aria-hidden="true" />
+          )}
+        </button>
+      </div>
+      {open && view === 'flow' && (
+        <div className="agent-flow-wrap">
+          {rows.length ? (
+            <AgentFlow events={scoped} t={t} />
+          ) : (
+            <p className="agent-empty">
+              <CircleHelp size={14} aria-hidden="true" />
+              <span>{t.agentEmpty}</span>
+            </p>
+          )}
+        </div>
+      )}
+      {open && view === 'list' && (
         <ol className="agent-events" aria-live="polite">
           {rows.length === 0 ? (
             <li className="agent-empty">
