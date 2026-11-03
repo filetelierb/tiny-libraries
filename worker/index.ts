@@ -447,7 +447,53 @@ export class Library extends DurableObject<Env> {
       fileName: file.name,
       summary: `Added ${value.synthesis.glossary.length} concepts of ${file.name} to the glossary`,
     });
+    await this.startAutoArtifact(file, value);
     await this.startAutoFlashcards(file, value);
+  }
+  /** Writes the study artifact (explanation chapters with questions and cards) for the file. */
+  private async startAutoArtifact(file: Source, learning: Learning) {
+    const settings = await this.settings();
+    const key = await this.apiKey();
+    if (!key || !learning.synthesis.artifact?.explanation) return;
+    const started = Date.now();
+    void recordEvent(this.env, this.project, {
+      tool: 'preparation',
+      action: 'artifact.generate',
+      fileId: file.id,
+      fileName: file.name,
+      summary: `Writing the explanation artifact for ${file.name}`,
+      model: settings.model,
+      reasoningEffort: 'auto',
+    });
+    let task: Promise<unknown> = Promise.resolve();
+    try {
+      await startArtifactStudy(this.ctx.storage, file.id, {
+        owner: this.executionId,
+        start: (next) => {
+          task = next;
+        },
+        generate: (currentLearning, chapters) =>
+          generateArtifactStudy(
+            key,
+            settings.model,
+            currentLearning,
+            chapters,
+            bridgedFetch(this.env),
+          ),
+      });
+      await task.catch(() => undefined);
+      void recordEvent(this.env, this.project, {
+        tool: 'preparation',
+        action: 'artifact.done',
+        fileId: file.id,
+        fileName: file.name,
+        summary: `Explanation artifact ready for ${file.name}`,
+        elapsedMs: Date.now() - started,
+        model: settings.model,
+      });
+    } catch (error) {
+      console.error('Auto-artifact failed', (error as Error).message);
+    }
   }
   /** Queues flashcard decks for every chapter and fires preparation.done when they are ready. */
   private async startAutoFlashcards(file: Source, learning: Learning) {

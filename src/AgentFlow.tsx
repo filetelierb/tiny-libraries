@@ -12,6 +12,7 @@ import {
   Languages,
   CircleDot,
   SquareStack,
+  FileText,
 } from 'lucide-react';
 import type { AgentEvent } from '../shared/agent-events';
 import type { T } from './i18n';
@@ -25,6 +26,7 @@ const STAGES = [
   'translate',
   'synthesize',
   'glossary',
+  'artifact',
   'flashcards',
   'done',
 ] as const;
@@ -46,6 +48,7 @@ const stageIcon: Record<Stage, React.ComponentType<{ size?: number }>> = {
   translate: Languages,
   synthesize: LayoutList,
   glossary: BookOpen,
+  artifact: FileText,
   flashcards: SquareStack,
   done: CircleDot,
 };
@@ -72,6 +75,8 @@ const stageOf: Partial<Record<string, Stage>> = {
   'synthesize.done': 'synthesize',
   'glossary.round': 'glossary',
   'glossary.ingest': 'glossary',
+  'artifact.generate': 'artifact',
+  'artifact.done': 'artifact',
   'flashcards.generate': 'flashcards',
   'flashcards.chapter.done': 'flashcards',
   'flashcards.done': 'flashcards',
@@ -165,6 +170,12 @@ function fileFlows(events: AgentEvent[], t: T): FileFlow[] {
         break;
       case 'glossary.ingest':
         done('glossary', t.agentStage_glossary);
+        break;
+      case 'artifact.generate':
+        open('artifact', t.agentStage_artifact);
+        break;
+      case 'artifact.done':
+        done('artifact', t.agentStage_artifact);
         break;
       case 'flashcards.generate':
         open('flashcards', t.agentStage_flashcards, event.progress);
