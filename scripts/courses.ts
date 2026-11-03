@@ -83,8 +83,8 @@ async function show() {
 
 async function download() {
   const course = await source(positional[0]).course(positional[1] || '');
-  const remembered = (await readConfig(root)).coursesDir;
-  const base = option('to') ? resolve(option('to')!) : remembered;
+  await readConfig(root);
+  const base = option('to') ? resolve(option('to')!) : undefined;
   if (!base) throw new DataFolderError('Choose where courses go with --to <folder>.');
   await assertVolumeMounted(base);
   const folder = join(base, course.source, courseFolderName(course));
@@ -104,7 +104,7 @@ async function download() {
   const needed = files.reduce((sum, file) => sum + (sizes.get(file.url) || 0), 0);
   await mkdir(folder, { recursive: true });
   await assertWritable(folder);
-  if (option('to')) await saveConfig(root, { coursesDir: base });
+  if (option('to')) await saveConfig(root, {});
   const disk = await statfs(folder);
   if (disk.bavail * disk.bsize < needed)
     throw new DataFolderError(

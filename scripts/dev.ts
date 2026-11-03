@@ -54,8 +54,9 @@ try {
   process.exit(1);
 }
 if (data.folder) console.log(`Library data: ${data.folder}`);
-const config = await readConfig(root);
-const bridge = await startBridge(token, data.processing, undefined, undefined, config.coursesDir);
+await readConfig(root);
+// The companion keeps every project's files under `projects/` in the data folder.
+const bridge = await startBridge(token, data.processing, undefined, undefined, data.folder || root);
 const port = 9876;
 const args = [
   'dev',
@@ -69,8 +70,6 @@ const args = [
   data.state,
   // Shown in Settings, so the library's location is visible from the app.
   ...(data.folder ? ['--var', `DATA_DIR:${data.folder}`] : []),
-  // Where downloaded courses are, so a new project can start from one.
-  ...(config.coursesDir ? ['--var', `COURSES_DIR:${config.coursesDir}`] : []),
 ];
 // If the runtime stops unexpectedly, the bridge keeps running and the runtime is started again,
 // a bounded number of times.

@@ -13,8 +13,8 @@ const configFile = (root: string) => join(root, '.local', 'config.json');
 
 export class DataFolderError extends Error {}
 
-/** Launch preferences kept in the project, such as the data and courses folders. */
-export type LocalConfig = { dataDir?: string; coursesDir?: string };
+/** Launch preferences kept in the project, such as the data folder. */
+export type LocalConfig = { dataDir?: string };
 export async function readConfig(root: string): Promise<LocalConfig> {
   try {
     return JSON.parse(await readFile(configFile(root), 'utf8'));

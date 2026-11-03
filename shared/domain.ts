@@ -27,6 +27,8 @@ export const sourceSchema = z.object({
   trashed: z.boolean().optional(),
   reviewed: z.boolean(),
   createdAt: z.string(),
+  /** Where the original is in the project's folder, when the project keeps files on disk. */
+  path: z.string().min(1).max(1024).optional(),
 });
 export type Source = z.infer<typeof sourceSchema>;
 export const directorySchema = z.object({

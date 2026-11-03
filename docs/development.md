@@ -396,3 +396,15 @@ Without a turn, a job stays queued with its place in line (`position`) and asks 
 The library shows the place in line beside each waiting file (a clock and its number), in the preparation queue ("Waiting its turn · 3 in line"), and in the line above the files ("45 waiting their turn"). The line names both files under way.
 
 Verification: type checks and 323 tests pass, including turns for two jobs at a time, the order of the line, a renewed turn and an expired one. With the CS223A project preparing all its files, after the restart and the jobs' recovery wake, `GET /api/jobs` reported 2 running (one transcribing, one reviewing its glossary), 42 queued with places 1 to 42, and 3 completed. The markers were not checked in a browser.
+
+### Course import removed; every project gets a folder of its own on disk
+
+The "From a course" dialog, the pack export and import, the companion `/courses/*` routes and the `COURSES_DIR` variable are gone. The dialog asks only for the name; `POST /api/projects` takes only `{name}`. `scripts/courses/import.ts` keeps its `--project` path (uploads copies into a named project under a folder named for the course). The download scripts (`npm run courses -- list|show|download`) are unchanged.
+
+Every new project now gets its own folder on disk, made by the companion before the project record is written. `POST /disk/project-folder {id, name, used}` returns the folder path; the companion sanitises the name (strips `\/:*?"<>|`, trims whitespace, caps at 80 chars) and adds " (2)" if the name clashes with another project's folder. The project record stores `folder`; a project made without one (because the companion is not running) falls back to the Workers object storage, as before.
+
+Uploads go through the companion when the project has a folder: `PUT /disk/file?folder=&path=` writes the file at the first free name for its library path and returns the final `path`, which the file record keeps. Reads go through `GET /disk/file` with range support (`X-File-Size`, `Content-Range`), so the player, PDF reader and preparation all stream from disk. A delete removes the file (and its macOS attribute file) and prunes empty parent folders. A rename or move follows on disk; a move that fails leaves the file at its old place, so the record stays readable. Deleting the project drops the records and the stored originals, including the files on disk.
+
+The outer upload and content handlers choose by the project's `folder`: when set, they call the companion; when not, they use R2 as before. The pergeStoredFiles helper deletes from disk by `file.path` when the DO's reply names the folder.
+
+Verification: type checks and 322 tests pass, including that `newProjectFolder` writes under `projects/`, sanitises unsafe characters and adds a numeric suffix when the name clashes. The live app smoke test was not run in this session (the external disk is unplugged).

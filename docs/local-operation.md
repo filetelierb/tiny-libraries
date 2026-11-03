@@ -60,18 +60,9 @@ Or start a new library there with `npm run dev -- --data "/Volumes/MyDisk/course
 - macOS asks before a program uses a removable volume. If the start says access was denied, allow your terminal under System Settings › Privacy & Security › Files and Folders › Removable Volumes.
 - `move-data` copies and checks that file counts and sizes match before switching. It leaves the previous copy in place; delete it yourself once the library opens from the new folder.
 
-## A project from a course
+## A folder of its own for every project
 
-Every project keeps its files in the library's data folder. **New project → From a course** starts one from a downloaded course in the courses folder (`coursesDir` in `.local/config.json`, set when courses are downloaded). It lists each sub-folder with readable files, and each course inside a site folder such as `see/`, with its videos, documents and size. The name starts as the course title. Then choose what to bring in:
-
-- **Files only**: the course's files are copied into the library with their folders (`Handouts/`, `Lectures/Lecture 01/…`), ready to prepare from scratch. **Prepare once copied** can queue the videos or every file, which uses your Meta key.
-- **With prepared material**: offered when the course carries prepared material. Transcripts, subtitles, chapters with their mini quizzes, the glossary, the artifact, pictures and flashcards come ready; nothing is prepared again. Files the material does not cover stay ready to prepare.
-
-Copying runs in the background, one file after another, and resumes if the app restarts; the project's card on the home page shows how far it has come. While files are prepared, a line above the library's files names the file under way and its step (or how many are under way), how many wait and how many need attention, and opens the preparation queue; each file being prepared shows a spinner beside its name, a clock and its place in line while it waits, or an alert if it stopped. Two files are prepared at a time across the app; the others wait their turn in the order they were queued. A file that finishes shows its chapters and practice without reloading. The course folder is never changed by the copy, and deleting the project leaves it as it is.
-
-**Save prepared material with the course**, on the card of a project made from a course, writes the project's prepared material to `.tailored-library/` inside the course folder (hidden, so it is never listed as a course file). It is matched to files by their place in the course and their size, so a file that changed is prepared again. Your progress, notes, conversations, card reviews and edits to the glossary are never part of it; saving again replaces the earlier copy.
-
-A course that already has a project is shown but cannot be chosen; delete that project first to start again from the course.
+Every project the app makes gets a folder of its own under `projects/` in the library's data folder, named after the project (unsafe characters are stripped and duplicates get " (2)"). The files you upload are kept there as ordinary files, with the library's folder structure (`Handouts/`, `Lectures/Lecture 01/…`). A project without a folder (made before this change) continues to keep its files in the Workers object storage; new projects always get one. Deleting a project removes the records and the files, folder and all. The folder path is shown on the project's card.
 
 ## Open courseware
 
@@ -86,7 +77,7 @@ npm run courses -- import "/Volumes/MyDisk/courses/see/EE261 – The Fourier Tra
 
 - `download` takes every handout, assignment, exam and transcript, and the videos of the lectures named with `--lectures` (`1-3`, `1,4,7`, `all`; none by default). `--no-transcripts` and `--no-materials` leave those out. It checks free space first, resumes interrupted files, and remembers the `--to` folder.
 - A course folder holds `Handouts/`, `Assignments/`, `Exams/` and `Lectures/Lecture 01/…` as the course page lists them, plus `course.json` (what was downloaded) and `SOURCE.md` (source, instructor and license). Links to other sites are not downloaded.
-- `import` needs the app running and the course in the courses folder. It makes a project from the course as **New project → From a course** does: the app copies the files with their folders; other kinds (zip, gif) are left out. `--prepare videos` or `--prepare all` queues preparation once they are copied, which uses your Meta key; follow it in the preparation queue. `--project <name>` instead uploads copies into an existing project, under a folder named for the course, and skips files already there, so it can be repeated after downloading more lectures.
+- `import` needs the app running and names the project to upload the course's files into with `--project <name>`. The downloaded files go in under a folder named for the course; other kinds (zip, gif) are left out. `--prepare videos` or `--prepare all` queues preparation of the uploaded files, which uses your Meta key; follow it in the preparation queue. Files already in the project are skipped, so it can be repeated after downloading more lectures.
 
 Downloaded courses stay on your disk and are never part of the repository. Attribute the course and its source when you show the material, for example in a demo.
 

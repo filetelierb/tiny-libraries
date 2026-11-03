@@ -26,7 +26,6 @@
     "APP_URL": "http://127.0.0.1:9876",
     "MEDIA_BRIDGE_URL": "http://127.0.0.1:9877",
     "MEDIA_BRIDGE_TOKEN": "launcher-required",
-    "DATA_DIR": "",
-    "COURSES_DIR": "",
+    "DATA_DIR": ""
   },
 }

@@ -10590,91 +10590,14 @@ body:has(.panel-resizer.resizing) {
   vertical-align: -2px;
   color: var(--primary);
 }
-.new-project-prepare {
-  display: grid;
-  gap: 6px;
-  margin-top: 4px;
-  font-size: var(--font-size-control);
-}
-.new-project-prepare small {
-  color: var(--muted-text);
-  font-size: var(--font-size-xs);
-  line-height: 1.5;
-}
-.new-project-start {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 4px;
-  padding: 3px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-}
-.new-project-start button {
-  padding: 6px 10px;
-  border: 0;
-  border-radius: calc(var(--radius-sm) - 2px);
-  background: none;
-  color: var(--muted-text);
-  font: inherit;
-  font-size: var(--font-size-control);
-  cursor: pointer;
-}
-.new-project-start button[aria-selected='true'] {
-  background: color-mix(in oklch, var(--primary) 10%, transparent);
-  color: inherit;
-  font-weight: var(--font-weight-medium);
-}
-.course-choices {
-  display: grid;
-  gap: 6px;
-  max-height: 260px;
-  margin: 0;
-  padding: 0;
-  overflow-y: auto;
-  list-style: none;
-}
-.course-choices button {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: none;
-  color: inherit;
-  font: inherit;
-  font-size: var(--font-size-control);
-  text-align: left;
-  cursor: pointer;
-}
-.course-choices button svg {
-  flex: none;
-  margin-top: 2px;
-  color: var(--muted-text);
-}
-.course-choices button[aria-checked='true'] {
-  border-color: var(--primary);
-  background: color-mix(in oklch, var(--primary) 6%, transparent);
-}
-.course-choices button:disabled {
-  cursor: default;
-  opacity: 0.6;
-}
-.course-choices small {
-  display: block;
-  margin-top: 2px;
-  color: var(--muted-text);
-  font-size: var(--font-size-xs);
-}
-.home-project-course {
-  display: flex;
+.home-project-folder {
+  display: inline-flex;
   align-items: center;
   gap: 4px;
-  min-width: 0;
-  overflow: hidden;
   color: var(--muted-text);
   font-size: var(--font-size-xs);
+  font-family: var(--font-mono);
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

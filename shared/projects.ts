@@ -11,34 +11,14 @@ export const projectSchema = z.object({
   name: z.string().trim().min(1).max(120),
   createdAt: z.string(),
   lastActiveAt: z.string().nullable(),
-  /** The downloaded course the project was made from; its files were copied into the library. */
-  course: z.string().max(1024).nullable().optional(),
+  /** The folder on disk where the project keeps its files, under the library's `projects/`. */
+  folder: z.string().max(1024).nullable().optional(),
 });
 export type Project = z.infer<typeof projectSchema>;
 export const projectInputSchema = z.object({ name: z.string().trim().min(1).max(120) }).strict();
-export const projectCreateSchema = projectInputSchema
-  .extend({
-    course: z.string().trim().min(1).max(1024).optional(),
-    /** Brings in the prepared material the course carries, matched to its files. */
-    pack: z.boolean().default(false),
-    /** What to queue for preparation, in `locale`, once the course's files are copied. */
-    prepare: z.enum(['none', 'videos', 'all']).default('none'),
-    locale: z.enum(['en', 'es']).default('en'),
-  })
-  .strict();
-/** How far copying a course's files into the project has come. */
-export type CourseImport = {
-  done: number;
-  total: number;
-  status: 'copying' | 'importing' | 'done' | 'failed';
-  error?: string;
-};
+export const projectCreateSchema = projectInputSchema;
 /** A project with what the home page shows on its card. */
-export type ProjectSummary = Project & {
-  files: number;
-  sessions: number;
-  importing?: CourseImport | null;
-};
+export type ProjectSummary = Project & { files: number; sessions: number };
 
 /** The Durable Object that holds a project's library; the first one keeps its original name. */
 export const libraryObjectName = (project: ProjectId) =>

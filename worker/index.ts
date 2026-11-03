@@ -23,8 +23,16 @@ import {
   type Job,
   type Locale,
 } from '../shared/domain';
-import { CourseError, listCourses, readCourseFile, scanCourse } from './courses';
-import { exportPack, importPack, PackError } from './pack';
+import {
+  createProjectFolder,
+  deleteOriginal,
+  diskPath,
+  DiskError,
+  moveOriginal,
+  readOriginal,
+  withFolderOriginals,
+  writeOriginal,
+} from './disk';
 import { claimTurn, noTurns, releaseTurn, type Turns } from '../shared/preparation-turns';
 export { ProcessingJob } from './jobs';
 export { TutorConversation } from './tutor-conversation';
@@ -144,7 +152,6 @@ import {
   projectInputSchema,
   projectCreateSchema,
   withoutProject,
-  type CourseImport,
   type StoredActivityDay,
   type Project,
   type ProjectId,
@@ -152,8 +159,11 @@ import {
 } from '../shared/projects';
 
 /** Stored bytes of permanently deleted files go after their records. */
-/** Removes every stored object under a prefix, a page at a time. */
-async function purgeStoredFiles(env: Env, files: Array<{ id: string; version: number }>) {
+async function purgeStoredFiles(
+  env: Env,
+  files: Array<{ id: string; version: number; path?: string }>,
+  folder?: string | null,
+) {
   for (const file of files) {
     const keys = Array.from(
       { length: file.version },
@@ -165,6 +175,7 @@ async function purgeStoredFiles(env: Env, files: Array<{ id: string; version: nu
       ...keys,
       ...[...captions.objects, ...visuals.objects].map((object) => object.key),
     ]);
+    if (folder && file.path) await deleteOriginal(env, folder, file.path).catch(() => {});
   }
 }
 /** A response that reports scored interactions the router cannot see in the request. */
@@ -241,14 +252,7 @@ async function existingProject(env: Env, project: ProjectId) {
   return project;
 }
 /** Routes that belong to the app as a whole rather than to one project's library. */
-const appRoute = (path: string) => /^\/api\/(settings|projects|activity|courses)(\/|$)/.test(path);
-/** A course being copied into a project; the files still to copy are kept one per key. */
-type CourseImportState = CourseImport & {
-  root: string;
-  pack: boolean;
-  prepare: 'none' | 'videos' | 'all';
-  locale: Locale;
-};
+const appRoute = (path: string) => /^\/api\/(settings|projects|activity)(\/|$)/.test(path);
 async function boundedJson(request: Request) {
   const reader = request.body?.getReader();
   if (!reader) return {};
@@ -387,11 +391,13 @@ export class Library extends DurableObject<Env> {
       );
       const value = await response.json<{
         error?: string;
-        files?: Array<{ id: string; version: number }>;
+        files?: Array<{ id: string; version: number; path?: string }>;
+        folder?: string | null;
       }>();
       if (!response.ok)
         throw new TutorActionError(value.error || 'Library action failed', response.status);
-      if (method === 'DELETE' && value.files) await purgeStoredFiles(this.env, value.files);
+      if (method === 'DELETE' && value.files)
+        await purgeStoredFiles(this.env, value.files, value.folder ?? null);
       return value;
     };
   }
@@ -409,127 +415,7 @@ export class Library extends DurableObject<Env> {
   private get project(): ProjectId {
     return this.home ? 'default' : (this.ctx.id.name!.slice('project:'.length) as ProjectId);
   }
-  /** How far copying the project's course has come, while it is under way or failed. */
-  private async courseImport(): Promise<CourseImport | null> {
-    const state = await this.ctx.storage.get<CourseImportState>('course-import');
-    if (!state || state.status === 'done') return null;
-    const { done, total, status, error } = state;
-    return { done, total, status, ...(error ? { error } : {}) };
-  }
-  /** Lists a course's files to copy and starts copying them, one per alarm. */
-  private async startCourseImport(input: Omit<CourseImportState, keyof CourseImport>) {
-    const { files } = await scanCourse(this.env, input.root);
-    for (const [index, file] of files.entries())
-      await this.ctx.storage.put(`course-entry:${String(index).padStart(6, '0')}`, file);
-    await this.ctx.storage.put('course-import', {
-      ...input,
-      done: 0,
-      total: files.length,
-      status: 'copying',
-    } satisfies CourseImportState);
-    await this.ctx.storage.setAlarm(Date.now());
-    return { total: files.length };
-  }
-  /**
-   * Copies one file of the course into the library, keeping its path in the course as its
-   * folder and name. A file the course no longer has is skipped.
-   */
-  private async copyCourseFile(root: string, entry: { path: string; size: number }) {
-    const parts = entry.path.split('/'),
-      name = parts.pop()!,
-      folder = normalizePath(parts.join('/')),
-      kind = kindFor(name);
-    if (!kind || kind === 'artifact' || name.length > 240 || folder.length > 240) return;
-    let response: Response;
-    try {
-      response = await readCourseFile(this.env, root, entry.path);
-    } catch (error) {
-      if (error instanceof CourseError && error.status === 404) return;
-      throw error;
-    }
-    const file: Source = {
-      id: crypto.randomUUID(),
-      version: 1,
-      name,
-      folder,
-      kind,
-      mime: mimeFor(name),
-      size: Number(response.headers.get('Content-Length')) || entry.size,
-      archived: false,
-      reviewed: false,
-      createdAt: new Date().toISOString(),
-    };
-    await this.env.FILES.put(`original/${file.id}/1`, response.body!, {
-      httpMetadata: { contentType: file.mime },
-    });
-    try {
-      await this.ctx.storage.transaction(async (storage) => {
-        if (!(await storage.get('course-import'))) throw new ApiError('Import stopped', 409);
-        const snapshot = await this.directorySnapshot(storage);
-        for (const entry of ensureDirectories(snapshot.directories, [folder]))
-          await storage.put(`directory:${entry.id}`, entry);
-        await storage.put(`file:${file.id}`, file);
-      });
-    } catch (error) {
-      await this.env.FILES.delete(`original/${file.id}/1`);
-      throw error;
-    }
-  }
-  /**
-   * Copies the next file of a course being imported. Once all are copied, its prepared
-   * material comes in and the files left to prepare are queued, as the student chose.
-   */
-  async alarm() {
-    const storage = this.ctx.storage;
-    const state = await storage.get<CourseImportState>('course-import');
-    if (!state || state.status === 'done' || state.status === 'failed') return;
-    const [next] = await storage.list<{ path: string; size: number }>({
-      prefix: 'course-entry:',
-      limit: 1,
-    });
-    if (next) {
-      try {
-        await this.copyCourseFile(state.root, next[1]);
-      } catch (error) {
-        // The companion may be restarting with the app; the copy resumes where it stopped.
-        if (error instanceof CourseError && error.status >= 500) {
-          await storage.setAlarm(Date.now() + 30000);
-          return;
-        }
-        await storage.put('course-import', {
-          ...state,
-          status: 'failed',
-          error: error instanceof Error ? error.message : 'Copy failed',
-        });
-        return;
-      }
-      await storage.delete(next[0]);
-      await storage.put('course-import', { ...state, done: state.done + 1 });
-      await storage.setAlarm(Date.now());
-      return;
-    }
-    await storage.put('course-import', { ...state, status: 'importing' });
-    const files = [...(await storage.list<Source>({ prefix: 'file:' })).values()];
-    if (state.pack)
-      await importPack(storage, this.env, state.root, files, (value) =>
-        this.publishLearning(value),
-      ).catch((error) => console.error('Prepared material could not be imported', error));
-    if (state.prepare !== 'none' && (await this.apiKey())) {
-      const prepared = new Set(
-        [...(await storage.list({ prefix: 'learning:' })).keys()].map((key) =>
-          key.slice('learning:'.length),
-        ),
-      );
-      for (const file of files)
-        if (
-          !prepared.has(file.id) &&
-          (state.prepare === 'all' || file.kind === 'video' || file.kind === 'audio')
-        )
-          await startJob(this.env, file, state.locale, this.project);
-    }
-    await storage.put('course-import', { ...state, status: 'done' });
-  }
-  /** Stores a file's prepared material, as its preparation or a course's pack hands it over. */
+  /** Stores a file's prepared material, as its preparation hands it over. */
   private async publishLearning(value: Learning) {
     const file = await this.ctx.storage.get<Source>(`file:${value.sourceId}`);
     if (!file || file.version !== value.sourceVersion)
@@ -540,6 +426,48 @@ export class Library extends DurableObject<Env> {
     await ingestLearning(this.ctx.storage, value).catch((error) =>
       console.error('Concept creation after preparation failed', error),
     );
+  }
+  /** The folder of the project this library belongs to, cached per library instance. */
+  private folderCache?: Promise<string | null>;
+  private projectFolder() {
+    this.folderCache ??= this.home
+      ? Promise.resolve(null)
+      : internal<{ folder: string | null }>(this.env, `/internal/projects/${this.project}`).then(
+          (value) => value.folder,
+        );
+    return this.folderCache;
+  }
+  /** The library's object storage, except originals of files kept in the project's folder. */
+  private originals() {
+    return withFolderOriginals(this.env.FILES, this.env, async (id) => {
+      const [folder, file] = await Promise.all([
+        this.projectFolder(),
+        this.ctx.storage.get<Source>(`file:${id}`),
+      ]);
+      return folder && file?.path ? { folder, path: file.path } : null;
+    });
+  }
+  /** After a rename or move, the project's files follow on disk; a failure keeps the record. */
+  private async followOnDisk(files: Source[]) {
+    const folder = await this.projectFolder();
+    if (!folder) return files;
+    const moved: Source[] = [];
+    for (const file of files) {
+      const target = diskPath(file);
+      if (!file.path || file.path === target) {
+        moved.push(file);
+        continue;
+      }
+      try {
+        const { path } = await moveOriginal(this.env, folder, file.path, target);
+        const next = { ...file, path };
+        await this.ctx.storage.put(`file:${file.id}`, next);
+        moved.push(next);
+      } catch {
+        moved.push(file);
+      }
+    }
+    return moved;
   }
   private async apiKey() {
     if (this.home) return this.ctx.storage.get<string>('apiKey');
@@ -581,21 +509,7 @@ export class Library extends DurableObject<Env> {
     }
     if (existsMatch) {
       const record = await storage.get<Project>(`project:${existsMatch[1]}`);
-      return json({ exists: !!record, course: record?.course ?? null });
-    }
-    if (path === '/api/courses' && request.method === 'GET') {
-      if (!this.env.COURSES_DIR) return json({ root: null, courses: [] });
-      const listed = await listCourses(this.env);
-      const used = new Map(
-        (await projects()).filter((p) => p.course).map((p) => [p.course, p.name] as const),
-      );
-      return json({
-        ...listed,
-        courses: listed.courses.map((course) => ({
-          ...course,
-          project: used.get(course.path) ?? null,
-        })),
-      });
+      return json({ exists: !!record, folder: record?.folder ?? null });
     }
     if (path === '/internal/activity' && request.method === 'POST') {
       const { project, day, events } = z
@@ -628,32 +542,26 @@ export class Library extends DurableObject<Env> {
     if (path === '/api/projects') {
       if (request.method === 'POST') {
         const input = projectCreateSchema.parse(await boundedJson(request));
-        // A course is one the companion lists, so only the courses folder is ever read.
-        const course = input.course
-          ? (await listCourses(this.env)).courses.find((entry) => entry.path === input.course)
-          : undefined;
-        if (input.course && !course) throw new ApiError('Course not found', 404);
-        if (course && (await projects()).some((project) => project.course === course.path))
-          throw new ApiError('A project was already made from this course', 409);
+        const id = crypto.randomUUID();
+        // A folder on disk holds every upload of the project, under its library folders.
+        const used = (await projects())
+          .map((p) => p.folder)
+          .filter((folder): folder is string => !!folder);
+        let folder: string | undefined;
+        try {
+          folder = (await createProjectFolder(this.env, { id, name: input.name, used })).folder;
+        } catch (error) {
+          // Without the companion, the project is still made; its files go to object storage.
+          console.error('Project folder could not be created', error);
+        }
         const project: Project = {
-          id: crypto.randomUUID(),
+          id,
           name: input.name,
           createdAt: new Date().toISOString(),
           lastActiveAt: null,
-          ...(course ? { course: course.path } : {}),
+          ...(folder ? { folder } : {}),
         };
         await storage.put(`project:${project.id}`, project);
-        // A course that cannot be listed leaves no empty project behind.
-        if (course)
-          await internal(
-            this.env,
-            '/internal/course/start',
-            { root: course.path, pack: input.pack, prepare: input.prepare, locale: input.locale },
-            project.id,
-          ).catch(async (error) => {
-            await storage.delete(`project:${project.id}`);
-            throw error;
-          });
         return json(project, 201);
       }
       const summaries: ProjectSummary[] = await Promise.all(
@@ -812,36 +720,7 @@ export class Library extends DurableObject<Env> {
             (file) => !file.trashed,
           ).length,
           sessions: (await this.ctx.storage.list({ prefix: 'session:' })).size,
-          importing: await this.courseImport(),
         });
-      if (path === '/internal/course/start' && request.method === 'POST') {
-        const input = z
-          .object({
-            root: z.string().min(1).max(1024),
-            pack: z.boolean(),
-            prepare: z.enum(['none', 'videos', 'all']),
-            locale: localeSchema,
-          })
-          .parse(await boundedJson(request));
-        return json(await this.startCourseImport(input));
-      }
-      if (path === '/api/pack/export' && request.method === 'POST') {
-        const { course } = await internal<{ course: string | null }>(
-          this.env,
-          `/internal/projects/${this.project}`,
-        );
-        if (!course) throw new ApiError('This project was not made from a course', 409);
-        if (await this.courseImport())
-          throw new ApiError('Wait until the course has been copied', 409);
-        const files = [...(await this.ctx.storage.list<Source>({ prefix: 'file:' })).values()];
-        const manifest = await exportPack(
-          this.ctx.storage,
-          this.env,
-          course,
-          files.filter((file) => !file.trashed && !file.archived),
-        );
-        return json({ files: manifest.files.length, locale: manifest.locale });
-      }
       if (path === '/internal/purge' && request.method === 'POST') {
         await this.purgeProject();
         return json({ ok: true });
@@ -1150,8 +1029,13 @@ export class Library extends DurableObject<Env> {
           return target;
         });
         return json({
-          files: removed.files.map((file) => ({ id: file.id, version: file.version })),
+          files: removed.files.map((file) => ({
+            id: file.id,
+            version: file.version,
+            ...(file.path ? { path: file.path } : {}),
+          })),
           directories: removed.directories.length,
+          folder: await this.projectFolder(),
         });
       }
       if (
@@ -1335,7 +1219,7 @@ export class Library extends DurableObject<Env> {
               batch,
               locale,
               bridgedFetch(this.env),
-              await readAssessmentImages(this.env.FILES, context),
+              await readAssessmentImages(this.originals(), context),
             );
           },
           analyze: async (
@@ -1355,7 +1239,7 @@ export class Library extends DurableObject<Env> {
               grades,
               locale,
               bridgedFetch(this.env),
-              await readAssessmentImages(this.env.FILES, context),
+              await readAssessmentImages(this.originals(), context),
             );
           },
         };
@@ -1409,7 +1293,7 @@ export class Library extends DurableObject<Env> {
                 html
                   ? assessmentHTML(
                       detail,
-                      await readAssessmentImages(this.env.FILES, detail.context),
+                      await readAssessmentImages(this.originals(), detail.context),
                     )
                   : assessmentMarkdown(detail),
                 {
@@ -1718,8 +1602,7 @@ export class Library extends DurableObject<Env> {
         error instanceof AssessmentError ||
         error instanceof TutorJournalError ||
         error instanceof PracticeError ||
-        error instanceof CourseError ||
-        error instanceof PackError
+        error instanceof DiskError
       )
         return json({ error: error.message }, error.status);
       if (error instanceof MetaError)
@@ -2004,16 +1887,17 @@ async function serve(request: Request, env: Env, url: URL): Promise<Response> {
         const response = await library(env, project).fetch(request);
         if (!response.ok) return response;
         const removed = await response.json<{
-          files: Array<{ id: string; version: number }>;
+          files: Array<{ id: string; version: number; path?: string }>;
           directories: number;
+          folder: string | null;
         }>();
         // Stored bytes go after the records, so a failure here never leaves a visible file without content.
-        await purgeStoredFiles(env, removed.files);
-        return json(removed);
+        await purgeStoredFiles(env, removed.files, removed.folder);
+        return json({ files: removed.files, directories: removed.directories });
       }
       return library(env, project).fetch(request);
     } catch (error) {
-      if (error instanceof ApiError || error instanceof CourseError)
+      if (error instanceof ApiError || error instanceof DiskError)
         return json({ error: error.message }, error.status);
       if (error instanceof z.ZodError || error instanceof SyntaxError)
         return json({ error: 'Invalid request' }, 400);
