@@ -9,6 +9,7 @@ import {
   Presentation,
 } from 'lucide-react';
 import type { Artifact, Segment } from '../shared/domain';
+import { formatTime } from '../shared/media-controls';
 import type { T } from './i18n';
 import { SignalExplorer } from './SignalExplorer';
 import { Button } from './design/components';
@@ -85,10 +86,16 @@ export function GeneratedArtifact({
   const cited = [...new Set([...artifact.segmentIds, ...widgetCites])]
     .map((id) => segments.find((segment) => segment.id === id))
     .filter((segment): segment is Segment => !!segment);
-  const label = (segment: Segment) =>
-    [sourceName, segment.page ? `${t.page} ${segment.page}` : segment.id]
-      .filter(Boolean)
-      .join(' · ');
+  // A recording's reference reads as its playback timestamp; a document's reads as its page.
+  const label = (segment: Segment) => {
+    const marker =
+      segment.start != null && Number.isFinite(segment.start)
+        ? formatTime(segment.start)
+        : segment.page
+          ? `${t.page} ${segment.page}`
+          : segment.id;
+    return [sourceName, marker].filter(Boolean).join(' · ');
+  };
   // Glossary terms in the text open the Glossary focused on that entry.
   const linkable = openConcept ? concepts : noConcepts,
     matcher = useMemo(() => conceptMatcher(linkable), [linkable]),
