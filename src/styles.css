@@ -8042,16 +8042,113 @@ body:has(.panel-resizer.resizing) {
   font-size: var(--font-size-2xs);
   color: var(--muted-text);
 }
-.annotation-card blockquote {
+.annotation-card blockquote,
+.annotation-card .annotation-card-quote {
   max-height: 140px;
-  margin: 8px 0 0;
-  padding: 0 0 0 8px;
+  margin: 0 0 8px;
+  padding: 6px 10px;
   overflow: auto;
-  border-left: 2px solid var(--border);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklch, var(--muted) 45%, transparent);
   white-space: pre-wrap;
   font-size: var(--font-size-2xs);
   font-style: italic;
   color: var(--muted-text);
+}
+.annotation-stamp-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+.annotation-stamp-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--background);
+  color: var(--text);
+  font-size: var(--font-size-2xs);
+  line-height: 1.4;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.annotation-stamp-chip:hover {
+  border-color: color-mix(in oklch, var(--primary) 40%, var(--border));
+  background: color-mix(in oklch, var(--primary) 8%, var(--background));
+  color: var(--primary);
+}
+.annotation-capture-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 6px;
+  margin-top: 8px;
+}
+.annotation-capture-thumb {
+  display: block;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--background);
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  cursor: pointer;
+}
+.annotation-capture-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.annotation-capture-thumb:hover {
+  border-color: color-mix(in oklch, var(--primary) 40%, var(--border));
+}
+.annotation-capture-more {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--background);
+  color: var(--muted-text);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  aspect-ratio: 4 / 3;
+  cursor: pointer;
+}
+.annotation-capture-more:hover {
+  color: var(--primary);
+  border-color: color-mix(in oklch, var(--primary) 40%, var(--border));
+}
+.annotation-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 8px;
+}
+.annotation-origin {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--muted) 40%, transparent);
+  color: var(--muted-text);
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.02em;
+}
+.annotation-origin.origin-tutor {
+  border-color: color-mix(in oklch, var(--primary) 40%, var(--border));
+  background: color-mix(in oklch, var(--primary) 10%, transparent);
+  color: var(--primary);
 }
 .annotation-card-actions {
   display: flex;

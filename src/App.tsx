@@ -2251,6 +2251,7 @@ export function App() {
                     })
                   }
                   navigate={(item) => navigateAnnotation(item.sourceId!, item.location)}
+                  jumpTo={(sourceId, location) => navigateAnnotation(sourceId, location)}
                   remove={async (item) => {
                     await run(async () => {
                       await api(`/annotations/${item.id}`, 'DELETE');

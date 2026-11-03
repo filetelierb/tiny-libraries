@@ -9,7 +9,7 @@ import { DirectoryTree, type TreeActions } from '../workspace/DirectoryTree';
 import { queryAnnotations } from './api';
 import { RichContent } from './RichContent';
 import { StrokeLayer } from './Sketch';
-import { CaptureCollectionView, stampLabel } from './CaptureCollection';
+import { CaptureCollectionView, CaptureGallery, stampLabel } from './CaptureCollection';
 import { capturePreviewUrl } from './captureClient';
 import type { T } from '../i18n';
 
@@ -52,6 +52,7 @@ export function AnnotationsPanel({
     [refresh, setRefresh] = useState(0),
     [query, setQuery] = useState(''),
     [opened, setOpened] = useState<Annotation | null>(null),
+    [gallery, setGallery] = useState<{ item: Annotation; captureId: string } | null>(null),
     [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const resourceKey = [...new Set(openSourceIds)].sort().join(',');
   const openIds = new Set(openSourceIds);
@@ -113,6 +114,14 @@ export function AnnotationsPanel({
       const value = await api<Annotation>(`/annotations/${item.id}`);
       if (editing) edit(value);
       else setOpened(value);
+    } catch (error) {
+      onError(error instanceof Error ? error.message : t.error);
+    }
+  };
+  const openGallery = async (item: AnnotationSummary, captureId: string) => {
+    try {
+      const value = await api<Annotation>(`/annotations/${item.id}`);
+      setGallery({ item: value, captureId });
     } catch (error) {
       onError(error instanceof Error ? error.message : t.error);
     }
@@ -292,19 +301,44 @@ export function AnnotationsPanel({
                   <Trash2 />
                 </IconButton>
               </header>
+              {(item.location.quote || item.quoteText) && (
+                <blockquote className="annotation-card-quote">
+                  {item.quoteText || item.location.quote}
+                </blockquote>
+              )}
               <AnnotationPreview
                 key={`${item.id}:${item.revision}`}
                 item={item}
                 t={t}
                 open={() => void open(item)}
+                openCapture={(captureId) => void openGallery(item, captureId)}
               />
-              <p className="annotation-card-date">
-                {new Date(item.updatedAt).toLocaleDateString(undefined, {
-                  day: 'numeric',
-                  month: 'short',
-                })}
-              </p>
-              {item.location.quote && <blockquote>{item.location.quote}</blockquote>}
+              {!!item.stamps?.length && (
+                <div className="annotation-stamp-chips" role="group" aria-label={t.jumpToStamp}>
+                  {item.stamps.map((stamp) => (
+                    <button
+                      type="button"
+                      key={stamp.id}
+                      className="annotation-stamp-chip"
+                      onClick={() => navigate(stamp.sourceId, stamp.location)}
+                      title={stampLabel(stamp, t)}
+                    >
+                      {stampLabel(stamp, t)}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="annotation-card-meta">
+                <span className={`annotation-origin origin-${item.origin}`}>
+                  {item.origin === 'tutor' ? t.suggestedOrigin : t.personalOrigin}
+                </span>
+                <span className="annotation-card-date">
+                  {new Date(item.updatedAt).toLocaleDateString(undefined, {
+                    day: 'numeric',
+                    month: 'short',
+                  })}
+                </span>
+              </div>
               {deleteTarget === item.id ? (
                 <div className="annotation-delete-confirm" role="group">
                   <p>{t.deleteAnnotationConfirm}</p>
@@ -350,6 +384,15 @@ export function AnnotationsPanel({
           );
         })}
       </div>
+      {gallery && !!gallery.item.captures?.length && (
+        <CaptureGallery
+          owner={gallery.item.id}
+          items={gallery.item.captures}
+          initial={gallery.captureId}
+          t={t}
+          close={() => setGallery(null)}
+        />
+      )}
       {opened && (
         <Modal
           title={opened.title || t.untitledAnnotation}
@@ -416,7 +459,17 @@ export function AnnotationsPanel({
   );
 }
 
-function AnnotationPreview({ item, t, open }: { item: AnnotationSummary; t: T; open: () => void }) {
+function AnnotationPreview({
+  item,
+  t,
+  open,
+  openCapture,
+}: {
+  item: AnnotationSummary;
+  t: T;
+  open: () => void;
+  openCapture: (captureId: string) => void;
+}) {
   const root = useRef<HTMLDivElement>(null);
   const [value, setValue] = useState<Annotation | null>(null);
   useEffect(() => {
@@ -454,20 +507,34 @@ function AnnotationPreview({ item, t, open }: { item: AnnotationSummary; t: T; o
         </p>
       )}
       {!!item.captures?.length && (
-        <button
-          className="annotation-thumbnail"
-          onClick={open}
-          aria-label={`${t.captureGallery} · ${item.captures.length}`}
-        >
-          <img
-            loading="lazy"
-            src={capturePreviewUrl(item.id, item.captures[0])}
-            alt={item.captures[0].label || t.capturePreview}
-          />
-          <span>
-            {item.captures.length} {t.captureCollection}
-          </span>
-        </button>
+        <div className="annotation-capture-strip" aria-label={t.captureGallery}>
+          {item.captures.slice(0, 4).map((capture, i) => (
+            <button
+              type="button"
+              key={capture.id}
+              className="annotation-capture-thumb"
+              onClick={() => openCapture(capture.id)}
+              aria-label={capture.label || `${t.captureImage} ${i + 1}`}
+              title={capture.label || `${t.captureImage} ${i + 1}`}
+            >
+              <img
+                loading="lazy"
+                src={capturePreviewUrl(item.id, capture)}
+                alt={capture.label || t.capturePreview}
+              />
+            </button>
+          ))}
+          {item.captures.length > 4 && (
+            <button
+              type="button"
+              className="annotation-capture-more"
+              onClick={() => item.captures && openCapture(item.captures[4].id)}
+              aria-label={`${t.captureGallery} · ${item.captures.length}`}
+            >
+              +{item.captures.length - 4}
+            </button>
+          )}
+        </div>
       )}
       {item.captures === undefined && item.capture && (
         <button className="annotation-thumbnail" onClick={open} aria-label={t.openCapture}>

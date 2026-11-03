@@ -1,7 +1,8 @@
 import { useState, type ReactNode } from 'react';
 import { Bookmark, Plus, Pencil, Trash2, Play } from 'lucide-react';
-import type { AnnotationSummary } from '../../shared/annotations';
+import type { AnnotationSummary, SourceLocation } from '../../shared/annotations';
 import { Button, IconButton } from '../design/components';
+import { stampLabel } from '../annotations/CaptureCollection';
 import type { T } from '../i18n';
 export type BookmarkFilter = 'all' | 'manual' | 'tutor';
 export function BookmarksPanel({
@@ -12,6 +13,7 @@ export function BookmarksPanel({
   create,
   edit,
   navigate,
+  jumpTo,
   remove,
   sourceName,
   composer,
@@ -23,6 +25,7 @@ export function BookmarksPanel({
   create: () => void;
   edit: (value: AnnotationSummary) => void;
   navigate: (value: AnnotationSummary) => void;
+  jumpTo?: (sourceId: string, location: SourceLocation) => void;
   remove: (value: AnnotationSummary) => Promise<void>;
   sourceName?: string;
   composer?: ReactNode;
@@ -104,6 +107,21 @@ export function BookmarksPanel({
               </IconButton>
             </div>
             <p>{item.title || item.text}</p>
+            {!!item.stamps?.length && jumpTo && (
+              <div className="annotation-stamp-chips" role="group" aria-label={t.jumpToStamp}>
+                {item.stamps.map((stamp) => (
+                  <button
+                    key={stamp.id}
+                    type="button"
+                    className="annotation-stamp-chip"
+                    onClick={() => jumpTo(stamp.sourceId, stamp.location)}
+                    title={stampLabel(stamp, t)}
+                  >
+                    {stampLabel(stamp, t)}
+                  </button>
+                ))}
+              </div>
+            )}
             {target === item.id && (
               <div className="bookmark-delete-confirm">
                 <p>{t.confirmBookmarkDelete}</p>
