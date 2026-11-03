@@ -10914,7 +10914,28 @@ body.agent-dragging {
 }
 .flow-stage.waiting {
   color: var(--muted-text);
+  border-color: color-mix(in oklch, var(--primary) 25%, var(--border));
   border-style: dashed;
+  animation: flow-pulse-soft 2.2s ease-in-out infinite;
+}
+.flow-stage.waiting::after {
+  border-top-color: color-mix(in oklch, var(--primary) 25%, var(--border));
+  border-right-color: color-mix(in oklch, var(--primary) 25%, var(--border));
+}
+.flow-stage.waiting .flow-stage-mark {
+  color: color-mix(in oklch, var(--primary) 50%, var(--muted-text));
+}
+.flow-stage.waiting small {
+  font-size: var(--font-size-xs);
+}
+@keyframes flow-pulse-soft {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in oklch, var(--primary) 12%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 3px color-mix(in oklch, var(--primary) 8%, transparent);
+  }
 }
 .flow-stage progress {
   width: 100%;

@@ -110,14 +110,15 @@ function fileFlows(events: AgentEvent[], t: T): FileFlow[] {
         break;
     }
   }
-  // Stages after the latest active one are still waiting; those before are implicitly done.
+  // When nothing is running yet, the next stage after the latest done one takes over as
+  // "waiting", so a stage is always moving between finish and start.
   for (const flow of files.values()) {
-    let seenActive = false;
-    for (const stage of STAGES) {
-      const state = flow.stages[stage];
-      if (!seenActive && state.status === 'active') seenActive = true;
-      else if (seenActive && state.status === 'pending') state.status = 'waiting';
-    }
+    const anyActive = STAGES.some((stage) => flow.stages[stage].status === 'active');
+    if (anyActive) continue;
+    let last = -1;
+    for (let i = 0; i < STAGES.length; i++) if (flow.stages[STAGES[i]].status === 'done') last = i;
+    const next = STAGES[last + 1];
+    if (next && flow.stages[next].status === 'pending') flow.stages[next].status = 'waiting';
   }
   return [...files.values()].sort((a, b) => b.lastAt.localeCompare(a.lastAt));
 }
@@ -135,7 +136,7 @@ function StageCard({
   const Mark =
     state.status === 'done'
       ? Check
-      : state.status === 'active'
+      : state.status === 'active' || state.status === 'waiting'
         ? LoaderCircle
         : state.status === 'failed'
           ? CircleAlert
@@ -146,8 +147,17 @@ function StageCard({
         <Icon size={16} aria-hidden="true" />
         <span>{state.label}</span>
       </div>
-      <div className="flow-stage-mark" aria-label={t[`agentStatus_${state.status}` as keyof T] as string}>
-        {Mark && <Mark size={14} className={state.status === 'active' ? 'spin' : ''} />}
+      <div
+        className="flow-stage-mark"
+        aria-label={t[`agentStatus_${state.status}` as keyof T] as string}
+      >
+        {Mark && (
+          <Mark
+            size={14}
+            className={state.status === 'active' || state.status === 'waiting' ? 'spin' : ''}
+          />
+        )}
+        {state.status === 'waiting' && <small>{t.agentStatus_waiting}</small>}
       </div>
       {state.progress && (
         <>
