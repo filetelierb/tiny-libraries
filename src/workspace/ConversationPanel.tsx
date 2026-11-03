@@ -89,11 +89,66 @@ import {
 export type ChipComposerHandle = {
   focus: (options?: FocusOptions) => void;
 };
+export type ActiveMention = { start: number; query: string };
+/**
+ * The @-mention being edited at `caret`: the last `@` before the caret preceded by
+ * whitespace (or start of text), with the span between it and the caret as the query —
+ * spaces included, so `" @ "` between two spaces counts as an active empty query. Returns
+ * `null` when nothing active.
+ */
+export function activeComposerMention(draft: string, caret: number | null): ActiveMention | null {
+  if (caret === null || caret < 0 || caret > draft.length) return null;
+  const before = draft.slice(0, caret);
+  const start = before.lastIndexOf('@');
+  if (start < 0) return null;
+  if (start > 0 && !/\s/.test(draft[start - 1])) return null;
+  const query = before.slice(start + 1);
+  if (query.length > 300 || /[@\n]/.test(query)) return null;
+  return { start, query };
+}
+/**
+ * Serialise a contenteditable composer DOM to plain text. Text nodes keep their text and chip
+ * spans become `@name`; the trailing `<br>` chromium adds as a line placeholder is dropped, so
+ * a lonely `@` at the end of the text isn't masked by a phantom newline.
+ */
+function serializeComposer(node: HTMLElement): string {
+  let out = '';
+  const children = Array.from(node.childNodes);
+  children.forEach((child, index) => {
+    if (child.nodeType === Node.TEXT_NODE) out += child.textContent || '';
+    else if (child instanceof HTMLElement) {
+      if (child.dataset.mention) out += `@${child.dataset.mention}`;
+      else if (child.tagName === 'BR') {
+        if (index < children.length - 1) out += '\n';
+      } else out += child.textContent || '';
+    }
+  });
+  return out;
+}
+/**
+ * Offset of the caret in the serialised text of `root`. Chips count as `@name` characters, so
+ * this offset maps directly onto the `draft` string the parent holds; returns `null` when the
+ * selection isn't inside `root`.
+ */
+function caretInComposer(root: HTMLElement): number | null {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) return null;
+  const range = selection.getRangeAt(0);
+  if (!root.contains(range.endContainer)) return null;
+  const pre = range.cloneRange();
+  pre.selectNodeContents(root);
+  pre.setEnd(range.endContainer, range.endOffset);
+  const container = document.createElement('div');
+  container.appendChild(pre.cloneContents());
+  return serializeComposer(container).length;
+}
 /**
  * A contenteditable composer that renders confirmed @mentions as atomic chip spans while
  * everything else reads as plain text. The parent still holds the plain-text draft (chips
  * serialize back to `@name`); each render only touches the DOM when the serialized text
- * drifts from the draft, so typing never fights React.
+ * drifts from the draft, so typing never fights React. The caret offset in that serialized
+ * text is reported upward so the parent can decide whether an @-mention is being edited,
+ * including the case where the caret sits in `" @ "` between two spaces.
  */
 const ChipComposer = React.forwardRef<
   ChipComposerHandle,
@@ -107,11 +162,12 @@ const ChipComposer = React.forwardRef<
     mentionControlsId: string;
     onEmptyBackspace: () => boolean;
     onEscape: () => void;
+    onCaretChange: (caret: number | null) => void;
     /** True when the picker handled the key. */
     onPickerKey: (key: string, shift: boolean) => boolean;
   }
 >(function ChipComposer(
-  { draft, setDraft, candidates, placeholder, ariaLabel, mentionOpen, mentionControlsId, onEmptyBackspace, onEscape, onPickerKey },
+  { draft, setDraft, candidates, placeholder, ariaLabel, mentionOpen, mentionControlsId, onEmptyBackspace, onEscape, onCaretChange, onPickerKey },
   ref,
 ) {
   const root = React.useRef<HTMLDivElement>(null);
@@ -119,6 +175,13 @@ const ChipComposer = React.forwardRef<
     () => [...candidates].sort((a, b) => b.length - a.length),
     [candidates],
   );
+  const caretChangeRef = React.useRef(onCaretChange);
+  caretChangeRef.current = onCaretChange;
+  const reportCaret = React.useCallback(() => {
+    const node = root.current;
+    if (!node) return;
+    caretChangeRef.current(caretInComposer(node));
+  }, []);
   React.useImperativeHandle(ref, () => ({
     focus: (options) => {
       const node = root.current;
@@ -133,25 +196,25 @@ const ChipComposer = React.forwardRef<
         selection?.removeAllRanges();
         selection?.addRange(range);
       }
+      reportCaret();
     },
   }));
-  // Serialise the current DOM: text nodes keep their text, chip spans become @name. The
-  // trailing <br> chromium adds as a line placeholder is dropped, so a lonely @ at the end of
-  // the text — the only clue the picker uses to open — isn't masked by a phantom newline.
-  const serialize = (node: HTMLElement): string => {
-    let out = '';
-    const children = Array.from(node.childNodes);
-    children.forEach((child, index) => {
-      if (child.nodeType === Node.TEXT_NODE) out += child.textContent || '';
-      else if (child instanceof HTMLElement) {
-        if (child.dataset.mention) out += `@${child.dataset.mention}`;
-        else if (child.tagName === 'BR') {
-          if (index < children.length - 1) out += '\n';
-        } else out += child.textContent || '';
-      }
-    });
-    return out;
-  };
+  // The browser fires `selectionchange` on the document for every caret move; mirror it into
+  // the parent whenever the selection is actually inside our editable, so the mention state
+  // reacts to arrow keys and clicks, not just typing.
+  React.useEffect(() => {
+    const listener = () => {
+      const node = root.current;
+      if (!node) return;
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0) return;
+      if (!node.contains(selection.anchorNode) && !node.contains(selection.focusNode)) return;
+      caretChangeRef.current(caretInComposer(node));
+    };
+    document.addEventListener('selectionchange', listener);
+    return () => document.removeEventListener('selectionchange', listener);
+  }, []);
+  const serialize = serializeComposer;
   // Build the DOM for a draft string: plain runs plus one chip span per confirmed @mention.
   const build = (value: string): Node[] => {
     const nodes: Node[] = [];
@@ -224,7 +287,9 @@ const ChipComposer = React.forwardRef<
       data-empty={draft.length === 0 ? '' : undefined}
       onInput={(event) => {
         setDraft(serialize(event.currentTarget));
+        reportCaret();
       }}
+      onFocus={() => reportCaret()}
       onPaste={(event) => {
         event.preventDefault();
         const text = event.clipboardData.getData('text/plain');
@@ -848,33 +913,20 @@ function ConversationThread({
     setTitle(conversation.name);
     setRename(true);
   }, [renameRequest]);
-  // A mention starts with @ either at the beginning or right after whitespace, and the token
-  // runs to the end of the draft with no space or @ inside; a space ends the mention.
-  const mentionQuery = draft.match(/(?:^|\s)@([^\s@\n]*)$/)?.[1];
-  // Ranges of confirmed @mentions in the draft; used to keep the caret off their inside.
-  const chipRanges = React.useMemo(() => {
-    const ordered = [
-      ...catalog.files.map((file) => file.name),
-      ...catalog.concepts.map((concept) => concept.term),
-    ].sort((a, b) => b.length - a.length);
-    const ranges: Array<{ start: number; end: number }> = [];
-    for (let i = 0; i < draft.length; i++) {
-      if (draft[i] !== '@') continue;
-      if (i > 0 && !/\s/.test(draft[i - 1])) continue;
-      const match = ordered.find((name) => {
-        if (draft.slice(i + 1, i + 1 + name.length) !== name) return false;
-        const next = draft[i + 1 + name.length];
-        return next === undefined || /\s/.test(next);
-      });
-      if (match) {
-        ranges.push({ start: i, end: i + 1 + match.length });
-        i += match.length;
-      }
-    }
-    return ranges;
-  }, [draft, catalog.files, catalog.concepts]);
-  // The active @token always ends the draft; the mirror highlights it behind the textarea.
-  const mentionStart = draft.length - (mentionQuery?.length ?? 0) - 1;
+  // The active @mention is driven by the caret: the last `@` before the caret (preceded by
+  // whitespace or start of the draft) opens the picker, and the query is everything between
+  // that `@` and the caret — so `" @ "` between two spaces works as long as the caret sits
+  // inside that span. The query may contain spaces until the student picks an item or
+  // presses Esc; `@`, newlines and runaway length bail out.
+  const [caret, setCaret] = useState<number | null>(null);
+  const caretRef = useRef(caret);
+  caretRef.current = caret;
+  const activeMention = React.useMemo(
+    () => activeComposerMention(draft, caret),
+    [draft, caret],
+  );
+  const mentionQuery = activeMention?.query;
+  const mentionStart = activeMention?.start ?? -1;
   // Esc dismisses the picker for the current @token only. The anchor is the @ position at
   // the moment of dismissal; a new @ at a different position reopens the picker.
   const [dismissedAt, setDismissedAt] = useState<number | null>(null);
@@ -1185,7 +1237,10 @@ function ConversationThread({
       }
       // A reference save may finish after the user has started a different draft.
       if (draftRef.current === before) {
-        changeDraft(`${before.slice(0, before.lastIndexOf('@'))}@${file.name} `);
+        const info = activeComposerMention(before, caretRef.current);
+        const atPos = info?.start ?? before.lastIndexOf('@');
+        const endPos = caretRef.current ?? before.length;
+        changeDraft(`${before.slice(0, atPos)}@${file.name} ${before.slice(endPos)}`);
         setMentionDismissed(true);
       }
     } finally {
@@ -1241,7 +1296,11 @@ function ConversationThread({
       return;
     }
     changeConcepts([...current.filter((c) => c.id !== entry.id), conceptMention(entry)]);
-    changeDraft(`${draftRef.current.slice(0, draftRef.current.lastIndexOf('@'))}@${entry.term} `);
+    const before = draftRef.current;
+    const info = activeComposerMention(before, caretRef.current);
+    const atPos = info?.start ?? before.lastIndexOf('@');
+    const endPos = caretRef.current ?? before.length;
+    changeDraft(`${before.slice(0, atPos)}@${entry.term} ${before.slice(endPos)}`);
     setMentionDismissed(true);
     composer.current?.focus();
   };
@@ -1772,6 +1831,7 @@ function ConversationThread({
                 return false;
               }}
               onEscape={() => setMentionDismissed(true)}
+              onCaretChange={setCaret}
               onPickerKey={(key, shift) =>
                 !shift && !!mentionPicker.current?.key(key)
               }
