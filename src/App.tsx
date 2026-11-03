@@ -2735,7 +2735,11 @@ export function App() {
           />
         </Modal>
       )}
-      <AgentPanel t={t} locale={locale} />
+      <AgentPanel
+        t={t}
+        locale={locale}
+        project={location.pathname.match(/^\/projects\/([\w-]+)/)?.[1]}
+      />
     </div>
   );
 }

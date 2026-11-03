@@ -12,6 +12,7 @@ import { Button, IconButton, LoadingRow, Modal } from '../design/components';
 import { dictionaries, type T } from '../i18n';
 import { ActivityHeatmap } from './ActivityHeatmap';
 import { NewProjectModal } from './NewProjectModal';
+import { AgentPanel } from '../AgentPanel';
 
 function relativeTime(value: string, locale: Locale) {
   const format = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }),
@@ -270,6 +271,7 @@ export function HomePage() {
           </form>
         </Modal>
       )}
+      <AgentPanel t={t} locale={locale} />
     </main>
   );
 }

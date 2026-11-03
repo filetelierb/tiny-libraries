@@ -630,6 +630,11 @@ export class Library extends DurableObject<Env> {
           if (!next) await tx.delete(key);
           else if (next !== day) await tx.put(key, next);
         }
+        // Agent activity events of the deleted project leave the ring buffer with it.
+        for (const [key, event] of await tx.list<{ project: string }>({
+          prefix: 'agent-event:',
+        }))
+          if (event.project === id) await tx.delete(key);
         await tx.delete(`project:${id}`);
       });
       return json({ deleted: id });

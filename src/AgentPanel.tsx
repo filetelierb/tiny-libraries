@@ -100,7 +100,16 @@ function groupEvents(events: AgentEvent[]): EventRow[] {
  * A bottom panel that shows what the AI tools and the Librarian agent are doing, step by step.
  * It can be minimised to a thin bar; a handle at the top edge resizes it.
  */
-export function AgentPanel({ t, locale }: { t: T; locale: 'en' | 'es' }) {
+export function AgentPanel({
+  t,
+  locale,
+  project,
+}: {
+  t: T;
+  locale: 'en' | 'es';
+  /** Only this project's events are shown; omit for the home page to see every project. */
+  project?: string;
+}) {
   const [open, setOpen] = useState(() => localStorage.getItem(OPEN_KEY) === 'yes');
   const [height, setHeight] = useState(() => Number(localStorage.getItem(HEIGHT_KEY)) || DEFAULT);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
@@ -136,13 +145,21 @@ export function AgentPanel({ t, locale }: { t: T; locale: 'en' | 'es' }) {
       window.removeEventListener('mouseup', stop);
     };
   }, []);
-  const rows = useMemo(() => groupEvents(events), [events]);
-  const active = events.filter(
-    (event) =>
-      event.tool === 'preparation' &&
-      !event.action.endsWith('.done') &&
-      event.action !== 'preparation.queued',
-  ).length;
+  const scoped = useMemo(
+    () => (project ? events.filter((event) => event.project === project) : events),
+    [events, project],
+  );
+  const rows = useMemo(() => groupEvents(scoped), [scoped]);
+  // A file still being prepared has an open step that no later `preparation.done` closes.
+  const activeFiles = useMemo(() => {
+    const seen = new Map<string, 'open' | 'done'>();
+    for (const event of scoped) {
+      if (event.tool !== 'preparation' || !event.fileId) continue;
+      if (seen.has(event.fileId)) continue;
+      seen.set(event.fileId, event.action === 'preparation.done' ? 'done' : 'open');
+    }
+    return [...seen.values()].filter((status) => status === 'open').length;
+  }, [scoped]);
   const projectName = useMemo(() => new Map(projects.map((p) => [p.id, p.name])), [projects]);
   const projectColor = (id: string) => {
     let hash = 0;
@@ -179,13 +196,13 @@ export function AgentPanel({ t, locale }: { t: T; locale: 'en' | 'es' }) {
         <Activity size={14} aria-hidden="true" />
         <strong>{t.agentPanel}</strong>
         <span className="agent-counts">
-          {active > 0 ? (
+          {activeFiles > 0 ? (
             <>
               <LoaderCircle size={12} className="spin" aria-hidden="true" />
-              {t.agentActive.replace('{n}', String(active))}
+              {t.agentActive.replace('{n}', String(activeFiles))}
             </>
-          ) : events.length ? (
-            t.agentIdle.replace('{n}', String(events.length))
+          ) : scoped.length ? (
+            t.agentIdle.replace('{n}', String(scoped.length))
           ) : (
             t.agentWaiting
           )}
