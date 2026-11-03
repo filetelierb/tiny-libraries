@@ -674,9 +674,22 @@ function ConversationThread({
     store(mentionDismissedKey, mentionDismissed ? draft : '');
   }, [mentionDismissed, draft, mentionDismissedKey]);
   const mentionQuery = draft.match(/(?:^|\s)@([^\n@]*)$/)?.[1];
-  const mentionOpen = !mentionDismissed && mentionQuery !== undefined;
   // The active @token always ends the draft; the mirror highlights it behind the textarea.
   const mentionStart = draft.length - (mentionQuery?.length ?? 0) - 1;
+  // Esc dismisses the picker for the current @token only; a new @ at a different position
+  // starts a fresh one, so the dismissal is cleared when the token moves.
+  const dismissedStart = useRef<number | null>(null);
+  if (mentionDismissed && (mentionQuery === undefined || dismissedStart.current !== mentionStart))
+    dismissedStart.current = null;
+  const effectiveDismissed = mentionDismissed && dismissedStart.current === mentionStart;
+  const mentionOpen = !effectiveDismissed && mentionQuery !== undefined;
+  useEffect(() => {
+    if (!mentionDismissed || dismissedStart.current !== null) return;
+    if (mentionQuery !== undefined) dismissedStart.current = mentionStart;
+  }, [mentionDismissed, mentionQuery, mentionStart]);
+  useEffect(() => {
+    if (!mentionDismissed) dismissedStart.current = null;
+  }, [mentionDismissed]);
   const mirror = useRef<HTMLDivElement>(null);
   const draftRef = useRef(draft),
     alive = useRef(true);
@@ -1593,7 +1606,6 @@ function ConversationThread({
               aria-expanded={mentionOpen}
               onChange={(event) => {
                 changeDraft(event.target.value);
-                setMentionDismissed(false);
               }}
               onKeyDown={(event) => {
                 // Backspace at the start of an empty draft removes the last attached chip.
