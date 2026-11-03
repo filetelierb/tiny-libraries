@@ -1503,7 +1503,7 @@ export function App() {
                 </div>
               </div>
             </div>
-            {job && (
+            {job && job.status !== 'completed' && (
               <div className={`job-strip ${job.status === 'failed' ? 'failed' : ''}`} role="status">
                 {['queued', 'running', 'partial'].includes(job.status) ? (
                   <LoaderCircle className="spin" size={14} />
@@ -1542,19 +1542,17 @@ export function App() {
                     {t.retry}
                   </Button>
                 ) : (
-                  job.status !== 'completed' && (
-                    <Button
-                      variant="ghost"
-                      onClick={() =>
-                        void run(async () => {
-                          await api(`/jobs/${job.id}`, 'DELETE');
-                          setRefreshTick((v) => v + 1);
-                        })
-                      }
-                    >
-                      {t.cancel}
-                    </Button>
-                  )
+                  <Button
+                    variant="ghost"
+                    onClick={() =>
+                      void run(async () => {
+                        await api(`/jobs/${job.id}`, 'DELETE');
+                        setRefreshTick((v) => v + 1);
+                      })
+                    }
+                  >
+                    {t.cancel}
+                  </Button>
                 )}
               </div>
             )}
