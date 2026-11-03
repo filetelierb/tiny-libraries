@@ -29,6 +29,8 @@ export const sourceSchema = z.object({
   createdAt: z.string(),
   /** Where the original is in the project's folder, when the project keeps files on disk. */
   path: z.string().min(1).max(1024).optional(),
+  /** For an auto-generated artifact file, the recording whose study material it shows. */
+  linkedSourceId: z.string().uuid().optional(),
 });
 export type Source = z.infer<typeof sourceSchema>;
 export const directorySchema = z.object({

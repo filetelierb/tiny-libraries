@@ -448,7 +448,42 @@ export class Library extends DurableObject<Env> {
       summary: `Added ${value.synthesis.glossary.length} concepts of ${file.name} to the glossary`,
     });
     await this.startAutoArtifact(file, value);
+    await this.ensureStudyArtifactFile(file, value);
     await this.startAutoFlashcards(file, value);
+  }
+  /**
+   * Keeps a kind='artifact' file beside the recording that points at its study material, so
+   * the artifact is organizable in the tree. The file is a thin reference; the content comes
+   * from the recording's learning record and its artifact study.
+   */
+  private async ensureStudyArtifactFile(file: Source, learning: Learning) {
+    if (!learning.synthesis.artifact?.explanation) return;
+    const files = [...(await this.ctx.storage.list<Source>({ prefix: 'file:' })).values()];
+    if (files.some((entry) => entry.linkedSourceId === file.id && !entry.trashed)) return;
+    const extension = file.name.includes('.') ? file.name.slice(file.name.lastIndexOf('.')) : '';
+    const stem = extension ? file.name.slice(0, -extension.length) : file.name;
+    const name = `${stem} — Study.artifact`.slice(0, 240);
+    const record: Source = {
+      id: crypto.randomUUID(),
+      version: 1,
+      name,
+      folder: file.folder,
+      kind: 'artifact',
+      mime: 'application/x-tailored-artifact',
+      size: 1,
+      archived: false,
+      reviewed: false,
+      createdAt: new Date().toISOString(),
+      linkedSourceId: file.id,
+    };
+    await this.ctx.storage.put(`file:${record.id}`, record);
+    void recordEvent(this.env, this.project, {
+      tool: 'preparation',
+      action: 'artifact.file',
+      fileId: record.id,
+      fileName: record.name,
+      summary: `Added ${record.name} to ${file.folder || 'the library'}`,
+    });
   }
   /** Writes the study artifact (explanation chapters with questions and cards) for the file. */
   private async startAutoArtifact(file: Source, learning: Learning) {

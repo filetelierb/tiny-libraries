@@ -654,7 +654,11 @@ export function App() {
     };
   }, [active?.id, locale, refreshTick]);
   useEffect(() => {
-    const sources = [primary, split].filter(
+    // An open linked-artifact file reads its material from the recording it points at.
+    const linkedSourceIds = [primary, split, active]
+      .filter((source): source is Source => !!source && !!source.linkedSourceId)
+      .map((source) => source.linkedSourceId!);
+    const sources = [primary, split, ...catalog!.files.filter((file) => linkedSourceIds.includes(file.id))].filter(
       (source): source is Source => !!source && source.id !== active?.id,
     );
     if (!sources.length) return;
@@ -1577,7 +1581,64 @@ export function App() {
                 t={t}
               >
                 {(source) => {
-                  if (source.kind === 'artifact')
+                  if (source.kind === 'artifact') {
+                    if (source.linkedSourceId) {
+                      const linked = catalog.files.find((f) => f.id === source.linkedSourceId);
+                      const linkedMaterial = linked ? materialCache[linked.id] : null;
+                      if (!linked || linked.trashed) {
+                        return (
+                          <p className="muted" style={{ padding: 20 }}>
+                            {t.evidenceUnavailable}
+                          </p>
+                        );
+                      }
+                      if (!linkedMaterial?.synthesis.artifact) {
+                        return <p style={{ padding: 20 }}>{t.loading}</p>;
+                      }
+                      return (
+                        <div className="artifact-host">
+                          <GeneratedArtifact
+                            study={{
+                              sourceId: linked.id,
+                              attempts: catalog.attempts,
+                              quiz: (chapter, version) =>
+                                setQuizRequest({
+                                  source: linked,
+                                  learning: { ...linkedMaterial, createdAt: version },
+                                  chapter: {
+                                    id: chapter.id,
+                                    title: chapter.title,
+                                    summary: chapter.summary,
+                                    segmentIds: chapter.segmentIds,
+                                    questions: chapter.questions,
+                                  },
+                                  wasPlaying: false,
+                                  artifactStudy: true,
+                                  ordinal: chapter.index + 1,
+                                }),
+                            }}
+                            artifact={linkedMaterial.synthesis.artifact}
+                            t={t}
+                            segments={linkedMaterial.segments}
+                            onCite={(segment) => citeFrom(linked.id, segment)}
+                            sourceName={linked.name}
+                            sourceUrl={`/api/files/${linked.id}/content`}
+                            pictures={`/api/visuals/${linked.id}/${linkedMaterial.sourceVersion}`}
+                            concepts={catalog.concepts}
+                            openConcept={openGlossaryConcept}
+                            saved={session.artifacts?.[linked.id]}
+                            persist={(value) =>
+                              updateSession({
+                                artifacts: {
+                                  ...sessionRef.current!.artifacts,
+                                  [linked.id]: value,
+                                },
+                              })
+                            }
+                          />
+                        </div>
+                      );
+                    }
                     return (
                       <TutorArtifact
                         file={source}
@@ -1586,6 +1647,7 @@ export function App() {
                         onCite={(sourceId, segment) => citeFrom(sourceId, segment)}
                       />
                     );
+                  }
                   const material =
                     learning?.sourceId === source.id ? learning : materialCache[source.id];
                   const reader = (
