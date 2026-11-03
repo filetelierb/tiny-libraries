@@ -260,6 +260,9 @@ export function MediaPlayer({
   const laneCount = Math.max(0, ...chapters.map((chapter) => chapter.lane + 1));
   const currentChapter = chapters.find((chapter) => chapter.start <= time && chapter.end > time);
   const Tag = source.kind === 'video' ? 'video' : 'audio';
+  // The translated captions track shows the target language name, like YouTube's language rows.
+  const languageName = (locale: 'en' | 'es') => (locale === 'es' ? 'Español' : 'English');
+  const translatedLabel = learning?.locale ? languageName(learning.locale) : t.translated;
   const keySeek = (event: React.KeyboardEvent) => {
     if (
       event.altKey ||
@@ -426,7 +429,7 @@ export function MediaPlayer({
     >
       <option value="off">{t.captionsOff}</option>
       <option value="original">{t.original}</option>
-      <option value="translated">{t.translated}</option>
+      <option value="translated">{translatedLabel}</option>
     </select>
   );
   return (
@@ -555,7 +558,7 @@ export function MediaPlayer({
             key={track}
             id={track}
             kind="subtitles"
-            label={track === 'original' ? t.original : t.translated}
+            label={track === 'original' ? t.original : translatedLabel}
             src={`/api/captions/${source.id}/${track}.vtt`}
           />
         ))}
@@ -698,7 +701,7 @@ export function MediaPlayer({
                               ? t.captionsOff
                               : preferences.track === 'original'
                                 ? t.original
-                                : t.translated}
+                                : translatedLabel}
                           </span>
                           <ChevronRight size={16} aria-hidden="true" />
                         </button>
@@ -770,7 +773,7 @@ export function MediaPlayer({
                                 ? t.captionsOff
                                 : value === 'original'
                                   ? t.original
-                                  : t.translated}
+                                  : translatedLabel}
                             </span>
                           </button>
                         ))}
