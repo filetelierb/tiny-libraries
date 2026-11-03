@@ -11071,3 +11071,51 @@ body.agent-dragging {
   color: var(--muted-text);
   background: var(--background);
 }
+
+/* Narrow players move the speed and caption selectors into a settings menu. */
+.custom-player {
+  container-type: inline-size;
+}
+.player-menu {
+  position: relative;
+}
+.player-menu-popover {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  min-width: 220px;
+  padding: 10px;
+  border: 1px solid color-mix(in oklch, var(--on-media-rgb) / 30%, transparent);
+  border-radius: var(--radius-sm);
+  background: rgb(var(--shadow-rgb) / 94%);
+  color: var(--on-media);
+  box-shadow: 0 12px 28px rgb(var(--shadow-rgb) / 50%);
+  display: grid;
+  gap: 10px;
+  z-index: var(--z-sticky);
+}
+.player-menu-group {
+  display: grid;
+  gap: 6px;
+}
+.player-menu-label {
+  font-size: var(--font-size-xs);
+  opacity: 0.75;
+}
+.player-menu-popover select {
+  background: transparent;
+  border: 1px solid rgb(var(--on-media-rgb) / 30%);
+  border-radius: var(--radius-sm);
+  color: var(--on-media);
+  padding: 4px 6px;
+}
+@container (max-width: 720px) {
+  .player-inline-options {
+    display: none;
+  }
+}
+@container (min-width: 720.01px) {
+  .player-menu {
+    display: none;
+  }
+}

@@ -12,6 +12,7 @@ import {
   Minimize2,
   Headphones,
   Bookmark,
+  Settings,
 } from 'lucide-react';
 import type { Source, PublicLearning, Bookmark as SavedBookmark } from '../shared/domain';
 import { captionCues } from '../shared/caption-cues';
@@ -75,6 +76,7 @@ export function MediaPlayer({
     [duration, setDuration] = useState(0),
     [playing, setPlaying] = useState(false),
     [visible, setVisible] = useState(true),
+    [menuOpen, setMenuOpen] = useState(false),
     [fullscreen, setFullscreen] = useState(false),
     [error, setError] = useState(''),
     [caption, setCaption] = useState('');
@@ -154,6 +156,16 @@ export function MediaPlayer({
       if (timer.current) clearTimeout(timer.current);
     } else wake();
   }, [playing]);
+  // A settings menu stays open while the controls are visible and closes with them.
+  useEffect(() => {
+    if (!visible && menuOpen) setMenuOpen(false);
+  }, [visible, menuOpen]);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = () => setMenuOpen(false);
+    window.addEventListener('pointerdown', close);
+    return () => window.removeEventListener('pointerdown', close);
+  }, [menuOpen]);
   const changeTime = (value: number) => {
     const player = media.current;
     if (!player || !Number.isFinite(player.duration)) return;
@@ -637,8 +649,38 @@ export function MediaPlayer({
               }
             />
             <div className="player-end">
-              {speedGroup}
-              {captionSelect}
+              <div className="player-inline-options">
+                {speedGroup}
+                {captionSelect}
+              </div>
+              <div className="player-menu">
+                <IconButton
+                  label={t.playerSettings}
+                  aria-expanded={menuOpen}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setMenuOpen((value) => !value);
+                  }}
+                >
+                  <Settings />
+                </IconButton>
+                {menuOpen && (
+                  <div
+                    role="menu"
+                    className="player-menu-popover"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <div className="player-menu-group">
+                      <span className="player-menu-label">{t.playbackSpeed}</span>
+                      {speedGroup}
+                    </div>
+                    <div className="player-menu-group">
+                      <span className="player-menu-label">{t.subtitle}</span>
+                      {captionSelect}
+                    </div>
+                  </div>
+                )}
+              </div>
               <IconButton
                 label={fullscreen ? t.exitFullscreen : t.fullscreen}
                 onClick={() => {
