@@ -86,58 +86,184 @@ import {
   type QuestionAttachment,
 } from '../../shared/tutor-attachments';
 
+export type ChipComposerHandle = {
+  focus: (options?: FocusOptions) => void;
+};
 /**
- * Walks the draft and turns every @name whose name matches a known file or glossary term into
- * a visual chip in the mirror, so the composer reads as rich text while the textarea keeps the
- * same plain-text contents. The @token being typed (its start is `pendingMentionStart`) gets a
- * soft mark that tracks the picker instead.
+ * A contenteditable composer that renders confirmed @mentions as atomic chip spans while
+ * everything else reads as plain text. The parent still holds the plain-text draft (chips
+ * serialize back to `@name`); each render only touches the DOM when the serialized text
+ * drifts from the draft, so typing never fights React.
  */
-function renderDraftWithChips(
-  draft: string,
-  candidates: string[],
-  pendingMentionStart: number,
-): React.ReactNode[] {
-  const nodes: React.ReactNode[] = [];
-  const ordered = [...candidates].sort((a, b) => b.length - a.length);
-  let cursor = 0,
-    key = 0;
-  while (cursor < draft.length) {
-    if (cursor === pendingMentionStart) {
-      nodes.push(
-        <mark key={key++}>{draft.slice(pendingMentionStart)}</mark>,
-      );
-      cursor = draft.length;
-      break;
-    }
-    if (draft[cursor] === '@' && (cursor === 0 || /\s/.test(draft[cursor - 1]))) {
-      const match = ordered.find((name) => {
-        if (draft.slice(cursor + 1, cursor + 1 + name.length) !== name) return false;
-        const next = draft[cursor + 1 + name.length];
-        return next === undefined || /\s/.test(next);
-      });
-      if (match) {
-        nodes.push(
-          <span key={key++} className="composer-chip-inline">
-            <span className="composer-chip-at" aria-hidden="true">
-              @
-            </span>
-            {match}
-          </span>,
-        );
-        cursor += 1 + match.length;
+const ChipComposer = React.forwardRef<
+  ChipComposerHandle,
+  {
+    draft: string;
+    setDraft: (value: string) => void;
+    candidates: string[];
+    placeholder: string;
+    ariaLabel: string;
+    mentionOpen: boolean;
+    mentionControlsId: string;
+    onEmptyBackspace: () => boolean;
+    onEscape: () => void;
+    /** True when the picker handled the key. */
+    onPickerKey: (key: string, shift: boolean) => boolean;
+  }
+>(function ChipComposer(
+  { draft, setDraft, candidates, placeholder, ariaLabel, mentionOpen, mentionControlsId, onEmptyBackspace, onEscape, onPickerKey },
+  ref,
+) {
+  const root = React.useRef<HTMLDivElement>(null);
+  const ordered = React.useMemo(
+    () => [...candidates].sort((a, b) => b.length - a.length),
+    [candidates],
+  );
+  React.useImperativeHandle(ref, () => ({
+    focus: (options) => {
+      const node = root.current;
+      if (!node) return;
+      node.focus(options);
+      // Place the caret at the end if there is no selection in the node yet.
+      const selection = window.getSelection();
+      if (!selection || !node.contains(selection.anchorNode)) {
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        range.collapse(false);
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+      }
+    },
+  }));
+  // Serialise the current DOM: text nodes keep their text, chip spans become @name.
+  const serialize = (node: HTMLElement): string => {
+    let out = '';
+    node.childNodes.forEach((child) => {
+      if (child.nodeType === Node.TEXT_NODE) out += child.textContent || '';
+      else if (child instanceof HTMLElement) {
+        if (child.dataset.mention) out += `@${child.dataset.mention}`;
+        else if (child.tagName === 'BR') out += '\n';
+        else out += child.textContent || '';
+      }
+    });
+    return out;
+  };
+  // Build the DOM for a draft string: plain runs plus one chip span per confirmed @mention.
+  const build = (value: string): Node[] => {
+    const nodes: Node[] = [];
+    let cursor = 0;
+    const flush = (text: string) => {
+      if (text) nodes.push(document.createTextNode(text));
+    };
+    while (cursor < value.length) {
+      const at = value.indexOf('@', cursor);
+      if (at < 0) {
+        flush(value.slice(cursor));
+        break;
+      }
+      if (at > 0 && !/\s/.test(value[at - 1])) {
+        // An @ right after a non-space character is literal text, not a mention.
+        flush(value.slice(cursor, at + 1));
+        cursor = at + 1;
         continue;
       }
+      const match = ordered.find((name) => {
+        if (value.slice(at + 1, at + 1 + name.length) !== name) return false;
+        const next = value[at + 1 + name.length];
+        return next === undefined || /\s/.test(next);
+      });
+      if (!match) {
+        flush(value.slice(cursor, at + 1));
+        cursor = at + 1;
+        continue;
+      }
+      flush(value.slice(cursor, at));
+      const chip = document.createElement('span');
+      chip.className = 'composer-chip-inline';
+      chip.contentEditable = 'false';
+      chip.dataset.mention = match;
+      chip.textContent = match;
+      nodes.push(chip);
+      cursor = at + 1 + match.length;
     }
-    // Append one plain character at a time; React merges identical adjacent text nodes.
-    const next = draft.indexOf('@', cursor + 1);
-    const boundary = next < 0 ? draft.length : next;
-    const stop =
-      pendingMentionStart > cursor && pendingMentionStart < boundary ? pendingMentionStart : boundary;
-    nodes.push(<React.Fragment key={key++}>{draft.slice(cursor, stop)}</React.Fragment>);
-    cursor = stop;
-  }
-  return nodes;
-}
+    return nodes;
+  };
+  // The draft prop is authoritative. When it drifts from the DOM text, rebuild and park the
+  // caret at the end — the only way draft changes externally is a picker insert or clear.
+  React.useEffect(() => {
+    const node = root.current;
+    if (!node) return;
+    if (serialize(node) === draft) return;
+    node.replaceChildren(...build(draft));
+    if (document.activeElement === node) {
+      const selection = window.getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      range.collapse(false);
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    }
+  });
+  return (
+    <div
+      ref={root}
+      className="composer-editable"
+      contentEditable
+      suppressContentEditableWarning
+      role="textbox"
+      aria-label={ariaLabel}
+      aria-multiline="true"
+      aria-autocomplete="list"
+      aria-controls={mentionOpen ? mentionControlsId : undefined}
+      aria-expanded={mentionOpen}
+      data-placeholder={placeholder}
+      data-empty={draft.length === 0 ? '' : undefined}
+      onInput={(event) => {
+        setDraft(serialize(event.currentTarget));
+      }}
+      onPaste={(event) => {
+        event.preventDefault();
+        const text = event.clipboardData.getData('text/plain');
+        document.execCommand('insertText', false, text);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' && !event.shiftKey && !mentionOpen) {
+          // The outer form owns submit; this component just inserts a line on Shift+Enter.
+          event.preventDefault();
+          event.currentTarget.closest('form')?.requestSubmit();
+          return;
+        }
+        if (event.key === 'Enter' && event.shiftKey) {
+          event.preventDefault();
+          document.execCommand('insertText', false, '\n');
+          return;
+        }
+        if (
+          event.key === 'Backspace' &&
+          !event.shiftKey &&
+          !event.metaKey &&
+          !event.ctrlKey &&
+          !event.altKey &&
+          !event.repeat &&
+          draft.length === 0 &&
+          !mentionOpen
+        ) {
+          if (onEmptyBackspace()) {
+            event.preventDefault();
+            return;
+          }
+        }
+        if (mentionOpen && event.key === 'Escape') {
+          event.preventDefault();
+          event.stopPropagation();
+          onEscape();
+          return;
+        }
+        if (mentionOpen && onPickerKey(event.key, event.shiftKey)) event.preventDefault();
+      }}
+    />
+  );
+});
 function stored(key: string) {
   try {
     return localStorage.getItem(key) || '';
@@ -675,7 +801,7 @@ function ConversationThread({
     }
   });
   const contextRef = useRef(context),
-    composer = useRef<HTMLTextAreaElement>(null);
+    composer = useRef<ChipComposerHandle>(null);
   contextRef.current = context;
   const changeContext = (value: QuestionContext | null) => {
     contextRef.current = value;
@@ -756,7 +882,6 @@ function ConversationThread({
     if (dismissedAt !== null && (mentionQuery === undefined || dismissedAt !== mentionStart))
       setDismissedAt(null);
   }, [dismissedAt, mentionQuery, mentionStart]);
-  const mirror = useRef<HTMLDivElement>(null);
   const draftRef = useRef(draft),
     alive = useRef(true);
   draftRef.current = draft;
@@ -1617,106 +1742,35 @@ function ConversationThread({
             ))}
           </div>
           <div className="composer-input">
-            <div className="composer-mirror" aria-hidden="true" ref={mirror}>
-              {renderDraftWithChips(
-                draft,
-                [
-                  ...catalog.files.map((file) => file.name),
-                  ...catalog.concepts.map((concept) => concept.term),
-                ],
-                mentionOpen ? mentionStart : -1,
-              )}
-              {'\u200b'}
-            </div>
-            <textarea
+            <ChipComposer
               ref={composer}
-              className="mention-active"
-              onScroll={(event) => {
-                if (mirror.current) mirror.current.scrollTop = event.currentTarget.scrollTop;
-              }}
-              aria-label={t.assistant}
+              draft={draft}
+              setDraft={changeDraft}
+              candidates={[
+                ...catalog.files.map((file) => file.name),
+                ...catalog.concepts.map((concept) => concept.term),
+              ]}
               placeholder={t.chatPlaceholder}
-              maxLength={8000}
-              value={draft}
-              aria-autocomplete="list"
-              aria-controls={mentionOpen ? `mentions-${conversation.id}` : undefined}
-              aria-expanded={mentionOpen}
-              onChange={(event) => {
-                changeDraft(event.target.value);
-              }}
-              onSelect={(event) => {
-                // A caret that landed inside a chip snaps to one of its edges so the chip reads
-                // as a single unit; a selection that straddles a chip extends to cover it.
-                const target = event.currentTarget;
-                const chip = chipRanges.find(
-                  (range) => target.selectionStart > range.start && target.selectionStart < range.end,
-                );
-                const chipEnd = chipRanges.find(
-                  (range) => target.selectionEnd > range.start && target.selectionEnd < range.end,
-                );
-                if (!chip && !chipEnd) return;
-                const newStart = chip ? chip.start : target.selectionStart;
-                const newEnd = chipEnd ? chipEnd.end : target.selectionEnd;
-                if (newStart !== target.selectionStart || newEnd !== target.selectionEnd)
-                  target.setSelectionRange(newStart, newEnd);
-              }}
-              onKeyDown={(event) => {
-                const target = event.currentTarget;
-                // Backspace at the end of a chip (with no selection) removes the whole chip.
-                if (
-                  event.key === 'Backspace' &&
-                  !event.shiftKey &&
-                  !event.metaKey &&
-                  !event.ctrlKey &&
-                  !event.altKey &&
-                  target.selectionStart === target.selectionEnd
-                ) {
-                  const chip = chipRanges.find((range) => range.end === target.selectionStart);
-                  if (chip) {
-                    event.preventDefault();
-                    const trailingSpace = draft[chip.end] === ' ' ? 1 : 0;
-                    const next = draft.slice(0, chip.start) + draft.slice(chip.end + trailingSpace);
-                    changeDraft(next);
-                    requestAnimationFrame(() => {
-                      composer.current?.setSelectionRange(chip.start, chip.start);
-                    });
-                    return;
-                  }
+              ariaLabel={t.assistant}
+              mentionOpen={mentionOpen}
+              mentionControlsId={`mentions-${conversation.id}`}
+              onEmptyBackspace={() => {
+                const concepts = conceptDraftRef.current.items;
+                const attachments = attachmentRef.current;
+                if (concepts.length) {
+                  changeConcepts(concepts.slice(0, -1));
+                  return true;
                 }
-                // Backspace at the start of an empty draft removes the last attached chip.
-                if (
-                  event.key === 'Backspace' &&
-                  !event.repeat &&
-                  !event.shiftKey &&
-                  !event.metaKey &&
-                  !event.ctrlKey &&
-                  !event.altKey &&
-                  draft.length === 0 &&
-                  !mentionOpen
-                ) {
-                  const concepts = conceptDraftRef.current.items;
-                  const attachments = attachmentRef.current;
-                  if (concepts.length) {
-                    event.preventDefault();
-                    changeConcepts(concepts.slice(0, -1));
-                    return;
-                  }
-                  if (attachments.length) {
-                    event.preventDefault();
-                    changeAttachments(attachments.slice(0, -1));
-                    return;
-                  }
+                if (attachments.length) {
+                  changeAttachments(attachments.slice(0, -1));
+                  return true;
                 }
-                if (!mentionOpen) return;
-                if (event.key === 'Escape') {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  setMentionDismissed(true);
-                  return;
-                }
-                if (!event.shiftKey && mentionPicker.current?.key(event.key))
-                  event.preventDefault();
+                return false;
               }}
+              onEscape={() => setMentionDismissed(true)}
+              onPickerKey={(key, shift) =>
+                !shift && !!mentionPicker.current?.key(key)
+              }
             />
           </div>
           <div className="composer-actions">
