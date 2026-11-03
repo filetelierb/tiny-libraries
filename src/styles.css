@@ -11239,4 +11239,96 @@ body.agent-dragging {
   cursor: default;
   vertical-align: baseline;
 }
+/* TipTap placeholder — the editor adds this class to the first paragraph when empty. */
+.composer-editable p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--muted-text);
+  pointer-events: none;
+  float: left;
+  height: 0;
+}
+.composer-editable .ProseMirror {
+  outline: none;
+}
+.composer-editable p { margin: 0; }
+
+/* Floating unified mention menu — one list of files + concepts, no tabs. */
+.mention-command-menu {
+  display: flex;
+  flex-direction: column;
+  min-width: 320px;
+  background: var(--surface, var(--background));
+  color: var(--foreground);
+  border-radius: 12px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35), inset 0 0 0 1px var(--border);
+  overflow: hidden;
+  z-index: 60;
+  font-family: var(--font-body);
+}
+.mention-command-list {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px;
+}
+.mention-command-empty {
+  padding: 16px;
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted-text);
+}
+.mention-command-item {
+  display: grid;
+  grid-template-columns: 20px minmax(0, max-content) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  font-size: 13px;
+  line-height: 1.3;
+}
+.mention-command-item.is-active,
+.mention-command-item:hover {
+  background: color-mix(in oklch, var(--primary) 10%, transparent);
+}
+.mention-command-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  color: var(--muted-text);
+}
+.mention-command-icon svg { width: 14px; height: 14px; }
+.mention-command-label {
+  font-weight: var(--font-weight-medium);
+  min-width: 0;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mention-command-description {
+  min-width: 0;
+  color: var(--muted-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.mention-command-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 12px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--muted-text);
+  background: color-mix(in oklch, var(--background) 92%, transparent);
+}
 

@@ -66,7 +66,13 @@ import {
 } from '../../shared/tutor-context';
 import { normalizeConcept, type GlossaryEntry } from '../../shared/glossary';
 import { ConceptInspector } from '../tutor/ConceptInspector';
-import { TutorMentionPicker, type MentionPickerHandle } from '../tutor/TutorMentionPicker';
+import { MentionCommandMenu } from '../tutor/MentionCommandMenu';
+import {
+  TipTapComposer,
+  type ComposerMenuCommands,
+  type ComposerSuggestion,
+  type TipTapComposerHandle,
+} from './TipTapComposer';
 import { useCitationRecovery } from '../tutor/useCitationRecovery';
 import { AttachmentPicker } from '../tutor/AttachmentPicker';
 import { AttachmentInspector } from '../tutor/AttachmentInspector';
@@ -86,253 +92,8 @@ import {
   type QuestionAttachment,
 } from '../../shared/tutor-attachments';
 
-export type ChipComposerHandle = {
-  focus: (options?: FocusOptions) => void;
-};
-export type ActiveMention = { start: number; query: string };
-/**
- * The @-mention being edited at `caret`: the last `@` before the caret preceded by
- * whitespace (or start of text), with the span between it and the caret as the query —
- * spaces included, so `" @ "` between two spaces counts as an active empty query. Returns
- * `null` when nothing active.
- */
-export function activeComposerMention(draft: string, caret: number | null): ActiveMention | null {
-  if (caret === null || caret < 0 || caret > draft.length) return null;
-  const before = draft.slice(0, caret);
-  const start = before.lastIndexOf('@');
-  if (start < 0) return null;
-  if (start > 0 && !/\s/.test(draft[start - 1])) return null;
-  const query = before.slice(start + 1);
-  if (query.length > 300 || /[@\n]/.test(query)) return null;
-  return { start, query };
-}
-/**
- * Serialise a contenteditable composer DOM to plain text. Text nodes keep their text and chip
- * spans become `@name`; the trailing `<br>` chromium adds as a line placeholder is dropped, so
- * a lonely `@` at the end of the text isn't masked by a phantom newline.
- */
-function serializeComposer(node: HTMLElement): string {
-  let out = '';
-  const children = Array.from(node.childNodes);
-  children.forEach((child, index) => {
-    if (child.nodeType === Node.TEXT_NODE) out += child.textContent || '';
-    else if (child instanceof HTMLElement) {
-      if (child.dataset.mention) out += `@${child.dataset.mention}`;
-      else if (child.tagName === 'BR') {
-        if (index < children.length - 1) out += '\n';
-      } else out += child.textContent || '';
-    }
-  });
-  return out;
-}
-/**
- * Offset of the caret in the serialised text of `root`. Chips count as `@name` characters, so
- * this offset maps directly onto the `draft` string the parent holds; returns `null` when the
- * selection isn't inside `root`.
- */
-function caretInComposer(root: HTMLElement): number | null {
-  const selection = window.getSelection();
-  if (!selection || selection.rangeCount === 0) return null;
-  const range = selection.getRangeAt(0);
-  if (!root.contains(range.endContainer)) return null;
-  const pre = range.cloneRange();
-  pre.selectNodeContents(root);
-  pre.setEnd(range.endContainer, range.endOffset);
-  const container = document.createElement('div');
-  container.appendChild(pre.cloneContents());
-  return serializeComposer(container).length;
-}
-/**
- * A contenteditable composer that renders confirmed @mentions as atomic chip spans while
- * everything else reads as plain text. The parent still holds the plain-text draft (chips
- * serialize back to `@name`); each render only touches the DOM when the serialized text
- * drifts from the draft, so typing never fights React. The caret offset in that serialized
- * text is reported upward so the parent can decide whether an @-mention is being edited,
- * including the case where the caret sits in `" @ "` between two spaces.
- */
-const ChipComposer = React.forwardRef<
-  ChipComposerHandle,
-  {
-    draft: string;
-    setDraft: (value: string) => void;
-    candidates: string[];
-    placeholder: string;
-    ariaLabel: string;
-    mentionOpen: boolean;
-    mentionControlsId: string;
-    onEmptyBackspace: () => boolean;
-    onEscape: () => void;
-    onCaretChange: (caret: number | null) => void;
-    /** True when the picker handled the key. */
-    onPickerKey: (key: string, shift: boolean) => boolean;
-  }
->(function ChipComposer(
-  { draft, setDraft, candidates, placeholder, ariaLabel, mentionOpen, mentionControlsId, onEmptyBackspace, onEscape, onCaretChange, onPickerKey },
-  ref,
-) {
-  const root = React.useRef<HTMLDivElement>(null);
-  const ordered = React.useMemo(
-    () => [...candidates].sort((a, b) => b.length - a.length),
-    [candidates],
-  );
-  const caretChangeRef = React.useRef(onCaretChange);
-  caretChangeRef.current = onCaretChange;
-  const reportCaret = React.useCallback(() => {
-    const node = root.current;
-    if (!node) return;
-    caretChangeRef.current(caretInComposer(node));
-  }, []);
-  React.useImperativeHandle(ref, () => ({
-    focus: (options) => {
-      const node = root.current;
-      if (!node) return;
-      node.focus(options);
-      // Place the caret at the end if there is no selection in the node yet.
-      const selection = window.getSelection();
-      if (!selection || !node.contains(selection.anchorNode)) {
-        const range = document.createRange();
-        range.selectNodeContents(node);
-        range.collapse(false);
-        selection?.removeAllRanges();
-        selection?.addRange(range);
-      }
-      reportCaret();
-    },
-  }));
-  // The browser fires `selectionchange` on the document for every caret move; mirror it into
-  // the parent whenever the selection is actually inside our editable, so the mention state
-  // reacts to arrow keys and clicks, not just typing.
-  React.useEffect(() => {
-    const listener = () => {
-      const node = root.current;
-      if (!node) return;
-      const selection = window.getSelection();
-      if (!selection || selection.rangeCount === 0) return;
-      if (!node.contains(selection.anchorNode) && !node.contains(selection.focusNode)) return;
-      caretChangeRef.current(caretInComposer(node));
-    };
-    document.addEventListener('selectionchange', listener);
-    return () => document.removeEventListener('selectionchange', listener);
-  }, []);
-  const serialize = serializeComposer;
-  // Build the DOM for a draft string: plain runs plus one chip span per confirmed @mention.
-  const build = (value: string): Node[] => {
-    const nodes: Node[] = [];
-    let cursor = 0;
-    const flush = (text: string) => {
-      if (text) nodes.push(document.createTextNode(text));
-    };
-    while (cursor < value.length) {
-      const at = value.indexOf('@', cursor);
-      if (at < 0) {
-        flush(value.slice(cursor));
-        break;
-      }
-      if (at > 0 && !/\s/.test(value[at - 1])) {
-        // An @ right after a non-space character is literal text, not a mention.
-        flush(value.slice(cursor, at + 1));
-        cursor = at + 1;
-        continue;
-      }
-      const match = ordered.find((name) => {
-        if (value.slice(at + 1, at + 1 + name.length) !== name) return false;
-        const next = value[at + 1 + name.length];
-        return next === undefined || /\s/.test(next);
-      });
-      if (!match) {
-        flush(value.slice(cursor, at + 1));
-        cursor = at + 1;
-        continue;
-      }
-      flush(value.slice(cursor, at));
-      const chip = document.createElement('span');
-      chip.className = 'composer-chip-inline';
-      chip.contentEditable = 'false';
-      chip.dataset.mention = match;
-      chip.textContent = match;
-      nodes.push(chip);
-      cursor = at + 1 + match.length;
-    }
-    return nodes;
-  };
-  // The draft prop is authoritative. When it drifts from the DOM text, rebuild and park the
-  // caret at the end — the only way draft changes externally is a picker insert or clear.
-  React.useEffect(() => {
-    const node = root.current;
-    if (!node) return;
-    if (serialize(node) === draft) return;
-    node.replaceChildren(...build(draft));
-    if (document.activeElement === node) {
-      const selection = window.getSelection();
-      const range = document.createRange();
-      range.selectNodeContents(node);
-      range.collapse(false);
-      selection?.removeAllRanges();
-      selection?.addRange(range);
-    }
-  });
-  return (
-    <div
-      ref={root}
-      className="composer-editable"
-      contentEditable
-      suppressContentEditableWarning
-      role="textbox"
-      aria-label={ariaLabel}
-      aria-multiline="true"
-      aria-autocomplete="list"
-      aria-controls={mentionOpen ? mentionControlsId : undefined}
-      aria-expanded={mentionOpen}
-      data-placeholder={placeholder}
-      data-empty={draft.length === 0 ? '' : undefined}
-      onInput={(event) => {
-        setDraft(serialize(event.currentTarget));
-        reportCaret();
-      }}
-      onFocus={() => reportCaret()}
-      onPaste={(event) => {
-        event.preventDefault();
-        const text = event.clipboardData.getData('text/plain');
-        document.execCommand('insertText', false, text);
-      }}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' && !event.shiftKey && !mentionOpen) {
-          // The outer form owns submit; this component just inserts a line on Shift+Enter.
-          event.preventDefault();
-          event.currentTarget.closest('form')?.requestSubmit();
-          return;
-        }
-        if (event.key === 'Enter' && event.shiftKey) {
-          event.preventDefault();
-          document.execCommand('insertText', false, '\n');
-          return;
-        }
-        if (
-          event.key === 'Backspace' &&
-          !event.shiftKey &&
-          !event.metaKey &&
-          !event.ctrlKey &&
-          !event.altKey &&
-          !event.repeat &&
-          draft.length === 0 &&
-          !mentionOpen
-        ) {
-          if (onEmptyBackspace()) {
-            event.preventDefault();
-            return;
-          }
-        }
-        if (mentionOpen && event.key === 'Escape') {
-          event.preventDefault();
-          event.stopPropagation();
-          onEscape();
-          return;
-        }
-        if (mentionOpen && onPickerKey(event.key, event.shiftKey)) event.preventDefault();
-      }}
-    />
-  );
-});
+// ChipComposer and its caret helpers moved to the TipTap-backed TipTapComposer. The parent
+// now talks to it via the suggestion state + menu commands refs, not a plain-text caret.
 function stored(key: string) {
   try {
     return localStorage.getItem(key) || '';
@@ -852,7 +613,7 @@ function ConversationThread({
     { kind: 'source' }
   > | null>(null);
   const citationAction = useRef<((reference: TutorCitation) => void) | null>(null);
-  const mentionPicker = useRef<MentionPickerHandle>(null);
+  const menuCommandsRef = useRef<ComposerMenuCommands | null>(null);
   const mentionBusy = useRef(false);
   const recoveredMaterials = useCitationRecovery(
     { ...conversation, messages: [...displayed.values()] },
@@ -870,7 +631,9 @@ function ConversationThread({
     }
   });
   const contextRef = useRef(context),
-    composer = useRef<ChipComposerHandle>(null);
+    composer = useRef<TipTapComposerHandle>(null);
+  const composerAnchor = useRef<HTMLDivElement>(null);
+  const [suggestion, setSuggestion] = useState<ComposerSuggestion | null>(null);
   contextRef.current = context;
   const changeContext = (value: QuestionContext | null) => {
     contextRef.current = value;
@@ -913,31 +676,9 @@ function ConversationThread({
     setTitle(conversation.name);
     setRename(true);
   }, [renameRequest]);
-  // The active @mention is driven by the caret: the last `@` before the caret (preceded by
-  // whitespace or start of the draft) opens the picker, and the query is everything between
-  // that `@` and the caret — so `" @ "` between two spaces works as long as the caret sits
-  // inside that span. The query may contain spaces until the student picks an item or
-  // presses Esc; `@`, newlines and runaway length bail out.
-  const [caret, setCaret] = useState<number | null>(null);
-  const caretRef = useRef(caret);
-  caretRef.current = caret;
-  const activeMention = React.useMemo(
-    () => activeComposerMention(draft, caret),
-    [draft, caret],
-  );
-  const mentionQuery = activeMention?.query;
-  const mentionStart = activeMention?.start ?? -1;
-  // Esc dismisses the picker for the current @token only. The anchor is the @ position at
-  // the moment of dismissal; a new @ at a different position reopens the picker.
-  const [dismissedAt, setDismissedAt] = useState<number | null>(null);
-  const setMentionDismissed = (value: boolean) =>
-    setDismissedAt(value && mentionQuery !== undefined ? mentionStart : null);
-  const effectiveDismissed = dismissedAt !== null && dismissedAt === mentionStart;
-  const mentionOpen = !effectiveDismissed && mentionQuery !== undefined;
-  useEffect(() => {
-    if (dismissedAt !== null && (mentionQuery === undefined || dismissedAt !== mentionStart))
-      setDismissedAt(null);
-  }, [dismissedAt, mentionQuery, mentionStart]);
+  // Suggestion open/close and query live inside the TipTap Mention extension; the parent
+  // just renders the menu overlay when `suggestion` is non-null. No caret tracking, no
+  // dismissedAt bookkeeping — TipTap's plugin tears the suggestion down on space/escape/etc.
   const draftRef = useRef(draft),
     alive = useRef(true);
   draftRef.current = draft;
@@ -971,6 +712,11 @@ function ConversationThread({
     writeDraft(value);
     setDraft(text);
   };
+  // Externally driven draft changes (prefill from a question, clear after submit, cross-tab
+  // sync) need to be pushed into the TipTap editor; self-echoes are no-ops inside setDraft.
+  useEffect(() => {
+    composer.current?.setDraft(draft);
+  }, [draft]);
   const syncDraft = () => {
     const web = readWebDraft(stored(webKey));
     webRef.current = web;
@@ -1219,30 +965,23 @@ function ConversationThread({
       onError(error instanceof Error ? error.message : t.error);
     }
   };
-  const mention = async (file: Source) => {
-    if (mentionBusy.current) return;
+  // Add the file as a reference (or unpause a paused one). The composer handles writing the
+  // chip itself via the suggestion's `command` callback, so we never touch the draft here.
+  const mention = async (file: Source): Promise<boolean> => {
+    if (mentionBusy.current) return false;
     mentionBusy.current = true;
-    const before = draftRef.current;
     setMentionPending(true);
     try {
       if (!conversation.sourceIds.includes(file.id)) {
         if (conversation.sourceIds.length >= 20) {
           onError(t.referenceLimit);
-          return;
+          return false;
         }
-        if (!(await patch({ sourceIds: [...conversation.sourceIds, file.id] }))) return;
+        if (!(await patch({ sourceIds: [...conversation.sourceIds, file.id] }))) return false;
       } else if (paused.has(file.id)) {
-        // Mentioning a paused reference uses it again.
-        if (!(await patch({ pausedSourceIds: [...paused].filter((id) => id !== file.id) }))) return;
+        if (!(await patch({ pausedSourceIds: [...paused].filter((id) => id !== file.id) }))) return false;
       }
-      // A reference save may finish after the user has started a different draft.
-      if (draftRef.current === before) {
-        const info = activeComposerMention(before, caretRef.current);
-        const atPos = info?.start ?? before.lastIndexOf('@');
-        const endPos = caretRef.current ?? before.length;
-        changeDraft(`${before.slice(0, atPos)}@${file.name} ${before.slice(endPos)}`);
-        setMentionDismissed(true);
-      }
+      return true;
     } finally {
       mentionBusy.current = false;
       if (alive.current) setMentionPending(false);
@@ -1289,20 +1028,14 @@ function ConversationThread({
       }
     }
   };
-  const mentionConcept = (entry: GlossaryEntry) => {
+  const mentionConcept = (entry: GlossaryEntry): boolean => {
     const current = conceptDraftRef.current.items;
     if (!current.some((c) => c.id === entry.id) && current.length >= MAX_QUESTION_CONCEPTS) {
       onError(t.conceptLimit);
-      return;
+      return false;
     }
     changeConcepts([...current.filter((c) => c.id !== entry.id), conceptMention(entry)]);
-    const before = draftRef.current;
-    const info = activeComposerMention(before, caretRef.current);
-    const atPos = info?.start ?? before.lastIndexOf('@');
-    const endPos = caretRef.current ?? before.length;
-    changeDraft(`${before.slice(0, atPos)}@${entry.term} ${before.slice(endPos)}`);
-    setMentionDismissed(true);
-    composer.current?.focus();
+    return true;
   };
   const citationLabel = (ref: TutorCitation) =>
     ref.kind === 'web'
@@ -1729,21 +1462,23 @@ function ConversationThread({
             <small>{t.questionContextNotice}</small>
           </div>
         )}
-        {mentionOpen && (
-          <div id={`mentions-${conversation.id}`}>
-            <TutorMentionPicker
-              ref={mentionPicker}
-              query={mentionQuery || ''}
-              catalog={catalog}
-              t={t}
-              actions={treeActions}
-              pickFile={(file) => {
-                void mention(file).then(() => composer.current?.focus());
-              }}
-              pickConcept={mentionConcept}
-              focusComposer={() => composer.current?.focus()}
-            />
-          </div>
+        {suggestion && (
+          <MentionCommandMenu
+            ref={menuCommandsRef}
+            suggestion={suggestion}
+            catalog={catalog}
+            anchor={composerAnchor.current}
+            onPickFile={(file, command) => {
+              void mention(file).then((ok) => {
+                if (ok) command({ id: file.id, label: file.name });
+                composer.current?.focus();
+              });
+            }}
+            onPickConcept={(entry, command) => {
+              if (mentionConcept(entry)) command({ id: entry.id, label: entry.term });
+              composer.current?.focus();
+            }}
+          />
         )}
         <div className="composer-card">
           <div className="composer-strip">
@@ -1804,19 +1539,23 @@ function ConversationThread({
               </span>
             ))}
           </div>
-          <div className="composer-input">
-            <ChipComposer
+          <div className="composer-input" ref={composerAnchor}>
+            <TipTapComposer
               ref={composer}
-              draft={draft}
-              setDraft={changeDraft}
+              initialDraft={draft}
               candidates={[
                 ...catalog.files.map((file) => file.name),
                 ...catalog.concepts.map((concept) => concept.term),
               ]}
               placeholder={t.chatPlaceholder}
               ariaLabel={t.assistant}
-              mentionOpen={mentionOpen}
-              mentionControlsId={`mentions-${conversation.id}`}
+              onDraftChange={changeDraft}
+              onSuggestionChange={setSuggestion}
+              menuCommandsRef={menuCommandsRef}
+              onSubmit={() => {
+                composerAnchor.current?.closest('form')?.requestSubmit();
+              }}
+              onEscape={() => setSuggestion(null)}
               onEmptyBackspace={() => {
                 const concepts = conceptDraftRef.current.items;
                 const attachments = attachmentRef.current;
@@ -1830,11 +1569,6 @@ function ConversationThread({
                 }
                 return false;
               }}
-              onEscape={() => setMentionDismissed(true)}
-              onCaretChange={setCaret}
-              onPickerKey={(key, shift) =>
-                !shift && !!mentionPicker.current?.key(key)
-              }
             />
           </div>
           <div className="composer-actions">
