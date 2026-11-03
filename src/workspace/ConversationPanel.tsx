@@ -1463,37 +1463,37 @@ function ConversationThread({
           </div>
         )}
         {!!conceptDraft.items.length && (
-          <section className="question-concepts" aria-label={t.attachedConcepts}>
-            <strong>{t.conceptsForQuestion}</strong>
-            <p>{t.conceptAttachmentNotice}</p>
+          <div className="composer-chip-row" aria-label={t.attachedConcepts}>
             {conceptDraft.items.map((ref) => {
               const current = catalog.concepts.find((c) => c.id === ref.id);
               return (
-                <div className="question-concept" key={ref.id}>
+                <span className="composer-chip" key={ref.id}>
                   <button
                     type="button"
-                    title={t.inspectConcept}
+                    className="composer-chip-label"
+                    title={
+                      current && current.version !== ref.version
+                        ? `${t.inspectConcept} · ${t.newerConceptRevision} ${current.version}`
+                        : t.inspectConcept
+                    }
                     onClick={() => setInspectedConcept(ref)}
                   >
-                    {ref.term} · {t.revision} {ref.version}
+                    {ref.term}
                   </button>
-                  {current && current.version !== ref.version && (
-                    <small>
-                      {t.newerConceptRevision} {current.version}
-                    </small>
-                  )}
-                  <IconButton
-                    label={`${t.removeConcept}: ${ref.term}`}
+                  <button
+                    type="button"
+                    className="composer-chip-remove"
+                    aria-label={`${t.removeConcept}: ${ref.term}`}
                     onClick={() =>
                       changeConcepts(conceptDraftRef.current.items.filter((c) => c.id !== ref.id))
                     }
                   >
-                    <X size={14} />
-                  </IconButton>
-                </div>
+                    <X size={12} />
+                  </button>
+                </span>
               );
             })}
-          </section>
+          </div>
         )}
         {mentionOpen && (
           <div id={`mentions-${conversation.id}`}>
@@ -1596,6 +1596,30 @@ function ConversationThread({
                 setMentionDismissed(false);
               }}
               onKeyDown={(event) => {
+                // Backspace at the start of an empty draft removes the last attached chip.
+                if (
+                  event.key === 'Backspace' &&
+                  !event.repeat &&
+                  !event.shiftKey &&
+                  !event.metaKey &&
+                  !event.ctrlKey &&
+                  !event.altKey &&
+                  draft.length === 0 &&
+                  !mentionOpen
+                ) {
+                  const concepts = conceptDraftRef.current.items;
+                  const attachments = attachmentRef.current;
+                  if (concepts.length) {
+                    event.preventDefault();
+                    changeConcepts(concepts.slice(0, -1));
+                    return;
+                  }
+                  if (attachments.length) {
+                    event.preventDefault();
+                    changeAttachments(attachments.slice(0, -1));
+                    return;
+                  }
+                }
                 if (!mentionOpen) return;
                 if (event.key === 'Escape') {
                   event.preventDefault();
