@@ -135,15 +135,19 @@ const ChipComposer = React.forwardRef<
       }
     },
   }));
-  // Serialise the current DOM: text nodes keep their text, chip spans become @name.
+  // Serialise the current DOM: text nodes keep their text, chip spans become @name. The
+  // trailing <br> chromium adds as a line placeholder is dropped, so a lonely @ at the end of
+  // the text — the only clue the picker uses to open — isn't masked by a phantom newline.
   const serialize = (node: HTMLElement): string => {
     let out = '';
-    node.childNodes.forEach((child) => {
+    const children = Array.from(node.childNodes);
+    children.forEach((child, index) => {
       if (child.nodeType === Node.TEXT_NODE) out += child.textContent || '';
       else if (child instanceof HTMLElement) {
         if (child.dataset.mention) out += `@${child.dataset.mention}`;
-        else if (child.tagName === 'BR') out += '\n';
-        else out += child.textContent || '';
+        else if (child.tagName === 'BR') {
+          if (index < children.length - 1) out += '\n';
+        } else out += child.textContent || '';
       }
     });
     return out;
