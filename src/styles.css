@@ -11382,7 +11382,7 @@ body.agent-dragging {
 }
 .references-panel-list li {
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) auto auto;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
   padding: 4px 6px;
@@ -11404,25 +11404,4 @@ body.agent-dragging {
   font-size: 12px;
   color: var(--muted-text);
 }
-.references-panel-foot {
-  padding: 6px;
-  border-top: 1px solid var(--border);
-  background: color-mix(in oklch, var(--background) 92%, transparent);
-}
-.references-panel-manage {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  padding: 8px 10px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--primary);
-  font-size: 12px;
-  font-weight: var(--font-weight-medium);
-  cursor: pointer;
-}
-.references-panel-manage:hover { background: color-mix(in oklch, var(--primary) 10%, transparent); }
-.references-panel-manage svg { width: 14px; height: 14px; }
 

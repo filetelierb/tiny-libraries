@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { FileText, Pause, Play, Plus, X } from 'lucide-react';
+import { FileText, Pause, Play } from 'lucide-react';
 import type { Catalog } from '../../shared/domain';
 import type { T } from '../i18n';
 import { IconButton } from '../design/components';
@@ -19,8 +19,6 @@ export function ReferencesPanel({
   pending,
   anchor,
   onPause,
-  onRemove,
-  onManage,
   onDismiss,
 }: {
   t: T;
@@ -30,8 +28,6 @@ export function ReferencesPanel({
   pending: boolean;
   anchor: HTMLElement | null;
   onPause: (id: string, pauseIt: boolean) => void;
-  onRemove: (id: string) => void;
-  onManage: () => void;
   onDismiss: () => void;
 }) {
   const root = useRef<HTMLDivElement>(null);
@@ -109,28 +105,11 @@ export function ReferencesPanel({
                 >
                   {off ? <Play /> : <Pause />}
                 </IconButton>
-                <IconButton
-                  label={`${t.removeReference}: ${label}`}
-                  disabled={pending}
-                  onClick={() => onRemove(id)}
-                >
-                  <X />
-                </IconButton>
               </li>
             );
           })}
         </ul>
       )}
-      <footer className="references-panel-foot">
-        <button
-          type="button"
-          className="references-panel-manage"
-          onClick={onManage}
-        >
-          <Plus aria-hidden="true" />
-          {t.references}
-        </button>
-      </footer>
     </div>,
     document.body,
   );

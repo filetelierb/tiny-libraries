@@ -1537,15 +1537,6 @@ function ConversationThread({
                         : [...paused].filter((value) => value !== id),
                     })
                   }
-                  onRemove={(id) =>
-                    void patch({
-                      sourceIds: conversation.sourceIds.filter((value) => value !== id),
-                    })
-                  }
-                  onManage={() => {
-                    setRefPanel(false);
-                    setPicker(true);
-                  }}
                   onDismiss={() => setRefPanel(false)}
                 />
               )}
