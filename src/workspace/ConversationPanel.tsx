@@ -666,30 +666,20 @@ function ConversationThread({
     setTitle(conversation.name);
     setRename(true);
   }, [renameRequest]);
-  const mentionDismissedKey = `tl:mention-dismissed:${conversation.id}`;
-  const [mentionDismissed, setMentionDismissed] = useState(
-    () => !!stored(draftKey) && stored(mentionDismissedKey) === stored(draftKey),
-  );
-  useEffect(() => {
-    store(mentionDismissedKey, mentionDismissed ? draft : '');
-  }, [mentionDismissed, draft, mentionDismissedKey]);
   const mentionQuery = draft.match(/(?:^|\s)@([^\n@]*)$/)?.[1];
   // The active @token always ends the draft; the mirror highlights it behind the textarea.
   const mentionStart = draft.length - (mentionQuery?.length ?? 0) - 1;
-  // Esc dismisses the picker for the current @token only; a new @ at a different position
-  // starts a fresh one, so the dismissal is cleared when the token moves.
-  const dismissedStart = useRef<number | null>(null);
-  if (mentionDismissed && (mentionQuery === undefined || dismissedStart.current !== mentionStart))
-    dismissedStart.current = null;
-  const effectiveDismissed = mentionDismissed && dismissedStart.current === mentionStart;
+  // Esc dismisses the picker for the current @token only. The anchor is the @ position at
+  // the moment of dismissal; a new @ at a different position reopens the picker.
+  const [dismissedAt, setDismissedAt] = useState<number | null>(null);
+  const setMentionDismissed = (value: boolean) =>
+    setDismissedAt(value && mentionQuery !== undefined ? mentionStart : null);
+  const effectiveDismissed = dismissedAt !== null && dismissedAt === mentionStart;
   const mentionOpen = !effectiveDismissed && mentionQuery !== undefined;
   useEffect(() => {
-    if (!mentionDismissed || dismissedStart.current !== null) return;
-    if (mentionQuery !== undefined) dismissedStart.current = mentionStart;
-  }, [mentionDismissed, mentionQuery, mentionStart]);
-  useEffect(() => {
-    if (!mentionDismissed) dismissedStart.current = null;
-  }, [mentionDismissed]);
+    if (dismissedAt !== null && (mentionQuery === undefined || dismissedAt !== mentionStart))
+      setDismissedAt(null);
+  }, [dismissedAt, mentionQuery, mentionStart]);
   const mirror = useRef<HTMLDivElement>(null);
   const draftRef = useRef(draft),
     alive = useRef(true);
