@@ -654,13 +654,16 @@ export function App() {
     };
   }, [active?.id, locale, refreshTick]);
   useEffect(() => {
+    if (!catalog) return;
     // An open linked-artifact file reads its material from the recording it points at.
     const linkedSourceIds = [primary, split, active]
       .filter((source): source is Source => !!source && !!source.linkedSourceId)
       .map((source) => source.linkedSourceId!);
-    const sources = [primary, split, ...catalog!.files.filter((file) => linkedSourceIds.includes(file.id))].filter(
-      (source): source is Source => !!source && source.id !== active?.id,
-    );
+    const sources = [
+      primary,
+      split,
+      ...catalog.files.filter((file) => linkedSourceIds.includes(file.id)),
+    ].filter((source): source is Source => !!source && source.id !== active?.id);
     if (!sources.length) return;
     let cancelled = false;
     const load = async () => {
