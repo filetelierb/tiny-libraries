@@ -11199,3 +11199,19 @@ body.agent-dragging {
   background: color-mix(in oklch, var(--primary) 20%, transparent);
   color: inherit;
 }
+
+/* An @mention renders as a visual chip in the mirror; the textarea stays plain-text underneath. */
+.composer-input > textarea {
+  color: transparent;
+  caret-color: var(--foreground);
+}
+.composer-input > textarea::placeholder {
+  color: var(--muted-text);
+}
+.composer-chip-inline {
+  padding: 1px 2px;
+  border-radius: 4px;
+  background: color-mix(in oklch, var(--primary) 15%, transparent);
+  color: var(--primary);
+  font-weight: var(--font-weight-medium);
+}

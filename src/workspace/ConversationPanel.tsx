@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { SavedTutorMessage } from '../tutor/SavedTutorMessage';
 import { ArtifactProgress } from '../tutor/ArtifactProgress';
 import { ActionLog } from '../tutor/ActionLog';
@@ -86,6 +86,55 @@ import {
   type QuestionAttachment,
 } from '../../shared/tutor-attachments';
 
+/**
+ * Walks the draft and turns every @name whose name matches a known file or glossary term into
+ * a visual chip in the mirror, so the composer reads as rich text while the textarea keeps the
+ * same plain-text contents. The @token being typed (its start is `pendingMentionStart`) gets a
+ * soft mark that tracks the picker instead.
+ */
+function renderDraftWithChips(
+  draft: string,
+  candidates: string[],
+  pendingMentionStart: number,
+): React.ReactNode[] {
+  const nodes: React.ReactNode[] = [];
+  const ordered = [...candidates].sort((a, b) => b.length - a.length);
+  let cursor = 0,
+    key = 0;
+  while (cursor < draft.length) {
+    if (cursor === pendingMentionStart) {
+      nodes.push(
+        <mark key={key++}>{draft.slice(pendingMentionStart)}</mark>,
+      );
+      cursor = draft.length;
+      break;
+    }
+    if (draft[cursor] === '@' && (cursor === 0 || /\s/.test(draft[cursor - 1]))) {
+      const match = ordered.find((name) => {
+        if (draft.slice(cursor + 1, cursor + 1 + name.length) !== name) return false;
+        const next = draft[cursor + 1 + name.length];
+        return next === undefined || /\s/.test(next);
+      });
+      if (match) {
+        nodes.push(
+          <span key={key++} className="composer-chip-inline">
+            @{match}
+          </span>,
+        );
+        cursor += 1 + match.length;
+        continue;
+      }
+    }
+    // Append one plain character at a time; React merges identical adjacent text nodes.
+    const next = draft.indexOf('@', cursor + 1);
+    const boundary = next < 0 ? draft.length : next;
+    const stop =
+      pendingMentionStart > cursor && pendingMentionStart < boundary ? pendingMentionStart : boundary;
+    nodes.push(<React.Fragment key={key++}>{draft.slice(cursor, stop)}</React.Fragment>);
+    cursor = stop;
+  }
+  return nodes;
+}
 function stored(key: string) {
   try {
     return localStorage.getItem(key) || '';
@@ -1465,39 +1514,6 @@ function ConversationThread({
             <small>{t.questionContextNotice}</small>
           </div>
         )}
-        {!!conceptDraft.items.length && (
-          <div className="composer-chip-row" aria-label={t.attachedConcepts}>
-            {conceptDraft.items.map((ref) => {
-              const current = catalog.concepts.find((c) => c.id === ref.id);
-              return (
-                <span className="composer-chip" key={ref.id}>
-                  <button
-                    type="button"
-                    className="composer-chip-label"
-                    title={
-                      current && current.version !== ref.version
-                        ? `${t.inspectConcept} · ${t.newerConceptRevision} ${current.version}`
-                        : t.inspectConcept
-                    }
-                    onClick={() => setInspectedConcept(ref)}
-                  >
-                    {ref.term}
-                  </button>
-                  <button
-                    type="button"
-                    className="composer-chip-remove"
-                    aria-label={`${t.removeConcept}: ${ref.term}`}
-                    onClick={() =>
-                      changeConcepts(conceptDraftRef.current.items.filter((c) => c.id !== ref.id))
-                    }
-                  >
-                    <X size={12} />
-                  </button>
-                </span>
-              );
-            })}
-          </div>
-        )}
         {mentionOpen && (
           <div id={`mentions-${conversation.id}`}>
             <TutorMentionPicker
@@ -1574,16 +1590,20 @@ function ConversationThread({
             ))}
           </div>
           <div className="composer-input">
-            {mentionOpen && (
-              <div className="composer-mirror" aria-hidden="true" ref={mirror}>
-                {draft.slice(0, mentionStart)}
-                <mark>{draft.slice(mentionStart)}</mark>
-                {'\u200b'}
-              </div>
-            )}
+            <div className="composer-mirror" aria-hidden="true" ref={mirror}>
+              {renderDraftWithChips(
+                draft,
+                [
+                  ...catalog.files.map((file) => file.name),
+                  ...catalog.concepts.map((concept) => concept.term),
+                ],
+                mentionOpen ? mentionStart : -1,
+              )}
+              {'\u200b'}
+            </div>
             <textarea
               ref={composer}
-              className={mentionOpen ? 'mention-active' : undefined}
+              className="mention-active"
               onScroll={(event) => {
                 if (mirror.current) mirror.current.scrollTop = event.currentTarget.scrollTop;
               }}
