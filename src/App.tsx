@@ -129,6 +129,7 @@ import { conversationHasWork } from './tutor/turnDrafts';
 import { AnnotationsPanel } from './annotations/AnnotationsPanel';
 import { captureSource } from './annotations/capture';
 import type { AnnotationRequest } from './annotations/AnnotationEditor';
+import { TypingPauseContext, useProvideTypingPause } from './annotations/typingPause';
 import { plainDocument } from '../shared/annotations';
 import type { Annotation, SourceLocation } from '../shared/annotations';
 import { useBookmarks } from './bookmarks/useBookmarks';
@@ -152,6 +153,7 @@ type DirectoryDialog =
   | { action: 'deleteFile'; file: Source };
 
 export function App() {
+  const typingPause = useProvideTypingPause();
   const [catalog, setCatalog] = useState<Catalog | null>(null),
     [locale, setLocale] = useState<Locale>(() => localGet('tl:locale', 'en') as Locale),
     [session, setSession] = useState<StudySession | null>(null);
@@ -986,6 +988,7 @@ export function App() {
       </div>
     );
   return (
+    <TypingPauseContext.Provider value={typingPause}>
     <div
       className="app"
       style={
@@ -2827,6 +2830,7 @@ export function App() {
         project={location.pathname.match(/^\/projects\/([\w-]+)/)?.[1]}
       />
     </div>
+    </TypingPauseContext.Provider>
   );
 }
 

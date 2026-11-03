@@ -44,6 +44,7 @@ import { ApiResponseError } from '../api';
 import type { T } from '../i18n';
 import { InlineMath, BlockMath } from './mathNodes';
 import { RichContent } from './RichContent';
+import { useTypingPauseController } from './typingPause';
 
 export type CaptureImage = { url: string; width: number; height: number; blob?: Blob };
 export type AnnotationRequest = {
@@ -165,6 +166,17 @@ function EditorForm({
   const draftRef = useRef(draft),
     writes = useRef(new DraftWriteQueue()),
     alive = useRef(true);
+  // Typing in the composer pauses any sibling media players through context;
+  // the release on blur / submit / cancel lets them resume what they owned.
+  const typingPause = useTypingPauseController();
+  const typingPauseRef = useRef(typingPause);
+  typingPauseRef.current = typingPause;
+  useEffect(
+    () => () => {
+      typingPauseRef.current.release();
+    },
+    [],
+  );
   const { title, sourceMode, markdown } = draft;
   function changeNote(patch: Partial<NoteDraft>, semantic = true) {
     const next = {
@@ -203,7 +215,10 @@ function EditorForm({
     editorProps: {
       attributes: { role: 'textbox', 'aria-label': t.annotationBody, spellcheck: 'true' },
     },
-    onUpdate: ({ editor }) => changeNote({ document: editor.getJSON() }),
+    onUpdate: ({ editor }) => {
+      typingPauseRef.current.pulse();
+      changeNote({ document: editor.getJSON() });
+    },
   });
   useEffect(() => {
     editor?.setEditable(!pending && !conflict, false);
@@ -216,6 +231,7 @@ function EditorForm({
   );
   const leave = async () => {
     if (pending) return;
+    typingPause.release();
     try {
       await writes.current.flush();
       await session.workspace.flush();
@@ -351,6 +367,7 @@ function EditorForm({
   }
   async function save() {
     if (!editor || pending || conflict || draftRef.current.unverified) return;
+    typingPause.release();
     setPending(true);
     setError('');
     try {
@@ -465,7 +482,11 @@ function EditorForm({
               aria-label={t.annotationTitle}
               maxLength={240}
               value={title}
-              onChange={(event) => setTitle(event.target.value)}
+              onChange={(event) => {
+                typingPause.pulse();
+                setTitle(event.target.value);
+              }}
+              onBlur={() => typingPause.release()}
               disabled={pending}
             />
           </label>
@@ -597,10 +618,18 @@ function EditorForm({
               className="annotation-markdown"
               aria-label={t.annotationMarkdown}
               value={markdown}
-              onChange={(event) => setMarkdown(event.target.value)}
+              onChange={(event) => {
+                typingPause.pulse();
+                setMarkdown(event.target.value);
+              }}
+              onBlur={() => typingPause.release()}
             />
           ) : (
-            <EditorContent editor={editor} className="annotation-body" />
+            <EditorContent
+              editor={editor}
+              className="annotation-body"
+              onBlur={() => typingPause.release()}
+            />
           )}
           <CaptureCollectionEditor
             catalog={catalog}
@@ -615,6 +644,11 @@ function EditorForm({
         <p role="status" className="capture-draft-status">
           {notice} {localSaved ? t.captureDraftSaved : t.captureDraftSaving}
         </p>
+        {typingPause.typing && (
+          <p role="status" className="typing-pause-chip">
+            {t.typingPauseStatus}
+          </p>
+        )}
         {draft.pending && !conflict && <p>{t.captureNetworkPending}</p>}
         {draft.unverified && (
           <div className="capture-recovery-review">

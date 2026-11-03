@@ -29,6 +29,7 @@ import {
 import { IconButton } from './design/components';
 import type { T } from './i18n';
 import type { ReadingProgress } from '../shared/chapters';
+import { useTypingPauseController } from './annotations/typingPause';
 
 type Preferences = { speed: number; volume: number; muted: boolean; track: string };
 function readPreferences(key: string): Preferences {
@@ -107,6 +108,26 @@ export function MediaPlayer({
     if (resumeSignal && media.current && !suspended)
       void media.current.play().catch(() => setError(t.playbackError));
   }, [resumeSignal]);
+  // Typing in a text composer nearby pauses this player and remembers that
+  // *we* paused it, so we only auto-resume plays we own. Any user-driven play
+  // or pause during the composer session clears that ownership (see onPlay /
+  // onPause handlers below).
+  const typingPause = useTypingPauseController();
+  const pausedByTyping = useRef(false);
+  useEffect(() => {
+    const player = media.current;
+    if (!player) return;
+    if (typingPause.typing) {
+      if (!player.paused) {
+        pausedByTyping.current = true;
+        player.pause();
+      }
+    } else if (pausedByTyping.current) {
+      pausedByTyping.current = false;
+      if (player.paused && !suspended)
+        void player.play().catch(() => setError(t.playbackError));
+    }
+  }, [typingPause.typing, suspended]);
   const wake = () => {
     setVisible(true);
     if (timer.current) clearTimeout(timer.current);
@@ -498,6 +519,9 @@ export function MediaPlayer({
         onPlay={() => {
           setPlaying(true);
           playingCallback.current?.(true);
+          // The user (or any resume) retook control; stop treating this player
+          // as paused-by-typing.
+          pausedByTyping.current = false;
           if (pendingSeek.current && media.current) {
             pendingSeek.current = false;
             positionCallback.current(media.current.currentTime);
@@ -507,6 +531,10 @@ export function MediaPlayer({
         onPause={() => {
           setPlaying(false);
           playingCallback.current?.(false);
+          // Only our typing-pause effect owns resumption; a manual pause by the
+          // user while typing clears ownership so we don't surprise-resume on
+          // release.
+          if (!typingPause.typing) pausedByTyping.current = false;
           if (media.current) positionCallback.current(media.current.currentTime);
         }}
         onEnded={() => {
