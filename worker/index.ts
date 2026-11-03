@@ -503,6 +503,7 @@ export class Library extends DurableObject<Env> {
               summary: `Writing flashcards for ${chapter?.title || 'a chapter'}`,
               progress: { current: started, total },
               model: settings.model,
+              reasoningEffort: 'auto',
             });
             let chapterUsage: MetaUsage | undefined;
             const plan = await generateCards(
@@ -528,6 +529,7 @@ export class Library extends DurableObject<Env> {
               summary: `Flashcards ready for ${chapter?.title || 'a chapter'}`,
               progress: { current: completed, total },
               model: settings.model,
+              reasoningEffort: 'auto',
               ...(chapterUsage ? { usage: chapterUsage } : {}),
             });
             return plan;

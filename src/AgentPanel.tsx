@@ -206,12 +206,7 @@ export function AgentPanel({
         }}
       />
       <div className="agent-header">
-        <button
-          type="button"
-          className="agent-header-toggle"
-          onClick={toggle}
-          aria-expanded={open}
-        >
+        <button type="button" className="agent-header-toggle" onClick={toggle} aria-expanded={open}>
           <Activity size={14} aria-hidden="true" />
           <strong>{t.agentPanel}</strong>
           <span className="agent-counts">
@@ -258,7 +253,7 @@ export function AgentPanel({
       {open && view === 'flow' && (
         <div className="agent-flow-wrap">
           {rows.length ? (
-            <AgentFlow events={scoped} t={t} />
+            <AgentFlow events={scoped} locale={locale} t={t} />
           ) : (
             <p className="agent-empty">
               <CircleHelp size={14} aria-hidden="true" />

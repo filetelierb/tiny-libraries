@@ -256,8 +256,43 @@ function StageCard({
   );
 }
 
-/** The actions of the stage currently selected on a file's pipeline, listed below the timeline. */
-function StageDetails({ stage, events, t }: { stage: Stage; events: AgentEvent[]; t: T }) {
+/**
+ * Reads an ISO date into a short phrase. Under 10 seconds, "a few seconds ago"; from there,
+ * the browser's relative time ("1 minute ago", "2 hours ago"); past 24 hours, the local date
+ * and time, so stale events never read as recent.
+ */
+function timeLabel(at: string, locale: 'en' | 'es', justNow: string) {
+  const now = Date.now(),
+    then = new Date(at).getTime(),
+    diffSeconds = Math.round((then - now) / 1000);
+  const abs = Math.abs(diffSeconds);
+  if (abs < 10) return justNow;
+  const format = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
+  if (abs < 60) return format.format(diffSeconds, 'second');
+  const diffMinutes = Math.round(diffSeconds / 60);
+  if (Math.abs(diffMinutes) < 60) return format.format(diffMinutes, 'minute');
+  const diffHours = Math.round(diffMinutes / 60);
+  if (Math.abs(diffHours) < 24) return format.format(diffHours, 'hour');
+  return new Date(at).toLocaleString(locale, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+/** The actions of the stage currently selected on a file's pipeline, as a vertical timeline. */
+function StageDetails({
+  stage,
+  events,
+  locale,
+  t,
+}: {
+  stage: Stage;
+  events: AgentEvent[];
+  locale: 'en' | 'es';
+  t: T;
+}) {
   if (!events.length) return null;
   const Icon = stageIcon[stage];
   return (
@@ -269,34 +304,64 @@ function StageDetails({ stage, events, t }: { stage: Stage; events: AgentEvent[]
           {events.length} {events.length === 1 ? t.agentDetailStep : t.agentDetailSteps}
         </small>
       </header>
-      <ul>
-        {events.map((event) => (
-          <li key={event.id}>
-            <strong>{event.summary}</strong>
-            <small>
-              {event.model ? `${event.model} · ` : ''}
-              {event.usage?.input !== undefined
-                ? `${event.usage.input.toLocaleString()} in · `
-                : ''}
-              {event.usage?.output !== undefined
-                ? `${event.usage.output.toLocaleString()} out · `
-                : ''}
-              {event.usage?.audioSeconds !== undefined
-                ? `${Math.round(event.usage.audioSeconds)} s audio · `
-                : ''}
-              {event.elapsedMs !== undefined ? `${elapsed(event.elapsedMs)} · ` : ''}
-              {new Date(event.at).toLocaleTimeString()}
-            </small>
-            {event.detail && <small className="agent-detail">{event.detail}</small>}
-          </li>
-        ))}
-      </ul>
+      <ol className="flow-timeline" aria-label={t[`agentStage_${stage}` as keyof T] as string}>
+        {events.map((event) => {
+          const metrics: string[] = [];
+          if (event.usage?.input !== undefined)
+            metrics.push(`${event.usage.input.toLocaleString()} in`);
+          if (event.usage?.output !== undefined)
+            metrics.push(`${event.usage.output.toLocaleString()} out`);
+          if (event.usage?.input !== undefined && event.usage?.output !== undefined)
+            metrics.push(
+              `${((event.usage.input || 0) + (event.usage.output || 0)).toLocaleString()} ${t.agentTokensTotal}`,
+            );
+          if (event.usage?.audioSeconds !== undefined)
+            metrics.push(`${Math.round(event.usage.audioSeconds)} ${t.agentAudioSeconds}`);
+          if (event.elapsedMs !== undefined) metrics.push(elapsed(event.elapsedMs));
+          return (
+            <li key={event.id} className="flow-timeline-item">
+              <time
+                className="flow-timeline-time"
+                dateTime={event.at}
+                title={new Date(event.at).toLocaleString(locale)}
+              >
+                {timeLabel(event.at, locale, t.agentJustNow)}
+              </time>
+              <div className="flow-timeline-body">
+                <strong>{event.summary}</strong>
+                {event.model && (
+                  <small className="flow-timeline-model">
+                    {event.model}
+                    {event.reasoningEffort ? ` · ${t.agentEffort}: ${event.reasoningEffort}` : ''}
+                  </small>
+                )}
+                {metrics.length > 0 && (
+                  <div className="flow-timeline-metrics">
+                    {metrics.map((item, index) => (
+                      <span key={index}>{item}</span>
+                    ))}
+                  </div>
+                )}
+                {event.detail && <small className="agent-detail">{event.detail}</small>}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
     </div>
   );
 }
 
 /** Diagram view: one pipeline per file, stage cards connected left to right. */
-export function AgentFlow({ events, t }: { events: AgentEvent[]; t: T }) {
+export function AgentFlow({
+  events,
+  locale,
+  t,
+}: {
+  events: AgentEvent[];
+  locale: 'en' | 'es';
+  t: T;
+}) {
   const flows = useMemo(() => fileFlows(events, t), [events, t]);
   const [selected, setSelected] = useState<Record<string, Stage | null>>({});
   if (!flows.length) return null;
@@ -325,7 +390,14 @@ export function AgentFlow({ events, t }: { events: AgentEvent[]; t: T }) {
                 />
               ))}
             </ol>
-            {picked && <StageDetails stage={picked} events={flow.stageEvents[picked]} t={t} />}
+            {picked && (
+              <StageDetails
+                stage={picked}
+                events={flow.stageEvents[picked]}
+                locale={locale}
+                t={t}
+              />
+            )}
           </section>
         );
       })}

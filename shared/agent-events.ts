@@ -25,6 +25,8 @@ export const agentEventSchema = z.object({
   elapsedMs: z.number().int().nonnegative().optional(),
   /** The AI model the step called, when it called one. */
   model: z.string().max(100).optional(),
+  /** The reasoning effort setting the call used (auto, minimal, low, medium, high). */
+  reasoningEffort: z.string().max(40).optional(),
   /** Tokens the step consumed, from the model's response. STT reports audio seconds instead. */
   usage: z
     .object({

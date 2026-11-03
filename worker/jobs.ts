@@ -319,18 +319,24 @@ export class ProcessingJob extends DurableObject<Env> {
           progress?: { current: number; total: number };
           elapsedMs?: number;
           model?: string;
+          reasoningEffort?: string;
           usage?: { input?: number; output?: number; audioSeconds?: number };
           tool?: 'preparation' | 'glossary';
         } = {},
       ) => {
         const { tool, ...rest } = extra;
+        // The preparation pipeline uses Meta's default reasoning effort for every chat call.
+        const defaults =
+          rest.model && !action.startsWith('transcribe') && !action.startsWith('normalize')
+            ? { reasoningEffort: 'auto', ...rest }
+            : rest;
         return recordEvent(this.env, project, {
           tool: tool || 'preparation',
           action,
           fileId: file.id,
           fileName: file.name,
           summary,
-          ...rest,
+          ...defaults,
         });
       };
       const { key } = await this.library<{ key: string | null }>('/internal/key');
