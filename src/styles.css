@@ -11145,13 +11145,6 @@ body.agent-dragging {
   width: 14px;
   height: 14px;
 }
-@container (max-width: 720px) {
-  .player-inline-options {
-    display: none;
-  }
-}
-@container (min-width: 720.01px) {
-  .player-menu {
-    display: none;
-  }
+.player-inline-options {
+  display: none;
 }
