@@ -118,7 +118,10 @@ function renderDraftWithChips(
       if (match) {
         nodes.push(
           <span key={key++} className="composer-chip-inline">
-            @{match}
+            <span className="composer-chip-at" aria-hidden="true">
+              @
+            </span>
+            {match}
           </span>,
         );
         cursor += 1 + match.length;
@@ -715,7 +718,31 @@ function ConversationThread({
     setTitle(conversation.name);
     setRename(true);
   }, [renameRequest]);
-  const mentionQuery = draft.match(/(?:^|\s)@([^\n@]*)$/)?.[1];
+  // A mention starts with @ either at the beginning or right after whitespace, and the token
+  // runs to the end of the draft with no space or @ inside; a space ends the mention.
+  const mentionQuery = draft.match(/(?:^|\s)@([^\s@\n]*)$/)?.[1];
+  // Ranges of confirmed @mentions in the draft; used to keep the caret off their inside.
+  const chipRanges = React.useMemo(() => {
+    const ordered = [
+      ...catalog.files.map((file) => file.name),
+      ...catalog.concepts.map((concept) => concept.term),
+    ].sort((a, b) => b.length - a.length);
+    const ranges: Array<{ start: number; end: number }> = [];
+    for (let i = 0; i < draft.length; i++) {
+      if (draft[i] !== '@') continue;
+      if (i > 0 && !/\s/.test(draft[i - 1])) continue;
+      const match = ordered.find((name) => {
+        if (draft.slice(i + 1, i + 1 + name.length) !== name) return false;
+        const next = draft[i + 1 + name.length];
+        return next === undefined || /\s/.test(next);
+      });
+      if (match) {
+        ranges.push({ start: i, end: i + 1 + match.length });
+        i += match.length;
+      }
+    }
+    return ranges;
+  }, [draft, catalog.files, catalog.concepts]);
   // The active @token always ends the draft; the mirror highlights it behind the textarea.
   const mentionStart = draft.length - (mentionQuery?.length ?? 0) - 1;
   // Esc dismisses the picker for the current @token only. The anchor is the @ position at
@@ -1617,7 +1644,45 @@ function ConversationThread({
               onChange={(event) => {
                 changeDraft(event.target.value);
               }}
+              onSelect={(event) => {
+                // A caret that landed inside a chip snaps to one of its edges so the chip reads
+                // as a single unit; a selection that straddles a chip extends to cover it.
+                const target = event.currentTarget;
+                const chip = chipRanges.find(
+                  (range) => target.selectionStart > range.start && target.selectionStart < range.end,
+                );
+                const chipEnd = chipRanges.find(
+                  (range) => target.selectionEnd > range.start && target.selectionEnd < range.end,
+                );
+                if (!chip && !chipEnd) return;
+                const newStart = chip ? chip.start : target.selectionStart;
+                const newEnd = chipEnd ? chipEnd.end : target.selectionEnd;
+                if (newStart !== target.selectionStart || newEnd !== target.selectionEnd)
+                  target.setSelectionRange(newStart, newEnd);
+              }}
               onKeyDown={(event) => {
+                const target = event.currentTarget;
+                // Backspace at the end of a chip (with no selection) removes the whole chip.
+                if (
+                  event.key === 'Backspace' &&
+                  !event.shiftKey &&
+                  !event.metaKey &&
+                  !event.ctrlKey &&
+                  !event.altKey &&
+                  target.selectionStart === target.selectionEnd
+                ) {
+                  const chip = chipRanges.find((range) => range.end === target.selectionStart);
+                  if (chip) {
+                    event.preventDefault();
+                    const trailingSpace = draft[chip.end] === ' ' ? 1 : 0;
+                    const next = draft.slice(0, chip.start) + draft.slice(chip.end + trailingSpace);
+                    changeDraft(next);
+                    requestAnimationFrame(() => {
+                      composer.current?.setSelectionRange(chip.start, chip.start);
+                    });
+                    return;
+                  }
+                }
                 // Backspace at the start of an empty draft removes the last attached chip.
                 if (
                   event.key === 'Backspace' &&

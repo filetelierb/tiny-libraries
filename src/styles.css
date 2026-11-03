@@ -11209,9 +11209,15 @@ body.agent-dragging {
   color: var(--muted-text);
 }
 .composer-chip-inline {
-  padding: 1px 2px;
-  border-radius: 4px;
-  background: color-mix(in oklch, var(--primary) 15%, transparent);
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklch, var(--primary) 45%, var(--border));
+  background: color-mix(in oklch, var(--primary) 8%, transparent);
   color: var(--primary);
   font-weight: var(--font-weight-medium);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+.composer-chip-inline .composer-chip-at {
+  color: transparent;
 }
