@@ -656,7 +656,7 @@ export function MediaPlayer({
                 {speedGroup}
                 {captionSelect}
               </div>
-              <div className="player-menu">
+              <div className="player-menu" onPointerDown={(event) => event.stopPropagation()}>
                 <IconButton
                   label={t.playerSettings}
                   aria-expanded={!!menu}
@@ -672,6 +672,7 @@ export function MediaPlayer({
                     role="menu"
                     className="player-menu-popover"
                     onClick={(event) => event.stopPropagation()}
+                    onPointerDown={(event) => event.stopPropagation()}
                   >
                     {menu === 'root' && (
                       <>
