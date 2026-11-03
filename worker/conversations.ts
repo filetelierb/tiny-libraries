@@ -274,6 +274,7 @@ async function prepareIntent(
       context,
       concepts: input.concepts,
       attachments: input.attachments,
+      ...(input.mentions && input.mentions.length ? { mentions: input.mentions } : {}),
     },
     userMessage: {
       role: 'user',
@@ -288,6 +289,7 @@ async function prepareIntent(
       ...(attachments.length
         ? { attachments: attachments.map((item) => attachmentMention(item.attachment)) }
         : {}),
+      ...(input.mentions && input.mentions.length ? { mentions: input.mentions } : {}),
     },
   };
 }

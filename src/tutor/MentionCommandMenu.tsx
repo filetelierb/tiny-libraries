@@ -12,6 +12,7 @@ import {
 import type {
   ComposerMenuCommands,
   ComposerSuggestion,
+  MentionRecord,
 } from '../workspace/TipTapComposer';
 
 type MenuItem =
@@ -46,8 +47,8 @@ export const MentionCommandMenu = forwardRef<
     suggestion: ComposerSuggestion;
     catalog: Catalog;
     anchor: HTMLElement | null;
-    onPickFile: (file: Source, command: (attrs: { id: string; label: string }) => void) => void;
-    onPickConcept: (entry: GlossaryEntry, command: (attrs: { id: string; label: string }) => void) => void;
+    onPickFile: (file: Source, command: (attrs: MentionRecord) => void) => void;
+    onPickConcept: (entry: GlossaryEntry, command: (attrs: MentionRecord) => void) => void;
   }
 >(function MentionCommandMenu({ suggestion, catalog, anchor, onPickFile, onPickConcept }, ref) {
   const { query, command } = suggestion;

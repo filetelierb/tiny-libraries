@@ -8,6 +8,8 @@ const referencesSchema = z
   .array(z.string().uuid())
   .max(20)
   .refine((ids) => new Set(ids).size === ids.length);
+import { mentionRecordsSchema, type MentionRecord } from './tutor-mentions';
+export { type MentionRecord } from './tutor-mentions';
 export const tutorTurnInputSchema = z.object({
   requestId: z.string().uuid(),
   prompt: z.string().trim().min(1).max(8000),
@@ -16,6 +18,7 @@ export const tutorTurnInputSchema = z.object({
   attachments: attachmentIdsSchema.default([]),
   generation: tutorGenerationSchema.optional(),
   references: referencesSchema.optional(),
+  mentions: mentionRecordsSchema.optional(),
   webSearch: z.literal(true).optional(),
 });
 export type TutorTurnInput = z.infer<typeof tutorTurnInputSchema>;
@@ -39,6 +42,7 @@ export type TurnScope = {
   context?: TutorTurnInput['context'];
   concepts: TutorTurnInput['concepts'];
   attachments: string[];
+  mentions?: MentionRecord[];
 };
 export type TurnIntent = {
   input: TutorTurnInput;
@@ -143,6 +147,7 @@ export function turnInputFingerprint(input: TutorTurnInput) {
     ...(input.generation ? { generation: input.generation } : {}),
     ...(input.references ? { references: input.references } : {}),
     ...(input.webSearch ? { webSearch: true } : {}),
+    ...(input.mentions && input.mentions.length ? { mentions: input.mentions } : {}),
   });
 }
 export function turnSteeringCompatible(queued: TurnScope, active: TurnScope) {

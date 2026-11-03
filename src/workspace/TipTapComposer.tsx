@@ -12,9 +12,11 @@ import type { SuggestionProps } from '@tiptap/suggestion';
  * a chip (TipTap's Suggestion plugin owns the range replacement); `rect` positions the menu
  * above the editor and tracks as the caret moves.
  */
+export type MentionKind = 'file' | 'concept';
+export type MentionRecord = { id: string; label: string; kind: MentionKind };
 export type ComposerSuggestion = {
   query: string;
-  command: (attrs: { id: string; label: string }) => void;
+  command: (attrs: MentionRecord) => void;
   rect: DOMRect | null;
 };
 
@@ -33,6 +35,8 @@ export type TipTapComposerHandle = {
   focus: (options?: FocusOptions) => void;
   clear: () => void;
   setDraft: (text: string) => void;
+  /** Mentions currently in the editor, in document order; duplicates stay duplicated. */
+  readMentions: () => MentionRecord[];
 };
 
 /** `@label` for mentions, paragraph breaks as `\n`, hard breaks also as `\n`. */
@@ -169,6 +173,18 @@ export const TipTapComposer = React.forwardRef<
               node.attrs.label ?? node.attrs.id,
             ];
           },
+          addAttributes() {
+            return {
+              ...this.parent?.(),
+              // The picker tags each chip with its origin so the send pipeline can emit a
+              // structured record (id + kind + label) alongside the plain-text prompt.
+              kind: {
+                default: 'file',
+                parseHTML: (element) => element.getAttribute('data-kind') || 'file',
+                renderHTML: (attrs) => (attrs.kind ? { 'data-kind': attrs.kind } : {}),
+              },
+            };
+          },
         }).configure({
           HTMLAttributes: { class: 'composer-chip-inline' },
           renderText: ({ node }) => `@${node.attrs.label ?? node.attrs.id}`,
@@ -273,6 +289,21 @@ export const TipTapComposer = React.forwardRef<
         if (!editor) return;
         if (serializeDoc(editor) === text) return;
         editor.commands.setContent(buildDocFromDraft(text, candidatesRef.current), { emitUpdate: false });
+      },
+      readMentions: () => {
+        if (!editor) return [];
+        const out: MentionRecord[] = [];
+        editor.state.doc.descendants((node) => {
+          if (node.type.name === 'mention') {
+            const id = (node.attrs.id ?? '') as string;
+            const label = (node.attrs.label ?? id) as string;
+            const kindAttr = (node.attrs.kind ?? 'file') as string;
+            const kind: MentionKind = kindAttr === 'concept' ? 'concept' : 'file';
+            if (id) out.push({ id, label, kind });
+          }
+          return true;
+        });
+        return out;
       },
     }),
     [editor],

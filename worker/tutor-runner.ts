@@ -188,6 +188,9 @@ export class TutorRunner {
           model: record.generation.model,
           reasoningEffort: record.generation.reasoningEffort,
           prompt: intent.input.prompt,
+          ...(intent.input.mentions && intent.input.mentions.length
+            ? { mentions: intent.input.mentions }
+            : {}),
           history: history.map((message) =>
             message.status
               ? {

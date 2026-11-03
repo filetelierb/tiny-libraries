@@ -19,6 +19,7 @@ import {
   type TutorCitation,
 } from '../shared/tutor-context';
 import { questionContent, type QuestionContext } from '../shared/conversations';
+import type { MentionRecord } from '../shared/tutor-mentions';
 import {
   attachmentMention,
   attachmentImages,
@@ -83,12 +84,15 @@ const readOnlyTools = new Set([
 export type TutorAgentInput = {
   model: string;
   prompt: string;
+  /** Chip mentions for the current turn, in draft order; duplicates preserved. */
+  mentions?: MentionRecord[];
   history: Array<{
     role: 'user' | 'assistant';
     content: string;
     context?: QuestionContext;
     concepts?: ConceptMention[];
     attachments?: AttachmentMention[];
+    mentions?: MentionRecord[];
     artifacts?: Array<z.infer<typeof replyArtifactSchema>>;
   }>;
   learning: Learning | Learning[] | null;
@@ -625,7 +629,13 @@ export async function createTutorAgent(input: TutorAgentInput, previous?: TutorA
       role: message.role,
       content:
         message.role === 'user'
-          ? questionContent(message.content, message.context, message.concepts, message.attachments)
+          ? questionContent(
+              message.content,
+              message.context,
+              message.concepts,
+              message.attachments,
+              message.mentions,
+            )
           : message.artifacts?.length
             ? `${message.content}\n\n[Artifacts started in this reply: ${JSON.stringify(message.artifacts.map(({ fileId, title }) => ({ artifactId: fileId, title })))}]`
             : message.content,
@@ -641,6 +651,7 @@ export async function createTutorAgent(input: TutorAgentInput, previous?: TutorA
                 context,
                 selected,
                 attached.map((item) => attachmentMention(item.attachment)),
+                input.mentions,
               ),
             },
             ...attached.flatMap((item) =>
@@ -663,6 +674,7 @@ export async function createTutorAgent(input: TutorAgentInput, previous?: TutorA
             context,
             selected,
             attached.map((item) => attachmentMention(item.attachment)),
+            input.mentions,
           ),
     },
   ];

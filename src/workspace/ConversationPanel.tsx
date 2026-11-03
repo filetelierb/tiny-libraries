@@ -1187,6 +1187,12 @@ function ConversationThread({
         generation: resolveTutorGeneration(generationRef.current, catalog.settings.model),
         ...(webRef.current.enabled ? { webSearch: true as const } : {}),
         ...(contextRef.current ? { context: contextRef.current } : {}),
+        ...(() => {
+          // Chip-origin mentions the student actually inserted this turn — order matters so
+          // the agent's tools can resolve each `@label` by index, not by substring lookup.
+          const mentions = composer.current?.readMentions() ?? [];
+          return mentions.length ? { mentions } : {};
+        })(),
       },
     };
     store(retryKey, JSON.stringify(sent));
@@ -1470,12 +1476,12 @@ function ConversationThread({
             anchor={composerAnchor.current}
             onPickFile={(file, command) => {
               void mention(file).then((ok) => {
-                if (ok) command({ id: file.id, label: file.name });
+                if (ok) command({ id: file.id, label: file.name, kind: 'file' });
                 composer.current?.focus();
               });
             }}
             onPickConcept={(entry, command) => {
-              if (mentionConcept(entry)) command({ id: entry.id, label: entry.term });
+              if (mentionConcept(entry)) command({ id: entry.id, label: entry.term, kind: 'concept' });
               composer.current?.focus();
             }}
           />
