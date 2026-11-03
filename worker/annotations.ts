@@ -3,6 +3,8 @@ import { z } from 'zod';
 import {
   annotationInputSchema,
   annotationQuerySchema,
+  annotationPathsQuerySchema,
+  annotationPathsQueryPrefixes,
   readAnnotationQueryPage,
   annotationScopeKey,
   annotationSummary,
@@ -184,7 +186,46 @@ export async function annotationRoute(
   if (!list && !match && !query) return null;
   if (query) {
     if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
-    const input = annotationQuerySchema.parse(await body());
+    const raw = (await body()) as Record<string, unknown> | null;
+    // Route the two body shapes: `{ paths }` triggers a cross-session batch lookup;
+    // `{ sessionId, sourceIds }` keeps the original session-bound behaviour untouched.
+    const asPaths = raw && typeof raw === 'object' && Array.isArray((raw as { paths?: unknown }).paths);
+    if (asPaths) {
+      const input = annotationPathsQuerySchema.parse(raw);
+      await ensureSharedAnnotations(storage);
+      const wanted = new Set(input.paths);
+      const files = [...(await storage.list<Source>({ prefix: 'file:' })).values()];
+      const matching = files.filter((file) => !!file.path && wanted.has(file.path));
+      const sourceIds = [...new Set(matching.map((file) => file.id))];
+      if (!sourceIds.length) return json({ items: [], nextCursor: null });
+      const prefixes = annotationPathsQueryPrefixes(sourceIds);
+      let start = 0;
+      if (input.after) {
+        start = prefixes.findIndex((prefix) => input.after!.startsWith(prefix));
+        if (
+          start < 0 ||
+          !z.string().uuid().safeParse(input.after.slice(prefixes[start].length)).success
+        )
+          throw new AnnotationError('Annotation selection changed; reload its first page');
+      }
+      const items: AnnotationSummary[] = [];
+      let scanned = 0;
+      const kind = input.kind;
+      for (let index = start; index < prefixes.length; index++) {
+        const entries = await storage.list<AnnotationSummary>({
+          prefix: prefixes[index],
+          limit: 100 - scanned,
+          ...(index === start && input.after ? { startAfter: input.after } : {}),
+        });
+        scanned += entries.size;
+        items.push(
+          ...[...entries.values()].filter((item) => (item.kind || 'annotation') === kind),
+        );
+        if (scanned === 100) return json({ items, nextCursor: [...entries.keys()].at(-1) });
+      }
+      return json({ items, nextCursor: null });
+    }
+    const input = annotationQuerySchema.parse(raw);
     if (!(await storage.get(`session:${input.sessionId}`)))
       throw new AnnotationError('Session not found', 404);
     for (const sourceId of input.sourceIds)

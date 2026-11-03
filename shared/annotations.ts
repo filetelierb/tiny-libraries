@@ -9,6 +9,13 @@ import {
 } from './captures';
 import { MAX_RESOURCE_TABS, type StudySession, type Source } from './domain';
 
+/**
+ * `annotation` and `bookmark` are the core kinds; `highlight` and `note` are optional
+ * variants a tutor or panel can label a card with. Extra kinds stay backward-compatible
+ * with existing stored records (they still default to `annotation`).
+ */
+export const annotationKindSchema = z.enum(['annotation', 'bookmark', 'highlight', 'note']);
+export type AnnotationKind = z.infer<typeof annotationKindSchema>;
 export const annotationQuerySchema = z.object({
   sessionId: z.string().uuid(),
   sourceIds: z
@@ -16,10 +23,28 @@ export const annotationQuerySchema = z.object({
     .max(MAX_RESOURCE_TABS * 2)
     .refine((ids) => new Set(ids).size === ids.length),
   includeSession: z.boolean().default(false),
-  kind: z.enum(['annotation', 'bookmark']).default('annotation'),
+  kind: annotationKindSchema.default('annotation'),
   after: z.string().max(512).nullable().optional(),
 });
 export type AnnotationQuery = z.infer<typeof annotationQuerySchema>;
+/**
+ * Batch lookup by library path (project-root-relative strings). The worker maps paths
+ * back to known source ids and then reuses the same prefix-scan machinery. Lives outside
+ * a single workspace session, so no sessionId / unbound scope is involved.
+ */
+export const annotationPathsQuerySchema = z.object({
+  paths: z
+    .array(z.string().min(1).max(1024))
+    .min(1)
+    .max(MAX_RESOURCE_TABS * 4)
+    .refine((paths) => new Set(paths).size === paths.length, 'Paths must be unique'),
+  kind: annotationKindSchema.default('annotation'),
+  after: z.string().max(512).nullable().optional(),
+});
+export type AnnotationPathsQuery = z.infer<typeof annotationPathsQuerySchema>;
+export function annotationPathsQueryPrefixes(sourceIds: string[]) {
+  return [...new Set(sourceIds)].sort().map((id) => `annotation-source-summary:${id}:`);
+}
 export function annotationQueryPrefixes(query: AnnotationQuery) {
   return [
     ...[...query.sourceIds].sort().map((id) => `annotation-source-summary:${id}:`),
@@ -207,9 +232,25 @@ export const drawingSchema = z
     (strokes) => strokes.reduce((sum, stroke) => sum + stroke.points.length, 0) <= 3000,
     'Drawing is too detailed; save this annotation and start another',
   );
+/**
+ * `drawingJson` is an opaque payload that carries mark unions richer than the
+ * pen+pin `strokes` list (highlight rectangles, inline text, arrows, inline capture
+ * references). It is stored as JSON and only guarded for size + JSON-serializability
+ * so clients can evolve the mark vocabulary without wire-breaking the server.
+ */
+export const drawingJsonSchema = z
+  .unknown()
+  .refine((value) => {
+    try {
+      const encoded = new TextEncoder().encode(JSON.stringify(value ?? null));
+      return encoded.byteLength <= 80000;
+    } catch {
+      return false;
+    }
+  }, 'Drawing payload is too large or not JSON-serializable');
 export const annotationInputSchema = z
   .object({
-    kind: z.enum(['annotation', 'bookmark']).default('annotation'),
+    kind: annotationKindSchema.default('annotation'),
     id: z.string().uuid(),
     sessionId: z.string().uuid(),
     sourceId: z.string().uuid().nullable(),
@@ -218,12 +259,25 @@ export const annotationInputSchema = z
     document: richDocumentSchema,
     location: locationSchema,
     strokes: drawingSchema.default([]),
-    origin: z.enum(['manual', 'tutor']).default('manual'),
+    /**
+     * `manual` keeps backward compatibility with annotations saved before `user`
+     * was introduced; new clients may send either. `tutor` marks a record created
+     * from a confirmed tutor draft.
+     */
+    origin: z.enum(['manual', 'user', 'tutor']).default('manual'),
     references: z.array(z.string().uuid()).max(20).default([]),
     expectedRevision: z.number().int().nonnegative(),
     mutationId: z.string().uuid().optional(),
     captures: captureSelectionsSchema.optional(),
     stamps: sourceStampsSchema.optional(),
+    /** Optional link to the review entry that spawned this annotation. */
+    reviewId: z.string().uuid().optional(),
+    /** Optional link to the tutor study-session message the record is threaded to. */
+    studySessionId: z.string().uuid().optional(),
+    /** Top-level quoted passage distinct from the source anchor in `location`. */
+    quoteText: z.string().max(8000).optional(),
+    /** Opaque drawing payload for mark unions richer than `strokes`. */
+    drawingJson: drawingJsonSchema.optional(),
   })
   .refine(
     (value) => (value.captures === undefined && value.stamps === undefined) || !!value.mutationId,
@@ -239,7 +293,7 @@ export type Annotation = Omit<
   'expectedRevision' | 'kind' | 'mutationId' | 'captures'
 > & {
   captures?: PublishedCapture[];
-  kind?: 'annotation' | 'bookmark';
+  kind?: AnnotationKind;
   revision: number;
   text: string;
   deleted: boolean;

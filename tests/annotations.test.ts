@@ -256,6 +256,47 @@ test('bookmark migration keeps fixed source locators and distinct stable identit
   assert.ok(annotationInputSchema.safeParse({ ...first, expectedRevision: 0 }).success);
 });
 
+test('path batch queries address source prefixes directly and widen the kind vocabulary', async () => {
+  const {
+    annotationPathsQuerySchema,
+    annotationPathsQueryPrefixes,
+    annotationKindSchema,
+    annotationInputSchema,
+    plainDocument,
+  } = await import('../shared/annotations');
+  const first = annotationPathsQuerySchema.parse({ paths: ['docs/a.pdf', 'docs/b.pdf'] });
+  assert.equal(first.kind, 'annotation');
+  // Deduplication + ordering make the generated prefixes deterministic.
+  assert.deepEqual(
+    annotationPathsQueryPrefixes(['second', 'first', 'first']),
+    ['annotation-source-summary:first:', 'annotation-source-summary:second:'],
+  );
+  assert.equal(annotationPathsQuerySchema.safeParse({ paths: [] }).success, false);
+  assert.equal(annotationPathsQuerySchema.safeParse({ paths: ['x', 'x'] }).success, false);
+  // Highlight + note stay optional and additive.
+  assert.equal(annotationKindSchema.safeParse('highlight').success, true);
+  assert.equal(annotationKindSchema.safeParse('note').success, true);
+  const draft = annotationInputSchema.parse({
+    id: sourceId,
+    sessionId,
+    sourceId,
+    sourceVersion: 1,
+    title: 'Highlighted fragment',
+    document: plainDocument('body'),
+    location: {},
+    expectedRevision: 0,
+    kind: 'highlight',
+    quoteText: 'lorem ipsum',
+    drawingJson: { marks: [{ kind: 'highlight-rect', rect: [0, 0, 1, 1] }] },
+    reviewId: sessionId,
+    studySessionId: sourceId,
+    origin: 'user',
+  });
+  assert.equal(draft.kind, 'highlight');
+  assert.equal(draft.origin, 'user');
+  assert.equal(draft.quoteText, 'lorem ipsum');
+});
+
 test('typed queries advance over full pages of another kind instead of hiding later bookmarks', async () => {
   const { annotationScopeKey, annotationQuerySchema, readAnnotationQueryPage } =
     await import('../shared/annotations');
