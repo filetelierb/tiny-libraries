@@ -140,3 +140,11 @@ Unsent text and question context stay in browser storage. Saved annotations, cap
 Use **Bookmark** in the reader toolbar or **Add bookmark** in the panel to label the current source location. File bookmarks are shared across study sessions. Edit the label, jump to the saved time/page, or delete a bookmark permanently. Existing session bookmarks are migrated automatically without changing their original session records.
 
 The panel filters **All bookmarks**, **Personal**, or **Suggested by Meta**; the same filter applies to playback markers. The navigation count shows the active file’s complete non-deleted total. Ask the tutor to bookmark a selected passage or an evidence-linked study location to create a Suggested bookmark. Its source and locator must resolve to the material available in that question. One reply can save up to three distinct locations; retry identities prevent duplicate records for the same request/location.
+
+## Agent activity panel
+
+A thin bar at the bottom of the app, the Agent activity panel, shows what the AI tools and the Librarian agent are doing in real time. Click it to open it; a handle at the top edge resizes it (drag with the mouse or focus it and press ↑/↓). The panel's state and size are remembered between sessions.
+
+Each row shows the step, the file it refers to, the project (coloured dot), elapsed time, how long ago it happened, and a progress bar when the step reports progress. Consecutive steps of the same file collapse into a single row that updates as new ones arrive, so long preparations read easily.
+
+Preparation steps shown: queued, reading the source, segmenting into audio chunks, transcribing each chunk, translating subtitles, building each chapter window, finishing the study guide, each glossary review round, adding concepts to the glossary, and the final completion. Flashcards show when a chapter's deck is being written. The Librarian shows each tool action it takes (opening a file, adding a note, starting a chapter quiz, and so on).

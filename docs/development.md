@@ -408,3 +408,18 @@ Uploads go through the companion when the project has a folder: `PUT /disk/file?
 The outer upload and content handlers choose by the project's `folder`: when set, they call the companion; when not, they use R2 as before. The pergeStoredFiles helper deletes from disk by `file.path` when the DO's reply names the folder.
 
 Verification: type checks and 322 tests pass, including that `newProjectFolder` writes under `projects/`, sanitises unsafe characters and adds a numeric suffix when the name clashes. The live app smoke test was not run in this session (the external disk is unplugged).
+
+### Agent activity panel: a ring buffer of what the tools are doing
+
+A new `GET /api/agent-events?since=<iso>&limit=<n>` returns the latest `AgentEvent`s, newest first. The home library keeps a ring buffer in its own storage under `agent-event:<iso>-<tail>`, trimmed lazily to the last 500 when a write pushes above it. An internal `POST /internal/agent-events` from any library (or the outer handler) appends an event; failures only log so the main code paths never block on observability.
+
+The event: `{id, at, project, tool, action, fileId?, fileName?, summary, detail?, progress?, elapsedMs?}`. Tools are `preparation`, `tutor`, `glossary`, `flashcards`. Known actions carry labels in `src/i18n.ts`.
+
+Instrumented points:
+
+- `worker/jobs.ts` at each stage transition: `normalize.start`, `normalize.done` (with the chunk count), `transcribe.chunk` (per chunk, with `current/total`), `translate.done`, `synthesize.part` (per window), `synthesize.done` (with chapters, questions and glossary term counts), `glossary.round`, `preparation.done`.
+- `worker/index.ts` on `startJob` (`preparation.queued`), on `publishLearning` (`glossary.ingest`), on flashcard generation (`flashcards.generate`), on each Librarian tool action (`tutor.<op>`).
+
+The panel polls every 2.5 s while open and every 15 s while closed, and stops when the tab is hidden. Consecutive events of the same file for `transcribe.chunk`, `glossary.round` and `synthesize.part` collapse into one row that shows the latest step. Clicking the bar opens the panel at ~1/3 of the viewport; a handle on the top edge resizes it between 120 px and 80 vh, saved to local storage.
+
+Verification: type checks and 322 tests pass. Through the API, with a fresh project and a markdown note queued for preparation (dummy API key so the queue runs through the first stage): `/api/agent-events` reported `preparation.queued`, `normalize.start`, and `normalize.done · Read Demo.md; no audio to transcribe` with its elapsed time. The dummy key was removed and the test project deleted. The panel itself was not verified in a browser in this session.

@@ -84,6 +84,7 @@ import { PanelResizer, useDrawerFocus, usePanels } from './workspace/Panels';
 import { ProcessingPanel } from './workspace/ProcessingPanel';
 import { usePreparation } from './workspace/usePreparation';
 import { PreparationStrip } from './workspace/PreparationStrip';
+import { AgentPanel } from './AgentPanel';
 import {
   readWorkspace,
   workspacePatch,
@@ -2734,6 +2735,7 @@ export function App() {
           />
         </Modal>
       )}
+      <AgentPanel t={t} locale={locale} />
     </div>
   );
 }

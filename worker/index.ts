@@ -1,5 +1,7 @@
 import { readAssessmentImages } from './assessment-vision';
 import { assessmentHTML, assessmentExportPolicy } from './assessment-export';
+import { appendEventOnHome, readEventsOnHome, recordEvent } from './agent-events';
+import { agentEventSchema } from '../shared/agent-events';
 import { DurableObject } from 'cloudflare:workers';
 import { z } from 'zod';
 import {
@@ -228,6 +230,13 @@ function startJob(
   project: ProjectId,
 ) {
   const id = `${file.id}-v${file.version}-${locale}`;
+  void recordEvent(env, project, {
+    tool: 'preparation',
+    action: 'preparation.queued',
+    fileId: file.id,
+    fileName: file.name,
+    summary: `Queued ${file.name} for preparation in ${locale.toUpperCase()}`,
+  });
   return env.JOBS.get(env.JOBS.idFromName(id)).fetch(
     new Request('http://internal/start', {
       method: 'POST',
@@ -252,7 +261,8 @@ async function existingProject(env: Env, project: ProjectId) {
   return project;
 }
 /** Routes that belong to the app as a whole rather than to one project's library. */
-const appRoute = (path: string) => /^\/api\/(settings|projects|activity)(\/|$)/.test(path);
+const appRoute = (path: string) =>
+  /^\/api\/(settings|projects|activity|agent-events)(\/|$)/.test(path);
 async function boundedJson(request: Request) {
   const reader = request.body?.getReader();
   if (!reader) return {};
@@ -426,6 +436,13 @@ export class Library extends DurableObject<Env> {
     await ingestLearning(this.ctx.storage, value).catch((error) =>
       console.error('Concept creation after preparation failed', error),
     );
+    void recordEvent(this.env, this.project, {
+      tool: 'glossary',
+      action: 'glossary.ingest',
+      fileId: value.sourceId,
+      fileName: file.name,
+      summary: `Added ${value.synthesis.glossary.length} concepts of ${file.name} to the glossary`,
+    });
   }
   /** The folder of the project this library belongs to, cached per library instance. */
   private folderCache?: Promise<string | null>;
@@ -510,6 +527,18 @@ export class Library extends DurableObject<Env> {
     if (existsMatch) {
       const record = await storage.get<Project>(`project:${existsMatch[1]}`);
       return json({ exists: !!record, folder: record?.folder ?? null });
+    }
+    if (path === '/internal/agent-events' && request.method === 'POST') {
+      await appendEventOnHome(storage, agentEventSchema.parse(await boundedJson(request)));
+      return json({ ok: true });
+    }
+    if (path === '/api/agent-events' && request.method === 'GET') {
+      const since = new URL(request.url).searchParams.get('since');
+      const limit = Math.max(
+        1,
+        Math.min(500, Number(new URL(request.url).searchParams.get('limit')) || 200),
+      );
+      return json(await readEventsOnHome(storage, since, limit));
     }
     if (path === '/internal/activity' && request.method === 'POST') {
       const { project, day, events } = z
@@ -848,6 +877,12 @@ export class Library extends DurableObject<Env> {
           conversationId: input.conversationId,
           sessionId,
           action,
+        });
+        await recordEvent(this.env, this.project, {
+          tool: 'tutor',
+          action: `tutor.${record.op}`,
+          summary: record.subject,
+          ...(record.detail ? { detail: record.detail } : {}),
         });
         return json({
           id: record.id,
@@ -1470,6 +1505,7 @@ export class Library extends DurableObject<Env> {
         return json(await cardSnapshot(this.ctx.storage, cardsMatch[1], this.executionId));
       if (cardsMatch && request.method === 'POST') {
         const settings = await this.settings();
+        const file = await this.ctx.storage.get<Source>(`file:${cardsMatch[1]}`);
         return json(
           await startCardDecks(this.ctx.storage, cardsMatch[1], await boundedJson(request), {
             owner: this.executionId,
@@ -1478,6 +1514,14 @@ export class Library extends DurableObject<Env> {
             generate: async (learning, chapterId) => {
               const key = await this.apiKey();
               if (!key) throw new ApiError('Add a Meta API key in Settings', 409);
+              const chapter = learning.synthesis.chapters.find((c) => c.id === chapterId);
+              await recordEvent(this.env, this.project, {
+                tool: 'flashcards',
+                action: 'flashcards.generate',
+                fileId: cardsMatch[1],
+                ...(file ? { fileName: file.name } : {}),
+                summary: `Writing flashcards for ${chapter?.title || 'a chapter'}`,
+              });
               return generateCards(
                 key,
                 settings.model,

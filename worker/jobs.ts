@@ -14,6 +14,7 @@ import {
   type NormalizedSource,
 } from '../shared/domain';
 import { internal } from './index';
+import { recordEvent } from './agent-events';
 import type { ProjectId } from '../shared/projects';
 import {
   GLOSSARY_ROUNDS,
@@ -273,16 +274,36 @@ export class ProcessingJob extends DurableObject<Env> {
     }
     job = { ...job, position: undefined };
     const initial = job;
+    const stageStartedAt = Date.now();
     try {
       // Schedule a recovery wake before external work; completed checkpoints are never repeated.
       await this.ctx.storage.setAlarm(Date.now() + 240000);
       job = { ...job, status: 'running', error: undefined };
       await this.ctx.storage.put('job', job);
       const file = (await this.ctx.storage.get<Source>('file'))!;
+      const project = (await this.ctx.storage.get<ProjectId>('project')) || 'default';
+      const push = (
+        action: string,
+        summary: string,
+        extra: {
+          detail?: string;
+          progress?: { current: number; total: number };
+          elapsedMs?: number;
+        } = {},
+      ) =>
+        recordEvent(this.env, project, {
+          tool: 'preparation',
+          action,
+          fileId: file.id,
+          fileName: file.name,
+          summary,
+          ...extra,
+        });
       const { key } = await this.library<{ key: string | null }>('/internal/key');
       if (!key) throw new MetaError('Add a Meta API key in Settings, then retry.', false);
       const settings = await this.library<{ model: string }>('/api/settings');
       if (job.stage === 'normalize') {
+        await push('normalize.start', `Reading ${file.name}`);
         // Let Node stream the immutable original from the loopback API, so the Worker never
         // pipes a stored body into an outbound request.
         const response = await this.bridge(`/normalize/${job.id}?kind=${file.kind}`, {
@@ -302,6 +323,13 @@ export class ProcessingJob extends DurableObject<Env> {
           totalChunks: normalized.chunks.length,
           stage: normalized.chunks.length ? 'transcribe' : 'synthesize',
         };
+        await push(
+          'normalize.done',
+          normalized.chunks.length
+            ? `Segmented ${file.name} into ${normalized.chunks.length} audio chunks`
+            : `Read ${file.name}; no audio to transcribe`,
+          { elapsedMs: Date.now() - stageStartedAt },
+        );
       } else if (job.stage === 'transcribe') {
         const normalized = (await this.ctx.storage.get<Normalized>('normalized'))!,
           chunk = normalized.chunks[job.completedChunks];
@@ -325,6 +353,14 @@ export class ProcessingJob extends DurableObject<Env> {
           segments.push(...((await this.ctx.storage.get<Segment[]>(`chunk:${i}`)) || []));
         await this.ctx.storage.put('segments', segments);
         job = { ...job, completedChunks: job.completedChunks + 1, status: 'partial' };
+        await push(
+          'transcribe.chunk',
+          `Transcribed audio chunk ${job.completedChunks} of ${job.totalChunks}`,
+          {
+            progress: { current: job.completedChunks, total: job.totalChunks },
+            elapsedMs: Date.now() - stageStartedAt,
+          },
+        );
         if (job.completedChunks === job.totalChunks) {
           if (!segments.length)
             throw new MetaError('No speech was detected in this recording', false);
@@ -356,6 +392,11 @@ export class ProcessingJob extends DurableObject<Env> {
           translated.push(...batch);
         }
         await this.saveCaptions(job.sourceId, 'translated', translated);
+        await push(
+          'translate.done',
+          `Translated subtitles into ${job.locale.toUpperCase()} for ${file.name}`,
+          { elapsedMs: Date.now() - stageStartedAt },
+        );
         job = { ...job, stage: 'synthesize', status: 'partial' };
       } else if (job.stage === 'synthesize') {
         const segments = (await this.ctx.storage.get<Segment[]>('segments'))!,
@@ -398,6 +439,11 @@ export class ProcessingJob extends DurableObject<Env> {
             totalParts: windows.length + 1,
             status: 'partial',
           };
+          await push(
+            'synthesize.part',
+            `Built chapters for window ${done + 1} of ${windows.length} of ${file.name}`,
+            { progress: { current: done + 1, total: windows.length + 1 } },
+          );
         } else {
           const parts = await Promise.all(
             windows.map(async (_, i) => (await this.ctx.storage.get<Synthesis>(`part:${i}`))!),
@@ -415,6 +461,14 @@ export class ProcessingJob extends DurableObject<Env> {
             phase: 'review',
             terms: initialGlossary(synthesis),
           });
+          await push(
+            'synthesize.done',
+            `Study guide ready: ${synthesis.chapters.length} chapters, ${synthesis.chapters.reduce(
+              (sum, c) => sum + c.questions.length,
+              0,
+            )} questions, ${synthesis.glossary.length} glossary terms`,
+            { elapsedMs: Date.now() - stageStartedAt },
+          );
           job = { ...job, stage: 'concepts', status: 'partial', completedParts: 0, totalParts: 0 };
         }
       } else if (job.stage === 'concepts') {
@@ -441,6 +495,11 @@ export class ProcessingJob extends DurableObject<Env> {
         }
         if (next) {
           await this.ctx.storage.put('glossary', next);
+          await push(
+            'glossary.round',
+            `Reviewed the glossary (round ${next.round}, ${next.terms.length} terms)`,
+            { progress: { current: next.round, total: 3 } },
+          );
           job = { ...job, status: 'partial', completedParts: next.round };
         } else {
           const finished = await this.ctx.storage.get<GlossaryState & { plan?: ConceptPlan[] }>(
@@ -459,6 +518,10 @@ export class ProcessingJob extends DurableObject<Env> {
             : synthesis;
           if (await this.publish(file, job, settings.model, segments, reviewed, finished?.plan))
             return;
+          await push(
+            'preparation.done',
+            `Finished preparing ${file.name} in ${job.locale.toUpperCase()}`,
+          );
           job = { ...job, stage: 'done', status: 'completed' };
         }
       }
