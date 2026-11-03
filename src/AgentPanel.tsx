@@ -157,6 +157,8 @@ export function AgentPanel({
     const seen = new Map<string, 'open' | 'done'>();
     for (const event of scoped) {
       if (event.tool !== 'preparation' || !event.fileId) continue;
+      // Uploading a file does not count as a preparation step running.
+      if (event.action === 'library.upload') continue;
       if (seen.has(event.fileId)) continue;
       seen.set(event.fileId, event.action === 'preparation.done' ? 'done' : 'open');
     }

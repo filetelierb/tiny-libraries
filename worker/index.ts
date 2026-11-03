@@ -1829,6 +1829,12 @@ async function serve(request: Request, env: Env, url: URL): Promise<Response> {
             summary: `Added ${stored.name}${stored.folder ? ` to ${stored.folder}` : ''}`,
             detail: `${Math.round(stored.size / 1024)} KB · ${stored.kind}${path ? ` · ${path}` : ''}`,
           });
+          // Videos and audio go to the preparation queue on arrival; others wait for the student.
+          if (stored.kind === 'video' || stored.kind === 'audio') {
+            const { key } = await call<{ key: string | null }>('/internal/key');
+            const settings = await call<{ locale: 'en' | 'es' }>('/api/settings');
+            if (key) void startJob(env, stored, settings.locale, project).catch(() => {});
+          }
           return json(stored, 201);
         } catch (error) {
           if (projectFolder && path) await deleteOriginal(env, projectFolder, path).catch(() => {});
