@@ -706,6 +706,9 @@ const en = {
     'Delete the unlinked concepts listed ({n})? Their history is deleted too, and other concepts drop their links to them. This cannot be undone.',
   purgeConceptsTitle: 'Concepts that cite only what you are deleting ({n})',
   purgeConceptsBody: 'Checked concepts are deleted with it. Unchecked ones stay, without a file.',
+  linkedArtifactsTitle: 'Linked study artifacts',
+  linkedArtifactsBody:
+    'These artifact files point to this recording. Pick the ones to delete with it; the rest stay as orphan links.',
   testState_complete: 'Complete',
   testState_open: 'Open',
   testState_cancelled: 'Cancelled',
@@ -2041,6 +2044,9 @@ const es: Dictionary = {
   purgeConceptsTitle: 'Conceptos que citan solo lo que vas a eliminar ({n})',
   purgeConceptsBody:
     'Los conceptos marcados se eliminan con ello. Los demás se conservan, sin archivo.',
+  linkedArtifactsTitle: 'Artefactos de estudio enlazados',
+  linkedArtifactsBody:
+    'Estos artefactos apuntan a esta grabación. Elige cuáles borrar con ella; los demás quedan como enlaces sin fuente.',
   testState_complete: 'Completa',
   testState_open: 'Abierta',
   testState_cancelled: 'Cancelada',

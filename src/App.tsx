@@ -2516,6 +2516,21 @@ export function App() {
             folder = 'directory' in dialog ? dialog.directory : null,
             item = 'file' in dialog ? dialog.file : null,
             path = folder ? `/directories/${folder.id}` : `/files/${item!.id}`;
+          // Study artifacts linked to the file being deleted (or to any file inside the folder).
+          const insideFolder = folder
+            ? (file: Source) => containsPath(folder.path, file.folder)
+            : (file: Source) => file.id === item!.id;
+          const linkedArtifacts = catalog.files
+            .filter(
+              (file) =>
+                file.kind === 'artifact' &&
+                !file.trashed &&
+                file.linkedSourceId &&
+                catalog.files.some(
+                  (other) => other.id === file.linkedSourceId && insideFolder(other),
+                ),
+            )
+            .map((file) => ({ id: file.id, name: file.name }));
           return (
             <DeleteModal
               t={t}
@@ -2534,6 +2549,7 @@ export function App() {
                     ).length
                   : 0
               }
+              linkedArtifacts={linkedArtifacts}
               close={() => setDirectoryDialog(null)}
               purgePath={path}
               // Archiving is the reversible alternative, unless the item already is archived.
@@ -2546,12 +2562,14 @@ export function App() {
                       setDirectoryDialog(null);
                     }
               }
-              submit={async (concepts) => {
+              submit={async (concepts, extraFileIds) => {
                 await saveChain.current;
                 await api(
                   concepts.length ? `${path}?concepts=${concepts.join(',')}` : path,
                   'DELETE',
                 );
+                for (const id of extraFileIds)
+                  await api(`/files/${id}`, 'DELETE').catch(() => undefined);
                 const data = await refresh();
                 if (sessionRef.current) commitWorkspace(usable(sessionRef.current, data));
                 setDirectoryDialog(null);
@@ -3137,6 +3155,7 @@ function DeleteModal({
   files,
   folders,
   purgePath,
+  linkedArtifacts = [],
   close,
   archive,
   submit,
@@ -3148,14 +3167,19 @@ function DeleteModal({
   folders: number;
   /** The file or folder route, also used to find concepts that cite only it. */
   purgePath: string;
+  /** Study artifacts that live beside this item and can be removed with it. */
+  linkedArtifacts?: Array<{ id: string; name: string }>;
   close: () => void;
   archive?: () => Promise<void>;
-  submit: (concepts: string[]) => Promise<void>;
+  submit: (concepts: string[], extraFileIds: string[]) => Promise<void>;
 }) {
   const [pending, setPending] = useState(false),
     [error, setError] = useState('');
   const [concepts, setConcepts] = useState<Array<{ id: string; term: string }> | null>(null),
-    [chosen, setChosen] = useState<Set<string>>(new Set());
+    [chosen, setChosen] = useState<Set<string>>(new Set()),
+    [removeArtifacts, setRemoveArtifacts] = useState<Set<string>>(
+      () => new Set(linkedArtifacts.map((entry) => entry.id)),
+    );
   useEffect(() => {
     let live = true;
     api<{ concepts: Array<{ id: string; term: string }> }>(`${purgePath}/purge-preview`)
@@ -3197,6 +3221,31 @@ function DeleteModal({
       </p>
       {archive && <p className="muted">{t.archiveHint}</p>}
       {concepts === null && <LoadingRow>{t.loading}</LoadingRow>}
+      {linkedArtifacts.length > 0 && (
+        <fieldset className="purge-concepts">
+          <legend>{t.linkedArtifactsTitle}</legend>
+          <p className="muted">{t.linkedArtifactsBody}</p>
+          <ul>
+            {linkedArtifacts.map((artifact) => (
+              <li key={artifact.id}>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={removeArtifacts.has(artifact.id)}
+                    onChange={(event) => {
+                      const next = new Set(removeArtifacts);
+                      if (event.target.checked) next.add(artifact.id);
+                      else next.delete(artifact.id);
+                      setRemoveArtifacts(next);
+                    }}
+                  />
+                  {artifact.name}
+                </label>
+              </li>
+            ))}
+          </ul>
+        </fieldset>
+      )}
       {!!concepts?.length && (
         <fieldset className="purge-concepts">
           <legend>{t.purgeConceptsTitle.replace('{n}', String(concepts.length))}</legend>
@@ -3237,7 +3286,7 @@ function DeleteModal({
         <Button
           variant="danger"
           disabled={pending || concepts === null}
-          onClick={() => void attempt(() => submit([...chosen]))}
+          onClick={() => void attempt(() => submit([...chosen], [...removeArtifacts]))}
         >
           <Trash2 size={16} />
           {t.deletePermanently}
