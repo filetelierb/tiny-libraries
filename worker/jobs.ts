@@ -289,16 +289,21 @@ export class ProcessingJob extends DurableObject<Env> {
           detail?: string;
           progress?: { current: number; total: number };
           elapsedMs?: number;
+          model?: string;
+          usage?: { input?: number; output?: number; audioSeconds?: number };
+          tool?: 'preparation' | 'glossary';
         } = {},
-      ) =>
-        recordEvent(this.env, project, {
-          tool: 'preparation',
+      ) => {
+        const { tool, ...rest } = extra;
+        return recordEvent(this.env, project, {
+          tool: tool || 'preparation',
           action,
           fileId: file.id,
           fileName: file.name,
           summary,
-          ...extra,
+          ...rest,
         });
+      };
       const { key } = await this.library<{ key: string | null }>('/internal/key');
       if (!key) throw new MetaError('Add a Meta API key in Settings, then retry.', false);
       const settings = await this.library<{ model: string }>('/api/settings');
@@ -368,6 +373,10 @@ export class ProcessingJob extends DurableObject<Env> {
           {
             progress: { current: job.completedChunks, total: job.totalChunks },
             elapsedMs: Date.now() - stageStartedAt,
+            model: 'muse-voice-transcribe-1.0',
+            usage: {
+              audioSeconds: batch.reduce((sum, c) => sum + c.duration, 0),
+            },
           },
         );
         if (job.completedChunks === job.totalChunks) {
@@ -404,7 +413,7 @@ export class ProcessingJob extends DurableObject<Env> {
         await push(
           'translate.done',
           `Translated subtitles into ${job.locale.toUpperCase()} for ${file.name}`,
-          { elapsedMs: Date.now() - stageStartedAt },
+          { elapsedMs: Date.now() - stageStartedAt, model: settings.model },
         );
         job = { ...job, stage: 'synthesize', status: 'partial' };
       } else if (job.stage === 'synthesize') {
@@ -451,7 +460,10 @@ export class ProcessingJob extends DurableObject<Env> {
           await push(
             'synthesize.part',
             `Built chapters for window ${done + 1} of ${windows.length} of ${file.name}`,
-            { progress: { current: done + 1, total: windows.length + 1 } },
+            {
+              progress: { current: done + 1, total: windows.length + 1 },
+              model: settings.model,
+            },
           );
         } else {
           const parts = await Promise.all(
@@ -476,7 +488,7 @@ export class ProcessingJob extends DurableObject<Env> {
               (sum, c) => sum + c.questions.length,
               0,
             )} questions, ${synthesis.glossary.length} glossary terms`,
-            { elapsedMs: Date.now() - stageStartedAt },
+            { elapsedMs: Date.now() - stageStartedAt, model: settings.model },
           );
           job = { ...job, stage: 'concepts', status: 'partial', completedParts: 0, totalParts: 0 };
         }
@@ -507,7 +519,11 @@ export class ProcessingJob extends DurableObject<Env> {
           await push(
             'glossary.round',
             `Reviewed the glossary (round ${next.round}, ${next.terms.length} terms)`,
-            { progress: { current: next.round, total: 3 } },
+            {
+              progress: { current: next.round, total: 3 },
+              model: settings.model,
+              tool: 'glossary',
+            },
           );
           job = { ...job, status: 'partial', completedParts: next.round };
         } else {
@@ -527,10 +543,7 @@ export class ProcessingJob extends DurableObject<Env> {
             : synthesis;
           if (await this.publish(file, job, settings.model, segments, reviewed, finished?.plan))
             return;
-          await push(
-            'preparation.done',
-            `Finished preparing ${file.name} in ${job.locale.toUpperCase()}`,
-          );
+          // The home library's publishLearning writes `preparation.done` after flashcards start.
           job = { ...job, stage: 'done', status: 'completed' };
         }
       }

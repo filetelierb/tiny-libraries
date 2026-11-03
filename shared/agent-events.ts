@@ -23,6 +23,16 @@ export const agentEventSchema = z.object({
     .object({ current: z.number().int().nonnegative(), total: z.number().int().positive() })
     .optional(),
   elapsedMs: z.number().int().nonnegative().optional(),
+  /** The AI model the step called, when it called one. */
+  model: z.string().max(100).optional(),
+  /** Tokens the step consumed, from the model's response. STT reports audio seconds instead. */
+  usage: z
+    .object({
+      input: z.number().int().nonnegative().optional(),
+      output: z.number().int().nonnegative().optional(),
+      audioSeconds: z.number().nonnegative().optional(),
+    })
+    .optional(),
 });
 export type AgentEvent = z.infer<typeof agentEventSchema>;
 

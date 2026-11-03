@@ -425,7 +425,10 @@ export class Library extends DurableObject<Env> {
   private get project(): ProjectId {
     return this.home ? 'default' : (this.ctx.id.name!.slice('project:'.length) as ProjectId);
   }
-  /** Stores a file's prepared material, as its preparation hands it over. */
+  /**
+   * Stores a file's prepared material, as its preparation hands it over, and starts writing
+   * flashcard decks for every chapter in the background.
+   */
   private async publishLearning(value: Learning) {
     const file = await this.ctx.storage.get<Source>(`file:${value.sourceId}`);
     if (!file || file.version !== value.sourceVersion)
@@ -443,6 +446,89 @@ export class Library extends DurableObject<Env> {
       fileName: file.name,
       summary: `Added ${value.synthesis.glossary.length} concepts of ${file.name} to the glossary`,
     });
+    await this.startAutoFlashcards(file, value);
+  }
+  /** Queues flashcard decks for every chapter and fires preparation.done when they are ready. */
+  private async startAutoFlashcards(file: Source, learning: Learning) {
+    const chapterIds = learning.synthesis.chapters.map((chapter) => chapter.id);
+    const settings = await this.settings();
+    const key = await this.apiKey();
+    const done = () =>
+      recordEvent(this.env, this.project, {
+        tool: 'preparation',
+        action: 'preparation.done',
+        fileId: file.id,
+        fileName: file.name,
+        summary: `Finished preparing ${file.name} in ${learning.locale.toUpperCase()}`,
+      }).catch(() => undefined);
+    if (!key || !chapterIds.length) {
+      await done();
+      return;
+    }
+    const total = chapterIds.length;
+    let started = 0,
+      completed = 0;
+    try {
+      await startCardDecks(
+        this.ctx.storage,
+        file.id,
+        { sourceVersion: file.version, learningVersion: learning.createdAt, chapterIds },
+        {
+          owner: this.executionId,
+          settings,
+          start: (task) =>
+            this.ctx.waitUntil(
+              task
+                .then(() =>
+                  recordEvent(this.env, this.project, {
+                    tool: 'flashcards',
+                    action: 'flashcards.done',
+                    fileId: file.id,
+                    fileName: file.name,
+                    summary: `${completed} flashcard decks ready for ${file.name}`,
+                  }),
+                )
+                .then(() => done())
+                .catch(() => undefined),
+            ),
+          generate: async (currentLearning, chapterId) => {
+            const chapter = currentLearning.synthesis.chapters.find((c) => c.id === chapterId);
+            started++;
+            void recordEvent(this.env, this.project, {
+              tool: 'flashcards',
+              action: 'flashcards.generate',
+              fileId: file.id,
+              fileName: file.name,
+              summary: `Writing flashcards for ${chapter?.title || 'a chapter'}`,
+              progress: { current: started, total },
+              model: settings.model,
+            });
+            const plan = await generateCards(
+              key,
+              settings.model,
+              currentLearning,
+              chapterId,
+              bridgedFetch(this.env),
+            );
+            completed++;
+            void recordEvent(this.env, this.project, {
+              tool: 'flashcards',
+              action: 'flashcards.chapter.done',
+              fileId: file.id,
+              fileName: file.name,
+              summary: `Flashcards ready for ${chapter?.title || 'a chapter'}`,
+              progress: { current: completed, total },
+              model: settings.model,
+            });
+            return plan;
+          },
+        },
+      );
+    } catch (error) {
+      // Flashcards are a nice-to-have on top of the study guide; a failure still finishes it.
+      console.error('Auto-flashcards failed', (error as Error).message);
+      await done();
+    }
   }
   /** The folder of the project this library belongs to, cached per library instance. */
   private folderCache?: Promise<string | null>;
