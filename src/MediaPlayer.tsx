@@ -13,6 +13,9 @@ import {
   Headphones,
   Bookmark,
   Settings,
+  ChevronLeft,
+  ChevronRight,
+  Check,
 } from 'lucide-react';
 import type { Source, PublicLearning, Bookmark as SavedBookmark } from '../shared/domain';
 import { captionCues } from '../shared/caption-cues';
@@ -76,7 +79,7 @@ export function MediaPlayer({
     [duration, setDuration] = useState(0),
     [playing, setPlaying] = useState(false),
     [visible, setVisible] = useState(true),
-    [menuOpen, setMenuOpen] = useState(false),
+    [menu, setMenu] = useState<null | 'root' | 'speed' | 'subtitle'>(null),
     [fullscreen, setFullscreen] = useState(false),
     [error, setError] = useState(''),
     [caption, setCaption] = useState('');
@@ -158,14 +161,14 @@ export function MediaPlayer({
   }, [playing]);
   // A settings menu stays open while the controls are visible and closes with them.
   useEffect(() => {
-    if (!visible && menuOpen) setMenuOpen(false);
-  }, [visible, menuOpen]);
+    if (!visible && menu) setMenu(null);
+  }, [visible, menu]);
   useEffect(() => {
-    if (!menuOpen) return;
-    const close = () => setMenuOpen(false);
+    if (!menu) return;
+    const close = () => setMenu(null);
     window.addEventListener('pointerdown', close);
     return () => window.removeEventListener('pointerdown', close);
-  }, [menuOpen]);
+  }, [menu]);
   const changeTime = (value: number) => {
     const player = media.current;
     if (!player || !Number.isFinite(player.duration)) return;
@@ -656,28 +659,122 @@ export function MediaPlayer({
               <div className="player-menu">
                 <IconButton
                   label={t.playerSettings}
-                  aria-expanded={menuOpen}
+                  aria-expanded={!!menu}
                   onClick={(event) => {
                     event.stopPropagation();
-                    setMenuOpen((value) => !value);
+                    setMenu((value) => (value ? null : 'root'));
                   }}
                 >
                   <Settings />
                 </IconButton>
-                {menuOpen && (
+                {menu && (
                   <div
                     role="menu"
                     className="player-menu-popover"
                     onClick={(event) => event.stopPropagation()}
                   >
-                    <div className="player-menu-group">
-                      <span className="player-menu-label">{t.playbackSpeed}</span>
-                      {speedGroup}
-                    </div>
-                    <div className="player-menu-group">
-                      <span className="player-menu-label">{t.subtitle}</span>
-                      {captionSelect}
-                    </div>
+                    {menu === 'root' && (
+                      <>
+                        <button
+                          type="button"
+                          className="player-menu-row"
+                          onClick={() => setMenu('speed')}
+                        >
+                          <span className="player-menu-row-label">{t.playbackSpeed}</span>
+                          <span className="player-menu-row-value">
+                            {preferences.speed === 1 ? t.speedNormal : `${preferences.speed}×`}
+                          </span>
+                          <ChevronRight size={16} aria-hidden="true" />
+                        </button>
+                        <button
+                          type="button"
+                          className="player-menu-row"
+                          onClick={() => setMenu('subtitle')}
+                        >
+                          <span className="player-menu-row-label">{t.subtitle}</span>
+                          <span className="player-menu-row-value">
+                            {preferences.track === 'off'
+                              ? t.captionsOff
+                              : preferences.track === 'original'
+                                ? t.original
+                                : t.translated}
+                          </span>
+                          <ChevronRight size={16} aria-hidden="true" />
+                        </button>
+                      </>
+                    )}
+                    {menu === 'speed' && (
+                      <>
+                        <button
+                          type="button"
+                          className="player-menu-back"
+                          onClick={() => setMenu('root')}
+                        >
+                          <ChevronLeft size={16} aria-hidden="true" />
+                          {t.playbackSpeed}
+                        </button>
+                        {playbackSpeeds
+                          .filter((speed) => [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].includes(speed))
+                          .map((speed) => (
+                            <button
+                              key={speed}
+                              type="button"
+                              className="player-menu-option"
+                              aria-checked={preferences.speed === speed}
+                              role="menuitemradio"
+                              onClick={() => {
+                                changeSpeed(speed);
+                                setMenu('root');
+                              }}
+                            >
+                              {preferences.speed === speed ? (
+                                <Check size={14} aria-hidden="true" />
+                              ) : (
+                                <span className="player-menu-check" />
+                              )}
+                              <span>{speed === 1 ? t.speedNormal : `${speed}×`}</span>
+                            </button>
+                          ))}
+                      </>
+                    )}
+                    {menu === 'subtitle' && (
+                      <>
+                        <button
+                          type="button"
+                          className="player-menu-back"
+                          onClick={() => setMenu('root')}
+                        >
+                          <ChevronLeft size={16} aria-hidden="true" />
+                          {t.subtitle}
+                        </button>
+                        {(['off', 'original', 'translated'] as const).map((value) => (
+                          <button
+                            key={value}
+                            type="button"
+                            className="player-menu-option"
+                            aria-checked={preferences.track === value}
+                            role="menuitemradio"
+                            onClick={() => {
+                              setPreferences((current) => ({ ...current, track: value }));
+                              setMenu('root');
+                            }}
+                          >
+                            {preferences.track === value ? (
+                              <Check size={14} aria-hidden="true" />
+                            ) : (
+                              <span className="player-menu-check" />
+                            )}
+                            <span>
+                              {value === 'off'
+                                ? t.captionsOff
+                                : value === 'original'
+                                  ? t.original
+                                  : t.translated}
+                            </span>
+                          </button>
+                        ))}
+                      </>
+                    )}
                   </div>
                 )}
               </div>
