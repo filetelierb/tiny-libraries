@@ -1,15 +1,9 @@
 import { useEffect, useRef } from 'react';
 import type { T } from '../i18n';
-import { BookOpen, FileStack, MessageSquare, StickyNote, Bookmark } from 'lucide-react';
+import { BookOpen, MessageSquare, StickyNote, Bookmark } from 'lucide-react';
 
-export const primaryStudyTools = [
-  'assistant',
-  'notes',
-  'bookmarks',
-  'glossary',
-  'artifacts',
-] as const;
-export const auxiliaryStudyTools = ['chapters', 'practice', 'review'] as const;
+export const primaryStudyTools = ['assistant', 'notes', 'bookmarks', 'glossary'] as const;
+export const auxiliaryStudyTools = ['chapters', 'practice', 'review', 'artifacts'] as const;
 export const studyTools = [...primaryStudyTools, ...auxiliaryStudyTools] as const;
 export type StudyTab = (typeof studyTools)[number];
 export function isPrimaryStudyTool(value: StudyTab) {
@@ -20,19 +14,16 @@ const icons = {
   notes: StickyNote,
   bookmarks: Bookmark,
   glossary: BookOpen,
-  artifacts: FileStack,
 };
 
 export function StudyTabs({
   value,
   change,
   t,
-  bookmarkCount = 0,
 }: {
   value: StudyTab;
   change: (value: StudyTab) => void;
   t: T;
-  bookmarkCount?: number;
 }) {
   const strip = useRef<HTMLDivElement>(null);
   const focusAfterChange = useRef(false);
@@ -74,7 +65,6 @@ export function StudyTabs({
           >
             <Icon size={14} aria-hidden="true" />
             <span className="study-tab-label">{t[tool]}</span>
-            {tool === 'bookmarks' && <span className="bookmark-tab-count">{bookmarkCount}</span>}
           </button>
         );
       })}

@@ -52,12 +52,10 @@ const tabIcons = {
 export function LibraryTabs({
   value,
   change,
-  counts,
   t,
 }: {
   value: LibraryTab;
   change: (value: LibraryTab) => void;
-  counts: Record<LibraryTab, number | string>;
   t: T;
 }) {
   const strip = useRef<HTMLDivElement>(null);
@@ -104,7 +102,6 @@ export function LibraryTabs({
           >
             <Icon size={14} aria-hidden="true" />
             <span className="library-tab-label">{labels[tab]}</span>
-            <span className="library-tab-count">{counts[tab]}</span>
           </button>
         );
       })}

@@ -1009,26 +1009,7 @@ export function App() {
         aria-modal={panels.drawer === 'left' ? true : undefined}
       >
         <div className="library-heading">
-          <LibraryTabs
-            value={libraryTab}
-            change={setLibraryTab}
-            t={t}
-            counts={{
-              library: catalog.files.filter((f) => sourceState(f, catalog.directories) === 'files')
-                .length,
-              sessions: catalog.sessions.length,
-              // Matches the list's default scope: this session's artifacts and unscoped ones.
-              artifacts: (libraryArtifacts.items || []).filter(
-                (item) =>
-                  (!item.sessionId || item.sessionId === session.id) &&
-                  catalog.files.some(
-                    (f) =>
-                      f.id === item.sourceId && sourceState(f, catalog.directories) !== 'trash',
-                  ),
-              ).length,
-              tests: `${tests.items.length}${tests.more ? '+' : ''}`,
-            }}
-          />
+          <LibraryTabs value={libraryTab} change={setLibraryTab} t={t} />
           <div className="panel-heading-actions">
             <a
               className="button button-ghost icon-button"
@@ -1871,12 +1852,7 @@ export function App() {
         aria-modal={panels.drawer === 'right' ? true : undefined}
       >
         <div className="study-heading">
-          <StudyTabs
-            value={tab}
-            change={setTab}
-            t={t}
-            bookmarkCount={activeBookmarks.filter((bookmark) => !bookmark.deleted).length}
-          />
+          <StudyTabs value={tab} change={setTab} t={t} />
           <div className="panel-heading-actions">
             {panels.narrow ? (
               <IconButton label={t.openFiles} onClick={() => setLeft(true)}>
