@@ -263,7 +263,7 @@ export class TutorConversation extends DurableObject<Env> {
           token: await toolToken(this.env.MEDIA_BRIDGE_TOKEN, id, providerId),
         };
       },
-      emit: (phase, { record, intent, status, error, elapsedMs }) => {
+      emit: (phase, { record, intent, status, error, elapsedMs, toolName }) => {
         // Fire-and-forget: the DO already stored `project` at seed time; the tutor turn's
         // conversation name isn't persisted in this DO but the runner panel keys by project.
         void (async () => {
@@ -273,13 +273,16 @@ export class TutorConversation extends DurableObject<Env> {
             const action =
               phase === 'start' ? 'tutor.turn.start'
               : phase === 'failed' ? 'tutor.turn.failed'
+              : phase === 'tool' ? 'tutor.action'
               : 'tutor.turn.done';
             const summary =
               phase === 'start'
                 ? `Tutor turn: ${promptPreview}${intent.input.prompt.length > 120 ? '…' : ''}`
                 : phase === 'failed'
                   ? `Tutor turn failed${error ? `: ${error.slice(0, 160)}` : ''}`
-                  : `Tutor turn completed${status && status !== 'completed' ? ` (${status})` : ''}`;
+                  : phase === 'tool'
+                    ? `Used tool: ${toolName}`
+                    : `Tutor turn completed${status && status !== 'completed' ? ` (${status})` : ''}`;
             await recordEvent(this.env, project, {
               tool: 'tutor',
               action,
@@ -290,7 +293,10 @@ export class TutorConversation extends DurableObject<Env> {
                 ? { reasoningEffort: record.generation.reasoningEffort }
                 : {}),
               ...(elapsedMs !== undefined ? { elapsedMs } : {}),
-              detail: `turn ${record.id} · attempt ${record.attempt}${record.toolNames.length ? ` · tools: ${record.toolNames.join(', ')}` : ''}`,
+              detail:
+                phase === 'tool'
+                  ? `turn ${record.id} · tool ${toolName}`
+                  : `turn ${record.id} · attempt ${record.attempt}${record.toolNames.length ? ` · tools: ${record.toolNames.join(', ')}` : ''}`,
             });
           } catch {}
         })();

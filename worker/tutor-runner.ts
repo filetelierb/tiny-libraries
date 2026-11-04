@@ -59,13 +59,15 @@ export type TutorRunnerServices = {
   /** Emit an agent-activity event for this turn. The DO wraps recordEvent(); undefined is
    * fine (events just don't flow to the panel). */
   emit?(
-    phase: 'start' | 'done' | 'failed',
+    phase: 'start' | 'tool' | 'done' | 'failed',
     details: {
       record: TurnRecord;
       intent: TurnIntent;
       status?: string;
       error?: string;
       elapsedMs?: number;
+      /** For phase 'tool': the tool the tutor just executed on this step. */
+      toolName?: string;
     },
   ): void;
 };
@@ -357,9 +359,17 @@ export class TutorRunner {
           control.steering.length
         )
           return;
+        const usedBefore = new Set(agent.snapshot().used);
         await agent.executeNextTool(...turnWriters(this.journal, this.services, record, intent));
+        const usedAfter = agent.snapshot().used;
+        const newToolName = usedAfter.find((name) => !usedBefore.has(name));
         const checkpointObject = await this.journal.objects.put(agent.snapshot());
-        await this.journal.progress(record, { checkpointObject, toolNames: agent.snapshot().used });
+        await this.journal.progress(record, { checkpointObject, toolNames: usedAfter });
+        if (newToolName) {
+          try {
+            this.services.emit?.('tool', { record, intent, toolName: newToolName });
+          } catch {}
+        }
         return;
       }
       const providerId = await tutorFingerprint({

@@ -451,12 +451,22 @@ function tutorFlows(events: AgentEvent[], t: T): TutorFlow[] {
       case 'tutor.action':
         flow.stages.tools = { status: 'active', label: label.tools };
         break;
-      case 'tutor.turn.done':
+      case 'tutor.turn.done': {
         flow.stages.received = { status: 'done', label: label.received };
         flow.stages.thinking = { status: 'done', label: label.thinking };
-        if (flow.stages.tools.status === 'active') flow.stages.tools = { status: 'done', label: label.tools };
+        // Fallback: when the turn completes, the server summary embeds "· tools: name1, name2"
+        // whenever any tool ran. Flip the Tools stage to done so the lane reflects tool use
+        // even if no explicit tutor.action event was emitted per tool.
+        const toolsMatch = typeof event.detail === 'string'
+          ? event.detail.match(/·\s*tools:\s*([^·]+)/i)
+          : null;
+        if (flow.stages.tools.status === 'active' || toolsMatch) {
+          flow.stages.tools = { status: 'done', label: label.tools };
+          if (toolsMatch) flow.stageEvents.tools.unshift(event);
+        }
         flow.stages.completed = { status: 'done', label: label.completed };
         break;
+      }
       case 'tutor.turn.failed':
         flow.stages.received = { status: 'done', label: label.received };
         flow.stages.thinking = { status: 'failed', label: label.thinking };
