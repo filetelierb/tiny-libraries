@@ -315,12 +315,6 @@ export function AssessmentWorkspace({
                 <LoadingRow>{t.loading}</LoadingRow>
               ) : (
                 <div className="assessment-wizard">
-                  {unfinished && (
-                    <div className="notice assessment-unfinished">
-                      <p>{t.assessmentUnfinishedNotice}</p>
-                      <Button onClick={() => choose(unfinished.id)}>{t.assessmentResume}</Button>
-                    </div>
-                  )}
                   <ol className="assessment-steps" aria-label={t.assessmentSetup}>
                     {setupSteps.map((name, index) => (
                       <li key={name}>
@@ -459,68 +453,6 @@ export function AssessmentWorkspace({
                               ))}
                           </details>
                         )}
-                        <section
-                          className="assessment-saved-evidence"
-                          aria-label={t.assessmentSavedEvidence}
-                        >
-                          <div className="assessment-picker-heading">
-                            <span className="assessment-field-label">
-                              {t.assessmentSavedEvidence} <small>{t.optional}</small>
-                            </span>
-                            <span className="assessment-picker-actions">
-                              <span>{evidenceIds.length} / 6</span>
-                              <span>
-                                {evidence.flatMap(attachmentImages).length} / 48 ·{' '}
-                                {(
-                                  evidence
-                                    .flatMap(attachmentImages)
-                                    .reduce((sum, image) => sum + image.size, 0) /
-                                  1024 /
-                                  1024
-                                ).toFixed(2)}{' '}
-                                / 12 MB
-                              </span>
-                            </span>
-                          </div>
-                          <p className="muted">{t.assessmentEvidenceDisclosure}</p>
-                          {evidenceLoading && <LoadingRow>{t.loading}</LoadingRow>}
-                          {evidenceIds.map((id) => {
-                            const item = evidence.find((item) => item.id === id);
-                            return (
-                              <div className="question-attachment" key={id}>
-                                <Button disabled={!item} onClick={() => setInspectedEvidence(id)}>
-                                  {item?.name || t.evidenceUnavailable}
-                                  {item && (
-                                    <small>
-                                      {t.attachmentSelectedImages}: {attachmentImages(item).length}
-                                      {item.annotationRevision
-                                        ? ` · ${t.revision} ${item.annotationRevision}`
-                                        : ''}
-                                    </small>
-                                  )}
-                                </Button>
-                                <Button
-                                  aria-label={`${t.remove}: ${item?.name || t.evidenceUnavailable}`}
-                                  onClick={() => {
-                                    const ids = evidenceIds.filter((value) => value !== id);
-                                    update({ ...configRef.current, attachmentIds: ids });
-                                    setEvidence((old) => old.filter((value) => value.id !== id));
-                                  }}
-                                >
-                                  {t.remove}
-                                </Button>
-                              </div>
-                            );
-                          })}
-                          <Button
-                            disabled={busy || evidenceLoading || evidenceIds.length >= 6}
-                            onClick={() => setEvidencePicker(true)}
-                          >
-                            <Plus size={14} />
-                            {t.assessmentAddEvidence}
-                          </Button>
-                          <p className="assessment-helper">{t.assessmentEvidenceLimits}</p>
-                        </section>
                       </>
                     )}
                     {setupSteps[step] === 'focus' && (
@@ -736,57 +668,6 @@ export function AssessmentWorkspace({
             notice={t.assessmentSavedEvidenceNotice}
           />
         )}
-        <section className="assessment-history">
-          <div className="assessment-picker-heading">
-            <h3>{t.assessmentSavedReviews}</h3>
-            <Button
-              variant="ghost"
-              aria-label={t.assessmentRefreshHistory}
-              onClick={() => void loadHistory().catch((e) => setError((e as Error).message))}
-            >
-              <RefreshCw size={14} />
-            </Button>
-          </div>
-          {selected && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setStep(0);
-                choose(null);
-              }}
-            >
-              <Plus size={14} />
-              {t.assessmentNew}
-            </Button>
-          )}
-          {!history.length && !loading && <p className="muted">{t.assessmentNoHistory}</p>}
-          {history.map((row) => (
-            <button
-              key={row.id}
-              type="button"
-              aria-current={selected === row.id ? 'page' : undefined}
-              className="assessment-history-row"
-              onClick={() => choose(row.id)}
-            >
-              <strong>{row.title || t.assessmentPreparing}</strong>
-              <small>
-                {new Date(row.createdAt).toLocaleString()} · {row.config.count}{' '}
-                {t.assessmentQuestions}
-              </small>
-              <span className="assessment-history-status">
-                {t[`assessmentStatus_${row.status}`]}
-              </span>
-            </button>
-          ))}
-          {cursor && (
-            <Button
-              onClick={() => void loadHistory(cursor).catch((e) => setError((e as Error).message))}
-            >
-              {t.assessmentLoadMore}
-            </Button>
-          )}
-        </section>
       </div>
     </Modal>
   );

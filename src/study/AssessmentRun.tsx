@@ -250,35 +250,6 @@ export function AssessmentRun({
   const report = detail.report;
   return (
     <div className="assessment-run">
-      <div className="assessment-run-header">
-        <Button variant="ghost" size="sm" onClick={back}>
-          <ChevronLeft size={14} />
-          {t.assessmentHistory}
-        </Button>
-        <span className="assessment-history-status">{t[`assessmentStatus_${detail.status}`]}</span>
-        {!['completed', 'cancelled'].includes(detail.status) && !confirmCancel && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="assessment-run-cancel"
-            disabled={busy}
-            onClick={() => setConfirmCancel(true)}
-          >
-            {t.assessmentCancel}
-          </Button>
-        )}
-      </div>
-      {confirmCancel && !['completed', 'cancelled'].includes(detail.status) && (
-        <div className="notice notice-plain assessment-cancel">
-          <p>{t.assessmentCancelConfirm}</p>
-          <Button variant="danger" disabled={busy} onClick={() => void action('cancel')}>
-            {t.assessmentCancel}
-          </Button>
-          <Button disabled={busy} onClick={() => setConfirmCancel(false)}>
-            {t.assessmentKeepWorking}
-          </Button>
-        </div>
-      )}
       <div className="assessment-run-title">
         <h3>{detail.title || t.assessmentPreparing}</h3>
         <p className="muted">
@@ -291,7 +262,6 @@ export function AssessmentRun({
           {error}
         </p>
       )}
-      <AssessmentScope context={detail.context} t={t} inspect={inspectEvidence} />
       {detail.status === 'preparing' || detail.status === 'grading' ? (
         <div className="assessment-working" role="status">
           <LoaderCircle size={32} className="spin" />
@@ -321,36 +291,6 @@ export function AssessmentRun({
           {detail.workActive && <p>{t.assessmentCancelInFlight}</p>}
         </div>
       ) : null}
-      {detail.plan && (
-        <details className="assessment-compiled">
-          <summary>{t.assessmentTopicGuide}</summary>
-          <div className="assessment-topic-grid">
-            {detail.plan.topics.map((topic) => (
-              <section key={topic.id}>
-                <h4>{topic.title}</h4>
-                <p>{topic.summary}</p>
-                <ul>
-                  {topic.concepts.map((text, i) => (
-                    <li key={i}>{text}</li>
-                  ))}
-                </ul>
-                <AssessmentCitations
-                  citations={topic.citations}
-                  context={detail.context}
-                  t={t}
-                  navigate={navigate}
-                  inspect={inspectEvidence}
-                />
-              </section>
-            ))}
-          </div>
-          {detail.plan.coverageNotes.map((text, i) => (
-            <p className="muted" key={i}>
-              {text}
-            </p>
-          ))}
-        </details>
-      )}
       {['ready', 'cancelled'].includes(detail.status) && question && (
         <section className="assessment-answer-sheet">
           <div className="assessment-question-meta">
@@ -594,6 +534,37 @@ export function AssessmentRun({
             ))}
           </details>
         </div>
+      )}
+      <AssessmentScope context={detail.context} t={t} inspect={inspectEvidence} />
+      {detail.plan && (
+        <details className="assessment-compiled">
+          <summary>{t.assessmentTopicGuide}</summary>
+          <div className="assessment-topic-grid">
+            {detail.plan.topics.map((topic) => (
+              <section key={topic.id}>
+                <h4>{topic.title}</h4>
+                <p>{topic.summary}</p>
+                <ul>
+                  {topic.concepts.map((text, i) => (
+                    <li key={i}>{text}</li>
+                  ))}
+                </ul>
+                <AssessmentCitations
+                  citations={topic.citations}
+                  context={detail.context}
+                  t={t}
+                  navigate={navigate}
+                  inspect={inspectEvidence}
+                />
+              </section>
+            ))}
+          </div>
+          {detail.plan.coverageNotes.map((text, i) => (
+            <p className="muted" key={i}>
+              {text}
+            </p>
+          ))}
+        </details>
       )}
       {inspectedEvidence && (
         <AttachmentInspector
