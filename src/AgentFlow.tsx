@@ -411,12 +411,21 @@ function tutorFlows(events: AgentEvent[], t: T): TutorFlow[] {
     tools: (t as Record<string, string>).agentTutorStage_tools || 'Tools',
     completed: (t as Record<string, string>).agentTutorStage_completed || 'Reply',
   };
+  // Each tutor turn gets its own lane so successive messages don't overwrite the previous
+  // one. The server embeds "turn <uuid>" in the event's detail string; parse it out and
+  // combine it with the conversation id to key the lane. Events with no turn id fall back
+  // to the conversation id so they still group somewhere.
+  const turnOf = (event: AgentEvent): string => {
+    const match = typeof event.detail === 'string' ? event.detail.match(/turn\s+([0-9a-f-]+)/i) : null;
+    return match ? match[1] : event.conversationId || '';
+  };
   const ensure = (event: AgentEvent): TutorFlow | null => {
     if (event.tool !== 'tutor' || !event.conversationId) return null;
-    let flow = by.get(event.conversationId);
+    const key = `${event.conversationId}:${turnOf(event)}`;
+    let flow = by.get(key);
     if (!flow) {
       flow = {
-        conversationId: event.conversationId,
+        conversationId: key,
         conversationLabel: event.conversationName || event.conversationId,
         stages: Object.fromEntries(
           TUTOR_STAGES.map((stage) => [stage, { status: 'pending' as Status, label: label[stage] }]),
@@ -426,7 +435,7 @@ function tutorFlows(events: AgentEvent[], t: T): TutorFlow[] {
         ) as TutorFlow['stageEvents'],
         lastAt: event.at,
       };
-      by.set(event.conversationId, flow);
+      by.set(key, flow);
     }
     if (event.at > flow.lastAt) flow.lastAt = event.at;
     if (event.conversationName) flow.conversationLabel = event.conversationName;
