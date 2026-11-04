@@ -255,8 +255,7 @@ export function AssessmentWorkspace({
       if (alive.current) setBusy(false);
     }
   }
-  const unfinished = history.find((row) => !['completed', 'cancelled'].includes(row.status)),
-    completed = history.filter((row) => row.status === 'completed'),
+  const completed = history.filter((row) => row.status === 'completed'),
     materialReady =
       (config.sourceIds.length > 0 || evidenceIds.length > 0) &&
       !evidenceLoading &&
@@ -625,9 +624,7 @@ export function AssessmentWorkspace({
                       ) : (
                         <Button
                           variant="primary"
-                          disabled={
-                            busy || !!unfinished || !materialReady || !catalog.settings.configured
-                          }
+                          disabled={busy || !materialReady || !catalog.settings.configured}
                           onClick={() => void create()}
                         >
                           {busy ? t.assessmentPreparing : t.assessmentPrepare}
