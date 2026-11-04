@@ -44,7 +44,7 @@ export type TutorArtifactServices = {
   previous(fileId: string): Promise<TutorArtifactDocument | null>;
   /** Saves the document as the file's next version and returns that version. */
   save(job: TutorArtifactJob, document: TutorArtifactDocument): Promise<number>;
-  /** Fire-and-forget hook so the Agent activity panel can show the generation progress. */
+  /** Fire-and-forget hook so the Muse activity panel can show the generation progress. */
   emit?(
     phase: 'plan' | 'write' | 'chapter' | 'check' | 'ready' | 'failed',
     details: { job: TutorArtifactJob; chapterIndex?: number; error?: string },

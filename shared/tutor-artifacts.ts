@@ -223,7 +223,7 @@ export type TutorArtifactJob = {
   /** The library file that holds the artifact once it is saved. */
   fileId: string;
   conversationId: string;
-  /** The tutor turn that started this generation. Preserved so the Agent activity panel can
+  /** The tutor turn that started this generation. Preserved so the Muse activity panel can
    * attach the artifact's progress events to that turn's lane. */
   turnId?: string;
   sessionId?: string;

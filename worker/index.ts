@@ -395,7 +395,7 @@ export class Library extends DurableObject<Env> {
         });
       },
       emit: (phase, { job, chapterIndex, error }) => {
-        // Fire-and-forget: the Agent activity panel groups events by `turn <uuid>` in the
+        // Fire-and-forget: the Muse activity panel groups events by `turn <uuid>` in the
         // detail string, so the artifact's progress lands in the originating turn's lane.
         void (async () => {
           try {
@@ -784,7 +784,7 @@ export class Library extends DurableObject<Env> {
           if (!next) await tx.delete(key);
           else if (next !== day) await tx.put(key, next);
         }
-        // Agent activity events of the deleted project leave the ring buffer with it.
+        // Muse activity events of the deleted project leave the ring buffer with it.
         for (const [key, event] of await tx.list<{ project: string }>({
           prefix: 'agent-event:',
         }))

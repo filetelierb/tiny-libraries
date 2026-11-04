@@ -3,7 +3,7 @@ import { projectIdSchema } from './projects';
 
 /**
  * A step the library's AI tools or the Librarian agent are taking. The home library keeps a
- * ring buffer of the latest ones so the Agent activity panel can show them in real time.
+ * ring buffer of the latest ones so the Muse activity panel can show them in real time.
  */
 export const agentToolSchema = z.enum([
   'preparation',
