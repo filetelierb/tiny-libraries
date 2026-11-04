@@ -650,7 +650,11 @@ function StudioBody({
               type="range"
               min="1"
               max="24"
-              value={width}
+              value={
+                active && 'points' in active
+                  ? clamp(Math.round(active.width * scale), 1, 24)
+                  : width
+              }
               onChange={(e) => {
                 setWidth(Number(e.target.value));
                 if (active && 'points' in active)
