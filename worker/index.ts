@@ -1440,6 +1440,7 @@ export class Library extends DurableObject<Env> {
           owner: this.executionId,
           settings: await this.settings(),
           start: (task: Promise<void>) => this.ctx.waitUntil(task),
+          emit,
           generate: async (
             context: import('../shared/assessments').AssessmentContext,
             config: import('../shared/assessments').AssessmentConfig,
@@ -1451,15 +1452,35 @@ export class Library extends DurableObject<Env> {
             const key = await this.apiKey();
             if (!key) throw new ApiError('Add a Meta API key in Settings', 409);
             const total = Math.ceil(config.count / 12);
+            const batchStart = batch * 12 + 1;
+            const batchEnd = Math.min((batch + 1) * 12, config.count);
             const started = Date.now();
+            const weakHints = context.prior
+              .slice(0, 3)
+              .map((p) => p.prompt.slice(0, 60))
+              .join(' · ');
             await emit(
-              'assessment.batch.start',
-              `Preparing questions ${batch * 12 + 1}–${Math.min(
-                (batch + 1) * 12,
-                config.count,
-              )} of ${config.count} from ${context.sources.length} file${
-                context.sources.length === 1 ? '' : 's'
-              }${context.prior.length ? ` and ${context.prior.length} prior weak answer${context.prior.length === 1 ? '' : 's'}` : ''}.`,
+              'assessment.batch.weaknesses',
+              context.prior.length
+                ? `Grouping ${context.prior.length} prior uncertain answer${context.prior.length === 1 ? '' : 's'} into strength/weakness topics for batch ${batch + 1} of ${total}.`
+                : `No prior weak answers; the Librarian will choose topics from the study passages alone for batch ${batch + 1} of ${total}.`,
+              {
+                progress: { current: batch, total },
+                detail: weakHints || undefined,
+              },
+            );
+            await emit(
+              'assessment.batch.plan',
+              `Proposing a topic mix and difficulty distribution for batch ${batch + 1} of ${total} (questions ${batchStart}–${batchEnd} of ${config.count}).`,
+              {
+                model,
+                reasoningEffort: 'auto',
+                progress: { current: batch, total },
+              },
+            );
+            await emit(
+              'assessment.batch.generate',
+              `Drafting questions ${batchStart}–${batchEnd} of ${config.count} grounded in the ${context.sources.length} selected file${context.sources.length === 1 ? '' : 's'}.`,
               {
                 model,
                 reasoningEffort: 'auto',
@@ -1478,9 +1499,15 @@ export class Library extends DurableObject<Env> {
                 bridgedFetch(this.env),
                 await readAssessmentImages(this.originals(), context),
               );
+              const topicNames = value.topics
+                .slice(0, 4)
+                .map((t) => t.title)
+                .join(', ');
+              const extra =
+                value.topics.length > 4 ? ` +${value.topics.length - 4} more` : '';
               await emit(
                 'assessment.batch.done',
-                `Prepared ${value.questions.length} question${value.questions.length === 1 ? '' : 's'} across ${value.topics.length} topic${value.topics.length === 1 ? '' : 's'}.`,
+                `Batch ${batch + 1} of ${total} ready — ${value.questions.length} question${value.questions.length === 1 ? '' : 's'} across ${value.topics.length} topic${value.topics.length === 1 ? '' : 's'}: ${topicNames}${extra}.`,
                 {
                   model,
                   reasoningEffort: 'auto',
@@ -1488,6 +1515,11 @@ export class Library extends DurableObject<Env> {
                   progress: { current: batch + 1, total },
                 },
               );
+              if (batch + 1 === total)
+                await emit(
+                  'assessment.plan.complete',
+                  `Full assessment ready: ${config.count} questions prepared from ${context.sources.length} file${context.sources.length === 1 ? '' : 's'}${context.prior.length ? ` and ${context.prior.length} prior weak answer${context.prior.length === 1 ? '' : 's'}` : ''}.`,
+                );
               return value;
             } catch (e) {
               await emit(

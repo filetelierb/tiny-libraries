@@ -55,6 +55,19 @@ type Operations = {
   owner: string;
   settings: Settings;
   start: (task: Promise<void>) => void;
+  /** Publish an intermediate step to the agent-activity timeline. Optional so tests don't
+   * need to supply one. */
+  emit?: (
+    action: string,
+    summary: string,
+    extra?: {
+      progress?: { current: number; total: number };
+      elapsedMs?: number;
+      model?: string;
+      reasoningEffort?: string;
+      detail?: string;
+    },
+  ) => Promise<void> | void;
   generate: (
     context: AssessmentContext,
     config: AssessmentConfig,
@@ -554,9 +567,39 @@ export async function createAssessment(
         until: Date.now() + 600000,
       };
     await tx.put(key(record.id), record);
-    return record;
+    return { record, context };
   });
-  if (record) options.start(runAssessment(storage, record, options));
+  if (record) {
+    if (options.emit) {
+      const files = record.context.sources.length;
+      const totalPassages = record.context.sources.reduce((n, s) => n + s.segments.length, 0);
+      void options.emit(
+        'assessment.context.sources',
+        `Analysed ${files} studied file${files === 1 ? '' : 's'} and captured ${totalPassages} evidence passage${totalPassages === 1 ? '' : 's'}.`,
+        { detail: record.context.sources.map((s) => s.name).join(', ') },
+      );
+      const attachmentCount = record.context.attachments?.length || 0;
+      if (attachmentCount)
+        void options.emit(
+          'assessment.context.evidence',
+          `Linked ${attachmentCount} saved evidence attachment${attachmentCount === 1 ? '' : 's'}.`,
+        );
+      const priorCount = record.context.prior.length;
+      const priorReports = new Set(record.context.prior.map((p) => p.reportId)).size;
+      if (priorCount) {
+        void options.emit(
+          'assessment.context.prior',
+          `Reviewed ${priorCount} uncertain or incorrect answer${priorCount === 1 ? '' : 's'} from ${priorReports} prior report${priorReports === 1 ? '' : 's'} to spot weak topics.`,
+        );
+      } else {
+        void options.emit(
+          'assessment.context.prior',
+          'No prior report answers were available to infer weak topics; starting from the study context alone.',
+        );
+      }
+    }
+    options.start(runAssessment(storage, record.record, options));
+  }
   return assessmentDetail(storage, input.requestId, options.owner);
 }
 export async function saveAssessmentAnswer(storage: GlossaryStorage, id: string, raw: unknown) {
