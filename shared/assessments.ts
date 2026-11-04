@@ -255,6 +255,11 @@ export function validateAssessmentCitation(
   c: AssessmentCitation,
   context: Pick<AssessmentContext, 'sources' | 'attachments'>,
 ) {
+  // Quote matching normalises whitespace, case and diacritics before the containment check: the
+  // model routinely reformats quotes (collapsed line breaks, smart quotes, title-casing) and a
+  // strict substring match would reject otherwise valid citations.
+  const quoteMatches = (text: string, quote: string) =>
+    normalizeAssessmentText(text).includes(normalizeAssessmentText(quote));
   if ('attachmentId' in c) {
     const content = context.attachments?.find((item) => item.attachment.id === c.attachmentId),
       segment = content?.segments.find((part) => part.id === c.segmentId),
@@ -266,7 +271,7 @@ export function validateAssessmentCitation(
       !content ||
       !segment ||
       (!c.imageId && !c.quote) ||
-      (c.quote && !segment.text.includes(c.quote)) ||
+      (c.quote && !quoteMatches(segment.text, c.quote)) ||
       (c.imageId &&
         (!image ||
           !imageEvidenceSegments(image, content.segments).some((part) => part.id === c.segmentId)))
@@ -276,7 +281,7 @@ export function validateAssessmentCitation(
   }
   const source = context.sources.find((s) => s.id === c.sourceId),
     segment = source?.segments.find((s) => s.id === c.segmentId);
-  if (!segment || !segment.text.includes(c.quote))
+  if (!segment || !quoteMatches(segment.text, c.quote))
     throw new Error('Assessment citation is outside the selected source evidence.');
   return { kind: 'source' as const, source: source!, segment };
 }
