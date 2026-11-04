@@ -88,7 +88,6 @@ type FileFlow = {
   /** The events that happened at each stage, newest first, so a stage can be expanded. */
   stageEvents: Record<Stage, AgentEvent[]>;
   firstAt: string;
-  lastAt: string;
 };
 const stageOf: Partial<Record<string, Stage>> = {
   'library.upload': 'upload',
@@ -137,12 +136,10 @@ function fileFlows(events: AgentEvent[], t: T): FileFlow[] {
           order.map((stage) => [stage, [] as AgentEvent[]]),
         ) as FileFlow['stageEvents'],
         firstAt: event.at,
-        lastAt: event.at,
       };
       files.set(event.fileId, flow);
     }
     if (event.at < flow.firstAt) flow.firstAt = event.at;
-    if (event.at > flow.lastAt) flow.lastAt = event.at;
     return flow;
   };
   // Events arrive newest first, so iterate oldest first for stage transitions.
@@ -237,7 +234,7 @@ function fileFlows(events: AgentEvent[], t: T): FileFlow[] {
     const next = flow.order[last + 1];
     if (next && flow.stages[next].status === 'pending') flow.stages[next].status = 'waiting';
   }
-  return [...files.values()].sort((a, b) => b.lastAt.localeCompare(a.lastAt));
+  return [...files.values()];
 }
 
 function StageCard({
@@ -417,7 +414,6 @@ type TutorFlow = {
   stages: Record<TutorStage, { status: Status; label: string }>;
   stageEvents: Record<TutorStage, AgentEvent[]>;
   firstAt: string;
-  lastAt: string;
 };
 
 function tutorFlows(events: AgentEvent[], t: T): TutorFlow[] {
@@ -434,7 +430,8 @@ function tutorFlows(events: AgentEvent[], t: T): TutorFlow[] {
   // combine it with the conversation id to key the lane. Events with no turn id fall back
   // to the conversation id so they still group somewhere.
   const turnOf = (event: AgentEvent): string => {
-    const match = typeof event.detail === 'string' ? event.detail.match(/turn\s+([0-9a-f-]+)/i) : null;
+    const match =
+      typeof event.detail === 'string' ? event.detail.match(/turn\s+([0-9a-f-]+)/i) : null;
     return match ? match[1] : event.conversationId || '';
   };
   const ensure = (event: AgentEvent): TutorFlow | null => {
@@ -446,18 +443,19 @@ function tutorFlows(events: AgentEvent[], t: T): TutorFlow[] {
         conversationId: key,
         conversationLabel: event.conversationName || event.conversationId,
         stages: Object.fromEntries(
-          TUTOR_STAGES.map((stage) => [stage, { status: 'pending' as Status, label: label[stage] }]),
+          TUTOR_STAGES.map((stage) => [
+            stage,
+            { status: 'pending' as Status, label: label[stage] },
+          ]),
         ) as TutorFlow['stages'],
         stageEvents: Object.fromEntries(
           TUTOR_STAGES.map((stage) => [stage, [] as AgentEvent[]]),
         ) as TutorFlow['stageEvents'],
         firstAt: event.at,
-        lastAt: event.at,
       };
       by.set(key, flow);
     }
     if (event.at < flow.firstAt) flow.firstAt = event.at;
-    if (event.at > flow.lastAt) flow.lastAt = event.at;
     if (event.conversationName) flow.conversationLabel = event.conversationName;
     return flow;
   };
@@ -492,9 +490,8 @@ function tutorFlows(events: AgentEvent[], t: T): TutorFlow[] {
         // Fallback: when the turn completes, the server summary embeds "· tools: name1, name2"
         // whenever any tool ran. Flip the Tools stage to done so the lane reflects tool use
         // even if no explicit tutor.action event was emitted per tool.
-        const toolsMatch = typeof event.detail === 'string'
-          ? event.detail.match(/·\s*tools:\s*([^·]+)/i)
-          : null;
+        const toolsMatch =
+          typeof event.detail === 'string' ? event.detail.match(/·\s*tools:\s*([^·]+)/i) : null;
         if (flow.stages.tools.status === 'active' || toolsMatch) {
           flow.stages.tools = { status: 'done', label: label.tools };
           if (toolsMatch) flow.stageEvents.tools.unshift(event);
@@ -530,7 +527,7 @@ function tutorFlows(events: AgentEvent[], t: T): TutorFlow[] {
       flow.stages.artifact = { status: 'hidden' as Status, label: label.artifact };
     }
   }
-  return [...by.values()].sort((a, b) => b.lastAt.localeCompare(a.lastAt));
+  return [...by.values()];
 }
 
 /** The stages an assessment preparation passes through: gathering study context, choosing
@@ -550,7 +547,6 @@ type AssessmentFlow = {
   stages: Record<AssessmentStage, { status: Status; label: string }>;
   stageEvents: Record<AssessmentStage, AgentEvent[]>;
   firstAt: string;
-  lastAt: string;
 };
 const assessmentStageOf: Partial<Record<string, AssessmentStage>> = {
   'assessment.context.sources': 'context',
@@ -599,12 +595,10 @@ function assessmentFlows(events: AgentEvent[], t: T): AssessmentFlow[] {
           ASSESSMENT_STAGES.map((stage) => [stage, [] as AgentEvent[]]),
         ) as AssessmentFlow['stageEvents'],
         firstAt: event.at,
-        lastAt: event.at,
       };
       by.set(key, flow);
     }
     if (event.at < flow.firstAt) flow.firstAt = event.at;
-    if (event.at > flow.lastAt) flow.lastAt = event.at;
     return flow;
   };
   for (const event of [...events].reverse()) {
@@ -655,7 +649,7 @@ function assessmentFlows(events: AgentEvent[], t: T): AssessmentFlow[] {
         break;
     }
   }
-  return [...by.values()].sort((a, b) => b.lastAt.localeCompare(a.lastAt));
+  return [...by.values()];
 }
 
 /** Diagram view: one pipeline per file for preparation, one per conversation for the tutor. */
@@ -677,11 +671,14 @@ export function AgentFlow({
     Record<string, AssessmentStage | null>
   >({});
   if (!flows.length && !tutorRows.length && !assessmentRows.length) return null;
-  return (
-    <div className="agent-flows">
-      {tutorRows.map((flow) => {
-        const picked = tutorSelected[flow.conversationId] ?? null;
-        return (
+  // One list across kinds, placed by when each lane's work began: that never changes as a lane
+  // progresses, so lanes hold their place, and it is the time each lane header shows.
+  const lanes = [
+    ...tutorRows.map((flow) => {
+      const picked = tutorSelected[flow.conversationId] ?? null;
+      return {
+        firstAt: flow.firstAt,
+        node: (
           <section
             key={`tutor:${flow.conversationId}`}
             className="flow-row flow-row-tutor"
@@ -695,51 +692,54 @@ export function AgentFlow({
               </time>
             </h3>
             <ol className="flow-stages">
-              {TUTOR_STAGES.filter((stage) => flow.stages[stage].status !== 'hidden').map((stage) => {
-                const state = flow.stages[stage];
-                const Icon = tutorStageIcon[stage];
-                const Mark =
-                  state.status === 'done'
-                    ? Check
-                    : state.status === 'active'
-                      ? LoaderCircle
-                      : state.status === 'failed'
-                        ? CircleAlert
-                        : null;
-                const empty = !flow.stageEvents[stage].length;
-                return (
-                  <li
-                    key={stage}
-                    className={`flow-stage ${state.status} ${picked === stage ? 'selected' : ''}`}
-                  >
-                    <button
-                      type="button"
-                      className="flow-stage-head-button"
-                      disabled={empty}
-                      aria-pressed={picked === stage}
-                      onClick={() =>
-                        setTutorSelected((prev) => ({
-                          ...prev,
-                          [flow.conversationId]: prev[flow.conversationId] === stage ? null : stage,
-                        }))
-                      }
+              {TUTOR_STAGES.filter((stage) => flow.stages[stage].status !== 'hidden').map(
+                (stage) => {
+                  const state = flow.stages[stage];
+                  const Icon = tutorStageIcon[stage];
+                  const Mark =
+                    state.status === 'done'
+                      ? Check
+                      : state.status === 'active'
+                        ? LoaderCircle
+                        : state.status === 'failed'
+                          ? CircleAlert
+                          : null;
+                  const empty = !flow.stageEvents[stage].length;
+                  return (
+                    <li
+                      key={stage}
+                      className={`flow-stage ${state.status} ${picked === stage ? 'selected' : ''}`}
                     >
-                      <div className="flow-stage-head">
-                        <Icon size={16} aria-hidden="true" />
-                        <span>{state.label}</span>
-                      </div>
-                      <div
-                        className="flow-stage-mark"
-                        aria-label={t[`agentStatus_${state.status}` as keyof T] as string}
+                      <button
+                        type="button"
+                        className="flow-stage-head-button"
+                        disabled={empty}
+                        aria-pressed={picked === stage}
+                        onClick={() =>
+                          setTutorSelected((prev) => ({
+                            ...prev,
+                            [flow.conversationId]:
+                              prev[flow.conversationId] === stage ? null : stage,
+                          }))
+                        }
                       >
-                        {Mark && (
-                          <Mark size={14} className={state.status === 'active' ? 'spin' : ''} />
-                        )}
-                      </div>
-                    </button>
-                  </li>
-                );
-              })}
+                        <div className="flow-stage-head">
+                          <Icon size={16} aria-hidden="true" />
+                          <span>{state.label}</span>
+                        </div>
+                        <div
+                          className="flow-stage-mark"
+                          aria-label={t[`agentStatus_${state.status}` as keyof T] as string}
+                        >
+                          {Mark && (
+                            <Mark size={14} className={state.status === 'active' ? 'spin' : ''} />
+                          )}
+                        </div>
+                      </button>
+                    </li>
+                  );
+                },
+              )}
             </ol>
             {picked && flow.stageEvents[picked].length > 0 && (
               <div className="flow-stage-details">
@@ -787,11 +787,14 @@ export function AgentFlow({
               </div>
             )}
           </section>
-        );
-      })}
-      {assessmentRows.map((flow) => {
-        const picked = assessmentSelected[flow.key] ?? null;
-        return (
+        ),
+      };
+    }),
+    ...assessmentRows.map((flow) => {
+      const picked = assessmentSelected[flow.key] ?? null;
+      return {
+        firstAt: flow.firstAt,
+        node: (
           <section
             key={`assessment:${flow.key}`}
             className="flow-row flow-row-assessment"
@@ -897,11 +900,14 @@ export function AgentFlow({
               </div>
             )}
           </section>
-        );
-      })}
-      {flows.map((flow) => {
-        const picked = selected[flow.fileId] ?? null;
-        return (
+        ),
+      };
+    }),
+    ...flows.map((flow) => {
+      const picked = selected[flow.fileId] ?? null;
+      return {
+        firstAt: flow.firstAt,
+        node: (
           <section key={flow.fileId} className="flow-row" aria-label={flow.fileName}>
             <h3>
               {flow.fileName}
@@ -936,8 +942,9 @@ export function AgentFlow({
               />
             )}
           </section>
-        );
-      })}
-    </div>
-  );
+        ),
+      };
+    }),
+  ].sort((a, b) => b.firstAt.localeCompare(a.firstAt));
+  return <div className="agent-flows">{lanes.map((lane) => lane.node)}</div>;
 }
