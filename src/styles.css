@@ -8036,18 +8036,26 @@ body:has(.panel-resizer.resizing) {
 .annotation-card > header {
   display: flex;
   align-items: flex-start;
+  justify-content: flex-end;
   gap: 4px;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
-.annotation-card-title {
-  flex: 1;
-  min-width: 0;
-  align-self: center;
+.annotation-card-body {
+  display: block;
+  width: 100%;
   padding: 0;
   text-align: left;
-  font-size: var(--font-size-small);
-  font-weight: var(--font-weight-semibold);
-  overflow-wrap: anywhere;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.annotation-card-body:hover {
+  color: var(--primary);
+}
+.annotation-card-body:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
 }
 .annotation-card > header > .icon-button {
   width: 28px;

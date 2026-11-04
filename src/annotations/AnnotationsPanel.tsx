@@ -277,17 +277,9 @@ export function AnnotationsPanel({
                   </span>
                 </p>
               )}
-              <header>
-                <button
-                  type="button"
-                  className="annotation-card-title"
-                  title={t.readAnnotation}
-                  onClick={() => void open(item)}
-                >
-                  {item.title || t.untitledAnnotation}
-                </button>
+              <header className="annotation-card-actions">
                 <IconButton
-                  label={`${t.editAnnotation}: ${item.title || t.untitledAnnotation}`}
+                  label={t.editAnnotation}
                   disabled={unavailable}
                   onClick={() => void open(item, true)}
                 >
@@ -496,16 +488,30 @@ function AnnotationPreview({
   }, [item.id, item.revision]);
   return (
     <div ref={root}>
-      {value ? (
-        <div className="annotation-rich-preview">
-          <RichContent document={value.document} t={t} />
-        </div>
-      ) : (
-        <p>
-          {item.text.slice(0, 240)}
-          {item.text.length > 240 ? '…' : ''}
-        </p>
-      )}
+      <div
+        role="button"
+        tabIndex={0}
+        className="annotation-card-body"
+        title={t.readAnnotation}
+        onClick={open}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            open();
+          }
+        }}
+      >
+        {value ? (
+          <div className="annotation-rich-preview">
+            <RichContent document={value.document} t={t} />
+          </div>
+        ) : (
+          <p>
+            {item.text.slice(0, 240)}
+            {item.text.length > 240 ? '…' : ''}
+          </p>
+        )}
+      </div>
       {!!item.captures?.length && (
         <div className="annotation-capture-strip" aria-label={t.captureGallery}>
           {item.captures.slice(0, 4).map((capture, i) => (

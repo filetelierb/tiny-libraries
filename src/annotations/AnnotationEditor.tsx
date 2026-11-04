@@ -180,7 +180,7 @@ function EditorForm({
     },
     [],
   );
-  const { title, sourceMode, markdown } = draft;
+  const { sourceMode, markdown } = draft;
   function changeNote(patch: Partial<NoteDraft>, semantic = true) {
     const next = {
       ...draftRef.current,
@@ -200,8 +200,7 @@ function EditorForm({
       });
     return next;
   }
-  const setTitle = (title: string) => changeNote({ title }),
-    setMarkdown = (markdown: string) => changeNote({ markdown });
+  const setMarkdown = (markdown: string) => changeNote({ markdown });
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -481,20 +480,6 @@ function EditorForm({
           {request.location.quote && (
             <blockquote className="selected-quote">{request.location.quote}</blockquote>
           )}
-          <label>
-            {t.annotationTitle}
-            <input
-              aria-label={t.annotationTitle}
-              maxLength={240}
-              value={title}
-              onChange={(event) => {
-                typingPause.pulse();
-                setTitle(event.target.value);
-              }}
-              onBlur={() => typingPause.release()}
-              disabled={pending}
-            />
-          </label>
           <div className="rich-toolbar" role="toolbar" aria-label={t.annotationFormatting}>
             <select
               aria-label={t.textStyle}
@@ -667,7 +652,6 @@ function EditorForm({
             {draft.base && (
               <details>
                 <summary>{t.captureSavedVersion}</summary>
-                <h4>{draft.base.title}</h4>
                 <RichContent document={draft.base.document} t={t} />
               </details>
             )}
