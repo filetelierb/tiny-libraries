@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import type { AgentEvent, AgentTool } from '../shared/agent-events';
 import type { ProjectSummary } from '../shared/projects';
+import { kindFor } from '../shared/domain';
 import { api } from './api';
 import { AgentFlow } from './AgentFlow';
 import { useAgentEvents } from './useAgentEvents';
@@ -189,9 +190,10 @@ export function AgentPanel({
     const seen = new Map<string, 'open' | 'done'>();
     for (const event of scoped) {
       if (!event.fileId) continue;
+      // .artifact pointer files are hidden from the flow diagram; they are not pipelines.
+      if (event.fileName && kindFor(event.fileName) === 'artifact') continue;
       if (seen.has(event.fileId)) continue;
       if (event.action === 'library.upload') {
-        // An upload on its own does not count as a preparation step running.
         seen.set(event.fileId, 'done');
         continue;
       }
