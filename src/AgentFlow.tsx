@@ -84,7 +84,10 @@ const stageOf: Partial<Record<string, Stage>> = {
   'normalize.start': 'read',
   'normalize.done': 'read',
   'transcribe.chunk': 'transcribe',
+  'translate.start': 'translate',
+  'translate.chunk': 'translate',
   'translate.done': 'translate',
+  'synthesize.start': 'synthesize',
   'synthesize.part': 'synthesize',
   'synthesize.done': 'synthesize',
   'glossary.round': 'glossary',
@@ -175,9 +178,14 @@ function fileFlows(events: AgentEvent[], t: T): FileFlow[] {
         if (event.progress && event.progress.current >= event.progress.total)
           done('transcribe', t.agentStage_transcribe);
         break;
+      case 'translate.start':
+      case 'translate.chunk':
+        open('translate', t.agentStage_translate, event.progress);
+        break;
       case 'translate.done':
         done('translate', t.agentStage_translate);
         break;
+      case 'synthesize.start':
       case 'synthesize.part':
         open('synthesize', t.agentStage_synthesize, event.progress);
         break;

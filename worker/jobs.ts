@@ -446,6 +446,12 @@ export class ProcessingJob extends DurableObject<Env> {
           ),
           translated: Segment[] = [];
         const translateTracker = usageTracker();
+        const totalBatches = Math.max(1, Math.ceil(segments.length / 80));
+        await push(
+          'translate.start',
+          `Translating subtitles into ${job.locale.toUpperCase()} for ${file.name}`,
+          { progress: { current: 0, total: totalBatches }, model: settings.model },
+        );
         // Bound translation calls and persist each batch independently.
         for (let i = 0; i < segments.length; i += 80) {
           const cacheKey = `translation:${i}`;
@@ -461,6 +467,16 @@ export class ProcessingJob extends DurableObject<Env> {
             await this.ctx.storage.put(cacheKey, batch);
           }
           translated.push(...batch);
+          const completed = Math.floor(i / 80) + 1;
+          if (completed < totalBatches)
+            await push(
+              'translate.chunk',
+              `Translated subtitle batch ${completed} of ${totalBatches}`,
+              {
+                progress: { current: completed, total: totalBatches },
+                model: settings.model,
+              },
+            );
         }
         await this.saveCaptions(job.sourceId, 'translated', translated);
         await push(
@@ -480,6 +496,17 @@ export class ProcessingJob extends DurableObject<Env> {
           done = job.completedParts || 0;
         let synthesis: Synthesis | undefined;
         const synthesizeTracker = usageTracker();
+        if (done === 0)
+          await push(
+            'synthesize.start',
+            windows.length === 1
+              ? `Building chapters and practice for ${file.name}`
+              : `Building chapters and practice for ${file.name} across ${windows.length} windows`,
+            {
+              progress: { current: 0, total: Math.max(1, windows.length) },
+              model: settings.model,
+            },
+          );
         if (windows.length === 1)
           synthesis = await synthesize(
             key,
