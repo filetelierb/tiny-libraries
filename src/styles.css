@@ -11125,6 +11125,17 @@ body.agent-dragging {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.flow-row > h3 .flow-row-stamp {
+  margin-left: auto;
+  padding-left: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-text);
+  font-weight: var(--font-weight-normal);
+  flex: none;
 }
 .flow-stages {
   display: grid;

@@ -53,6 +53,17 @@ function elapsed(ms: number) {
     seconds = Math.round((ms % 60000) / 1000);
   return `${minutes}m ${seconds}s`;
 }
+/** Short local date + time for a lane header, e.g. "Nov 4, 16:48". */
+function laneStamp(at: string, locale: 'en' | 'es') {
+  const date = new Date(at);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString(locale, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
 const stageIcon: Record<Stage, React.ComponentType<{ size?: number }>> = {
   upload: FilePlus,
   queued: Clock,
@@ -76,6 +87,7 @@ type FileFlow = {
   >;
   /** The events that happened at each stage, newest first, so a stage can be expanded. */
   stageEvents: Record<Stage, AgentEvent[]>;
+  firstAt: string;
   lastAt: string;
 };
 const stageOf: Partial<Record<string, Stage>> = {
@@ -124,10 +136,12 @@ function fileFlows(events: AgentEvent[], t: T): FileFlow[] {
         stageEvents: Object.fromEntries(
           order.map((stage) => [stage, [] as AgentEvent[]]),
         ) as FileFlow['stageEvents'],
+        firstAt: event.at,
         lastAt: event.at,
       };
       files.set(event.fileId, flow);
     }
+    if (event.at < flow.firstAt) flow.firstAt = event.at;
     if (event.at > flow.lastAt) flow.lastAt = event.at;
     return flow;
   };
@@ -402,6 +416,7 @@ type TutorFlow = {
   conversationLabel: string;
   stages: Record<TutorStage, { status: Status; label: string }>;
   stageEvents: Record<TutorStage, AgentEvent[]>;
+  firstAt: string;
   lastAt: string;
 };
 
@@ -436,10 +451,12 @@ function tutorFlows(events: AgentEvent[], t: T): TutorFlow[] {
         stageEvents: Object.fromEntries(
           TUTOR_STAGES.map((stage) => [stage, [] as AgentEvent[]]),
         ) as TutorFlow['stageEvents'],
+        firstAt: event.at,
         lastAt: event.at,
       };
       by.set(key, flow);
     }
+    if (event.at < flow.firstAt) flow.firstAt = event.at;
     if (event.at > flow.lastAt) flow.lastAt = event.at;
     if (event.conversationName) flow.conversationLabel = event.conversationName;
     return flow;
@@ -532,6 +549,7 @@ type AssessmentFlow = {
   label: string;
   stages: Record<AssessmentStage, { status: Status; label: string }>;
   stageEvents: Record<AssessmentStage, AgentEvent[]>;
+  firstAt: string;
   lastAt: string;
 };
 const assessmentStageOf: Partial<Record<string, AssessmentStage>> = {
@@ -580,10 +598,12 @@ function assessmentFlows(events: AgentEvent[], t: T): AssessmentFlow[] {
         stageEvents: Object.fromEntries(
           ASSESSMENT_STAGES.map((stage) => [stage, [] as AgentEvent[]]),
         ) as AssessmentFlow['stageEvents'],
+        firstAt: event.at,
         lastAt: event.at,
       };
       by.set(key, flow);
     }
+    if (event.at < flow.firstAt) flow.firstAt = event.at;
     if (event.at > flow.lastAt) flow.lastAt = event.at;
     return flow;
   };
@@ -669,7 +689,10 @@ export function AgentFlow({
           >
             <h3>
               <Sparkles size={13} aria-hidden="true" />
-              {(t as Record<string, string>).agentTool_tutor || 'Librarian'} · {flow.conversationLabel}
+              {(t as Record<string, string>).agentTool_tutor || 'Librarian'}
+              <time className="flow-row-stamp" dateTime={flow.firstAt}>
+                {laneStamp(flow.firstAt, locale)}
+              </time>
             </h3>
             <ol className="flow-stages">
               {TUTOR_STAGES.filter((stage) => flow.stages[stage].status !== 'hidden').map((stage) => {
@@ -777,6 +800,9 @@ export function AgentFlow({
             <h3>
               <LayoutList size={13} aria-hidden="true" />
               {(t as Record<string, string>).agentTool_assessment || 'Assessment'} · {flow.label}
+              <time className="flow-row-stamp" dateTime={flow.firstAt}>
+                {laneStamp(flow.firstAt, locale)}
+              </time>
             </h3>
             <ol className="flow-stages">
               {ASSESSMENT_STAGES.map((stage) => {
@@ -877,7 +903,12 @@ export function AgentFlow({
         const picked = selected[flow.fileId] ?? null;
         return (
           <section key={flow.fileId} className="flow-row" aria-label={flow.fileName}>
-            <h3>{flow.fileName}</h3>
+            <h3>
+              {flow.fileName}
+              <time className="flow-row-stamp" dateTime={flow.firstAt}>
+                {laneStamp(flow.firstAt, locale)}
+              </time>
+            </h3>
             <ol className="flow-stages">
               {flow.order.map((stage) => (
                 <StageCard
