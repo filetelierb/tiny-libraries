@@ -175,15 +175,27 @@ export function AgentPanel({
     [events, project],
   );
   const rows = useMemo(() => groupEvents(scoped), [scoped]);
-  // A file still being prepared has an open step that no later `preparation.done` closes.
+  // A file still being prepared is one whose most recent event (across every tool) is not a
+  // terminal milestone — preparation.done, flashcards.done (last stage of its own kind) and
+  // preparation.cancelled all close a file. Earlier tools can fire after preparation.done
+  // (flashcards run in the background), so only looking at tool=preparation under-counts; and
+  // skipping library.upload keeps an uploaded-but-ignored file from counting as running.
+  const TERMINAL_ACTIONS = new Set([
+    'preparation.done',
+    'preparation.cancelled',
+    'flashcards.done',
+  ]);
   const activeFiles = useMemo(() => {
     const seen = new Map<string, 'open' | 'done'>();
     for (const event of scoped) {
-      if (event.tool !== 'preparation' || !event.fileId) continue;
-      // Uploading a file does not count as a preparation step running.
-      if (event.action === 'library.upload') continue;
+      if (!event.fileId) continue;
       if (seen.has(event.fileId)) continue;
-      seen.set(event.fileId, event.action === 'preparation.done' ? 'done' : 'open');
+      if (event.action === 'library.upload') {
+        // An upload on its own does not count as a preparation step running.
+        seen.set(event.fileId, 'done');
+        continue;
+      }
+      seen.set(event.fileId, TERMINAL_ACTIONS.has(event.action) ? 'done' : 'open');
     }
     return [...seen.values()].filter((status) => status === 'open').length;
   }, [scoped]);
