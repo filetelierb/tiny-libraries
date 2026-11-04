@@ -6932,7 +6932,29 @@ body:has(.panel-resizer.resizing) {
   margin-block: 10px;
 }
 .capture-collection-list {
-  display: block;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x proximity;
+  padding-bottom: 6px;
+}
+.capture-collection-list::-webkit-scrollbar {
+  height: 8px;
+}
+.capture-collection-list::-webkit-scrollbar-thumb {
+  background: color-mix(in oklab, var(--muted-text) 30%, transparent);
+  border-radius: 999px;
+}
+.capture-collection-list .capture-tile {
+  flex: 0 0 220px;
+  width: 220px;
+  margin-bottom: 0;
+  scroll-snap-align: start;
+}
+.capture-collection-list .capture-tile-preview img {
+  max-height: 120px;
 }
 .capture-collection-grid {
   display: grid;

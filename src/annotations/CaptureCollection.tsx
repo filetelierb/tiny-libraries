@@ -108,7 +108,6 @@ export function CaptureCollectionEditor({
     [view, setView] = useState<'list' | 'grid'>('list'),
     [adding, setAdding] = useState(false),
     [framePicker, setFramePicker] = useState(false),
-    [cursor, setCursor] = useState(0),
     input = useRef<HTMLInputElement>(null);
   const missing = value.items
     .filter(
@@ -120,7 +119,10 @@ export function CaptureCollectionEditor({
     .join(',');
   useEffect(() => {
     let alive = true;
-    if (!missing) return;
+    if (!missing) {
+      setBusy(false);
+      return;
+    }
     setBusy(true);
     void (async () => {
       for (const item of workspace.getSnapshot().items)
@@ -220,9 +222,6 @@ export function CaptureCollectionEditor({
     ),
     selected = value.items.find((item) => item.descriptor.id === studio);
   const total = value.items.length;
-  const safeCursor = Math.max(0, Math.min(cursor, total - 1));
-  if (total && cursor !== safeCursor) setCursor(safeCursor);
-  const displayed = view === 'list' && total ? [value.items[safeCursor]] : value.items;
   return (
     <section className="capture-collection" aria-label={t.captureCollection}>
       <header className="capture-collection-head">
@@ -245,27 +244,9 @@ export function CaptureCollectionEditor({
             <LayoutGrid />
           </IconButton>
         </div>
-        {view === 'list' && total > 1 && (
-          <div className="capture-pagination" aria-label={t.capturePagination}>
-            <IconButton
-              label={t.capturePrevious}
-              disabled={safeCursor === 0}
-              onClick={() => setCursor(safeCursor - 1)}
-            >
-              <ChevronLeft />
-            </IconButton>
-            <IconButton
-              label={t.captureNext}
-              disabled={safeCursor >= total - 1}
-              onClick={() => setCursor(safeCursor + 1)}
-            >
-              <ChevronRight />
-            </IconButton>
-          </div>
-        )}
       </header>
       <div className={`capture-collection-items capture-collection-${view}`}>
-        {displayed.map((item) => {
+        {value.items.map((item) => {
           const index = value.items.indexOf(item);
           return (
             <article className="capture-tile" key={item.descriptor.id}>
