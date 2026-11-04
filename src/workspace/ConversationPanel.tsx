@@ -1007,12 +1007,15 @@ function ConversationThread({
     }
   };
   const [dropActive, setDropActive] = useState(false);
-  const accepts = (event: React.DragEvent) =>
-    event.dataTransfer.types.includes(RESOURCE_DRAG_TYPE) ||
-    event.dataTransfer.types.includes('Files');
+  const composerFormRef = useRef<HTMLFormElement | null>(null);
+  const accepts = (event: DragEvent) =>
+    !!event.dataTransfer &&
+    (event.dataTransfer.types.includes(RESOURCE_DRAG_TYPE) ||
+      event.dataTransfer.types.includes('Files'));
   /** Tree files open as a session tab (becoming a permanent reference); files from the
    * computer become one-shot attachments. */
-  const dropOnComposer = async (event: React.DragEvent) => {
+  const dropOnComposer = async (event: DragEvent) => {
+    if (!event.dataTransfer) return;
     const resource = event.dataTransfer.getData(RESOURCE_DRAG_TYPE);
     if (resource) {
       const file = catalog.files.find((entry) => entry.id === JSON.parse(resource).id);
@@ -1020,6 +1023,10 @@ function ConversationThread({
       if (!openSourceIds.includes(file.id)) openFile(file.id);
       if (paused.has(file.id))
         await patch({ pausedSourceIds: [...paused].filter((id) => id !== file.id) });
+      // Visible feedback for the drop — inserting the mention as a chip at the caret makes
+      // the file appear right in the message the student is typing, the same as @-picking it.
+      composer.current?.insertMention({ id: file.id, label: file.name, kind: 'file' });
+      composer.current?.focus();
       return;
     }
     for (const file of [...event.dataTransfer.files]) {
@@ -1044,6 +1051,44 @@ function ConversationThread({
       }
     }
   };
+  // ProseMirror attaches a native drop listener to its contenteditable element; React's
+  // onDropCapture only fires after that, because React 17+ delegates events at the root
+  // and bubbles through its own virtual tree. To beat ProseMirror we have to attach native
+  // listeners with {capture: true} on the actual <form> element, so the browser dispatches
+  // them before the child's native handler during the real DOM capture phase.
+  useEffect(() => {
+    const form = composerFormRef.current;
+    if (!form) return;
+    const over = (event: DragEvent) => {
+      if (!accepts(event)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+      setDropActive(true);
+    };
+    const leave = (event: DragEvent) => {
+      if (!form.contains(event.relatedTarget as Node | null)) setDropActive(false);
+    };
+    const drop = (event: DragEvent) => {
+      if (!accepts(event)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setDropActive(false);
+      void dropOnComposer(event);
+    };
+    form.addEventListener('dragover', over, { capture: true });
+    form.addEventListener('dragleave', leave, { capture: true });
+    form.addEventListener('drop', drop, { capture: true });
+    return () => {
+      form.removeEventListener('dragover', over, { capture: true });
+      form.removeEventListener('dragleave', leave, { capture: true });
+      form.removeEventListener('drop', drop, { capture: true });
+    };
+    // Handlers close over catalog/openSourceIds/paused/attachmentRef via refs or set-state
+    // whose identity doesn't matter; re-binding each render is fine since there's only
+    // one composer form per conversation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  });
   const mentionConcept = (entry: GlossaryEntry): boolean => {
     const current = conceptDraftRef.current.items;
     if (!current.some((c) => c.id === entry.id) && current.length >= MAX_QUESTION_CONCEPTS) {
@@ -1452,27 +1497,8 @@ function ConversationThread({
         conversationId={conversation.id}
       />
       <form
+        ref={composerFormRef}
         className={`tutor-composer ${dropActive ? 'drop-active' : ''}`}
-        onDragOverCapture={(event) => {
-          if (!accepts(event)) return;
-          // Capture phase: TipTap/ProseMirror would otherwise consume the drop at its own
-          // contenteditable element and paste the filename as text. Preventing default here
-          // (before the native drop handler runs) keeps the file-as-chip flow intact.
-          event.preventDefault();
-          event.dataTransfer.dropEffect = 'copy';
-          setDropActive(true);
-        }}
-        onDragLeave={(event) => {
-          if (!event.currentTarget.contains(event.relatedTarget as Node | null))
-            setDropActive(false);
-        }}
-        onDropCapture={(event) => {
-          if (!accepts(event)) return;
-          event.preventDefault();
-          event.stopPropagation();
-          setDropActive(false);
-          void dropOnComposer(event);
-        }}
         onSubmit={(event) => {
           event.preventDefault();
           void send();

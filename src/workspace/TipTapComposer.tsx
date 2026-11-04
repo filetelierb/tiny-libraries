@@ -38,6 +38,9 @@ export type TipTapComposerHandle = {
   setDraft: (text: string) => void;
   /** Mentions currently in the editor, in document order; duplicates stay duplicated. */
   readMentions: () => MentionRecord[];
+  /** Insert a mention chip at the caret — the drop handler uses this so a file dragged in
+   * from the tree appears as a chip exactly like typing `@label` would. */
+  insertMention: (record: MentionRecord) => void;
 };
 
 /** `@label` for mentions, paragraph breaks as `\n`, hard breaks also as `\n`. */
@@ -323,6 +326,17 @@ export const TipTapComposer = React.forwardRef<
           return true;
         });
         return out;
+      },
+      insertMention: (record) => {
+        if (!editor) return;
+        editor
+          .chain()
+          .focus('end')
+          .insertContent([
+            { type: 'mention', attrs: { id: record.id, label: record.label, kind: record.kind } },
+            { type: 'text', text: ' ' },
+          ])
+          .run();
       },
     }),
     [editor],
