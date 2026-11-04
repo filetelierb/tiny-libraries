@@ -1099,7 +1099,7 @@ export function App() {
                     directories={catalog.directories.filter(
                       (dir) => !/(?:^|\/)(Artifacts|Artefactos)$/.test(dir.path),
                     )}
-                    files={catalog.files.filter((file) => file.kind !== 'artifact')}
+                    files={catalog.files}
                     t={t}
                     active={active?.id}
                     view="files"
@@ -1126,7 +1126,7 @@ export function App() {
                       directories={catalog.directories.filter(
                         (dir) => !/(?:^|\/)(Artifacts|Artefactos)$/.test(dir.path),
                       )}
-                      files={catalog.files.filter((file) => file.kind !== 'artifact')}
+                      files={catalog.files}
                       t={t}
                       active={active?.id}
                       view="archived"
