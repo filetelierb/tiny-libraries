@@ -899,6 +899,75 @@ function StudioBody({
                 )}
               </>
             )}
+            {editing &&
+              (() => {
+                const draft = editing.text || '…';
+                const anchorX = editing.point.x * space.width;
+                const anchorY = editing.point.y * space.height;
+                if (editing.kind === 'comment') {
+                  const size = editing.size;
+                  return (
+                    <foreignObject
+                      x={anchorX - size * 4}
+                      y={anchorY - size * 1.2}
+                      width={Math.min(space.width, size * 20)}
+                      height={Math.min(space.height, size * 12)}
+                      style={{ overflow: 'visible', pointerEvents: 'none' }}
+                    >
+                      <div
+                        style={{
+                          fontFamily: '"Times New Roman", serif',
+                          fontSize: `${size * 1.6}px`,
+                          lineHeight: 1.25,
+                          color: '#ffffff',
+                          background: editing.color,
+                          borderRadius: '9999px',
+                          padding: `${size * 0.35}px ${size * 0.8}px`,
+                          display: 'inline-block',
+                          opacity: 0.85,
+                          whiteSpace: 'pre-wrap',
+                          wordBreak: 'break-word',
+                          maxWidth: `${Math.min(space.width, size * 18)}px`,
+                        }}
+                      >
+                        {editing.number}. {draft}
+                      </div>
+                    </foreignObject>
+                  );
+                }
+                const padding = editing.style === 'plain' ? 0 : 8;
+                const maxWidth = Math.min(360, Math.max(editing.fontSize, space.width - 2 * padding));
+                const estLines = Math.max(1, Math.ceil(draft.length / 30) + (draft.match(/\n/g)?.length || 0));
+                return (
+                  <foreignObject
+                    x={Math.max(0, anchorX)}
+                    y={Math.max(0, anchorY)}
+                    width={Math.min(space.width, maxWidth + 2 * padding + 4)}
+                    height={Math.min(space.height, estLines * editing.fontSize * 1.25 + 2 * padding + 8)}
+                    style={{ overflow: 'visible', pointerEvents: 'none' }}
+                  >
+                    <div
+                      style={{
+                        fontFamily: '"Times New Roman", serif',
+                        fontSize: `${editing.fontSize}px`,
+                        lineHeight: 1.25,
+                        padding: `${padding}px`,
+                        color: editing.style === 'plain' ? editing.color : '#ffffff',
+                        background: editing.style === 'plain' ? 'transparent' : '#202f36',
+                        border: editing.style === 'plain' ? 'none' : '1px solid #ffffff',
+                        borderRadius: editing.style === 'plain' ? 0 : '6px',
+                        display: 'inline-block',
+                        opacity: 0.85,
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word',
+                        maxWidth: `${maxWidth}px`,
+                      }}
+                    >
+                      {draft}
+                    </div>
+                  </foreignObject>
+                );
+              })()}
           </svg>
         </div>
       </div>
