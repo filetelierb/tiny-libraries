@@ -195,7 +195,16 @@ export function CaptureCollectionEditor({
     const stamp = sourceLocationStamp(source, current);
     const image = await captureSource(source, current);
     if (!image?.blob) throw new Error(t.captureNotReady);
-    const id = await workspace.add(image.blob, 'image', source.name, stamp, false, {
+    const origin =
+      source.kind === 'video'
+        ? 'video_frame'
+        : source.kind === 'pdf'
+          ? 'pdf_page'
+          : source.kind === 'image'
+            ? 'image'
+            : undefined;
+    if (!origin) throw new Error(t.captureNotReady);
+    const id = await workspace.add(image.blob, origin, source.name, stamp, false, {
       id: source.id,
       version: source.version,
       name: source.name,
