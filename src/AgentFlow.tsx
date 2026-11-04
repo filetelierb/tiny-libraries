@@ -18,6 +18,7 @@ import {
   FileText,
 } from 'lucide-react';
 import type { AgentEvent } from '../shared/agent-events';
+import { kindFor, type Kind } from '../shared/domain';
 import type { T } from './i18n';
 
 /** The stages a file goes through from upload to a ready study guide. */
@@ -34,6 +35,17 @@ const STAGES = [
   'done',
 ] as const;
 type Stage = (typeof STAGES)[number];
+/** Stages that apply per uploaded kind — transcription and translation only make
+ * sense for recordings, chapters/glossary for anything with teachable text. */
+function stagesForKind(kind: Kind | null): readonly Stage[] {
+  if (kind === 'video' || kind === 'audio') return STAGES;
+  if (kind === 'pdf')
+    return ['upload', 'queued', 'read', 'synthesize', 'glossary', 'artifact', 'flashcards', 'done'];
+  if (kind === 'markdown' || kind === 'text')
+    return ['upload', 'queued', 'read', 'synthesize', 'glossary', 'artifact', 'flashcards', 'done'];
+  if (kind === 'image') return ['upload', 'queued', 'read', 'artifact', 'done'];
+  return STAGES;
+}
 type Status = 'pending' | 'waiting' | 'active' | 'done' | 'failed';
 
 function elapsed(ms: number) {
@@ -59,6 +71,8 @@ const stageIcon: Record<Stage, React.ComponentType<{ size?: number }>> = {
 type FileFlow = {
   fileId: string;
   fileName: string;
+  /** The ordered subset of STAGES that applies to this file's kind. */
+  order: readonly Stage[];
   stages: Record<
     Stage,
     { status: Status; label: string; progress?: { current: number; total: number } }
@@ -93,17 +107,20 @@ function fileFlows(events: AgentEvent[], t: T): FileFlow[] {
     if (!event.fileId) return null;
     let flow = files.get(event.fileId);
     if (!flow) {
+      const name = event.fileName || event.fileId;
+      const order = stagesForKind(kindFor(name));
       flow = {
         fileId: event.fileId,
-        fileName: event.fileName || event.fileId,
+        fileName: name,
+        order,
         stages: Object.fromEntries(
-          STAGES.map((stage) => [
+          order.map((stage) => [
             stage,
             { status: 'pending' as Status, label: t[`agentStage_${stage}` as keyof T] as string },
           ]),
         ) as FileFlow['stages'],
         stageEvents: Object.fromEntries(
-          STAGES.map((stage) => [stage, [] as AgentEvent[]]),
+          order.map((stage) => [stage, [] as AgentEvent[]]),
         ) as FileFlow['stageEvents'],
         lastAt: event.at,
       };
@@ -197,11 +214,12 @@ function fileFlows(events: AgentEvent[], t: T): FileFlow[] {
   // When nothing is running yet, the next stage after the latest done one takes over as
   // "waiting", so a stage is always moving between finish and start.
   for (const flow of files.values()) {
-    const anyActive = STAGES.some((stage) => flow.stages[stage].status === 'active');
+    const anyActive = flow.order.some((stage) => flow.stages[stage].status === 'active');
     if (anyActive) continue;
     let last = -1;
-    for (let i = 0; i < STAGES.length; i++) if (flow.stages[STAGES[i]].status === 'done') last = i;
-    const next = STAGES[last + 1];
+    for (let i = 0; i < flow.order.length; i++)
+      if (flow.stages[flow.order[i]].status === 'done') last = i;
+    const next = flow.order[last + 1];
     if (next && flow.stages[next].status === 'pending') flow.stages[next].status = 'waiting';
   }
   return [...files.values()].sort((a, b) => b.lastAt.localeCompare(a.lastAt));
@@ -578,7 +596,7 @@ export function AgentFlow({
           <section key={flow.fileId} className="flow-row" aria-label={flow.fileName}>
             <h3>{flow.fileName}</h3>
             <ol className="flow-stages">
-              {STAGES.map((stage) => (
+              {flow.order.map((stage) => (
                 <StageCard
                   key={stage}
                   stage={stage}

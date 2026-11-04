@@ -383,6 +383,9 @@ export function App() {
     void run(async () => {
       const data = await refresh();
       setLocale(data.settings.locale);
+      // Nudge any preparation job that stopped alarming between sessions, so a reload resumes
+      // the work instead of leaving it stuck at whatever stage the DO last wrote.
+      void api('/jobs/resume', 'POST', { locale: data.settings.locale }).catch(() => {});
       let selected =
         data.sessions.find((s) => s.id === localGet('tl:session', '')) || data.sessions[0];
       if (!selected) {

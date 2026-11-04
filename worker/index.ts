@@ -2234,6 +2234,28 @@ async function serve(request: Request, env: Env, url: URL): Promise<Response> {
         if (!key) throw new ApiError('Add a Meta API key in Settings', 409);
         return startJob(env, file, data.locale, project);
       }
+      if (url.pathname === '/api/jobs/resume' && request.method === 'POST') {
+        // Page reloads call this once to re-poke every non-terminal preparation job so that any
+        // DO that lost its alarm (crash / deploy / eviction mid-step) wakes up and keeps going.
+        const locale = localeSchema.parse((await boundedJson(request)).locale);
+        const catalog = await call<{ files: Source[]; directories: Directory[] }>('/api/catalog');
+        const files = catalog.files.filter(
+          (file) => sourceState(file, catalog.directories) === 'files' && file.kind !== 'artifact',
+        );
+        const poked: string[] = [];
+        await Promise.all(
+          files.map(async (file) => {
+            const id = `${file.id}-v${file.version}-${locale}`;
+            const response = await env.JOBS.get(env.JOBS.idFromName(id)).fetch(
+              new Request('http://internal/resume', { method: 'POST' }),
+            );
+            const body = await response.json<Job | null>().catch(() => null);
+            if (body && body.status !== 'completed' && body.status !== 'cancelled')
+              poked.push(file.id);
+          }),
+        );
+        return json({ resumed: poked });
+      }
       const visualMatch = url.pathname.match(/^\/api\/visuals\/([a-f0-9-]+)\/(\d+)\/([^/]+)$/);
       if (visualMatch && request.method === 'GET') {
         const object = await env.FILES.get(

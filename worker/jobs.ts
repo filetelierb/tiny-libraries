@@ -74,6 +74,20 @@ export class ProcessingJob extends DurableObject<Env> {
       return Response.json({ ok: true });
     }
     let job = await this.ctx.storage.get<Job>('job');
+    if (path === '/resume' && request.method === 'POST') {
+      // A page refresh pokes stalled jobs: if the DO is holding a non-terminal job that stopped
+      // alarming (crash, eviction, missing alarm after a deploy), re-queue it so its next tick
+      // can claim a turn and keep going. Terminal jobs are left alone.
+      if (!job || job.status === 'completed' || job.status === 'cancelled')
+        return Response.json(job || null);
+      const next: Job =
+        job.status === 'failed'
+          ? { ...job, status: 'queued', error: undefined, attempts: 0 }
+          : { ...job, status: 'queued' };
+      await this.ctx.storage.put('job', next);
+      await this.ctx.storage.setAlarm(Date.now() + 100);
+      return Response.json(next);
+    }
     if (path === '/start' && request.method === 'POST') {
       if (job) return Response.json(job);
       const { id, file, locale, project } = await request.json<{
