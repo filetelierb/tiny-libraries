@@ -15,7 +15,6 @@ import {
   MessageSquare,
   Wrench,
   SquareStack,
-  FileText,
 } from 'lucide-react';
 import type { AgentEvent } from '../shared/agent-events';
 import { kindFor, type Kind } from '../shared/domain';
@@ -30,7 +29,6 @@ const STAGES = [
   'translate',
   'synthesize',
   'glossary',
-  'artifact',
   'flashcards',
   'done',
 ] as const;
@@ -40,10 +38,10 @@ type Stage = (typeof STAGES)[number];
 function stagesForKind(kind: Kind | null): readonly Stage[] {
   if (kind === 'video' || kind === 'audio') return STAGES;
   if (kind === 'pdf')
-    return ['upload', 'queued', 'read', 'synthesize', 'glossary', 'artifact', 'flashcards', 'done'];
+    return ['upload', 'queued', 'read', 'synthesize', 'glossary', 'flashcards', 'done'];
   if (kind === 'markdown' || kind === 'text')
-    return ['upload', 'queued', 'read', 'synthesize', 'glossary', 'artifact', 'flashcards', 'done'];
-  if (kind === 'image') return ['upload', 'queued', 'read', 'artifact', 'done'];
+    return ['upload', 'queued', 'read', 'synthesize', 'glossary', 'flashcards', 'done'];
+  if (kind === 'image') return ['upload', 'queued', 'read', 'done'];
   return STAGES;
 }
 type Status = 'pending' | 'waiting' | 'active' | 'done' | 'failed';
@@ -63,7 +61,6 @@ const stageIcon: Record<Stage, React.ComponentType<{ size?: number }>> = {
   translate: Languages,
   synthesize: LayoutList,
   glossary: BookOpen,
-  artifact: FileText,
   flashcards: SquareStack,
   done: CircleDot,
 };
@@ -92,8 +89,6 @@ const stageOf: Partial<Record<string, Stage>> = {
   'synthesize.done': 'synthesize',
   'glossary.round': 'glossary',
   'glossary.ingest': 'glossary',
-  'artifact.generate': 'artifact',
-  'artifact.done': 'artifact',
   'flashcards.generate': 'flashcards',
   'flashcards.chapter.done': 'flashcards',
   'flashcards.done': 'flashcards',
@@ -194,12 +189,6 @@ function fileFlows(events: AgentEvent[], t: T): FileFlow[] {
         break;
       case 'glossary.ingest':
         done('glossary', t.agentStage_glossary);
-        break;
-      case 'artifact.generate':
-        open('artifact', t.agentStage_artifact);
-        break;
-      case 'artifact.done':
-        done('artifact', t.agentStage_artifact);
         break;
       case 'flashcards.generate':
         open('flashcards', t.agentStage_flashcards, event.progress);
