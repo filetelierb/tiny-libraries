@@ -44,7 +44,7 @@ function stagesForKind(kind: Kind | null): readonly Stage[] {
   if (kind === 'image') return ['upload', 'queued', 'read', 'done'];
   return STAGES;
 }
-type Status = 'pending' | 'waiting' | 'active' | 'done' | 'failed';
+type Status = 'pending' | 'waiting' | 'active' | 'done' | 'failed' | 'hidden';
 
 function elapsed(ms: number) {
   if (ms < 1000) return `${ms} ms`;
@@ -386,14 +386,16 @@ function StageDetails({
 }
 
 /** The stages a tutor turn passes through: the student's prompt arriving, the agent
- * thinking (model call + optional tool use), and the reply completing or failing. */
-const TUTOR_STAGES = ['received', 'thinking', 'tools', 'completed'] as const;
+ * thinking (model call + optional tool use), the reply completing, and — when the reply
+ * started an artifact — its generation progress. */
+const TUTOR_STAGES = ['received', 'thinking', 'tools', 'completed', 'artifact'] as const;
 type TutorStage = (typeof TUTOR_STAGES)[number];
 const tutorStageIcon: Record<TutorStage, React.ComponentType<{ size?: number }>> = {
   received: MessageSquare,
   thinking: Sparkles,
   tools: Wrench,
   completed: CircleDot,
+  artifact: LayoutList,
 };
 type TutorFlow = {
   conversationId: string;
@@ -410,6 +412,7 @@ function tutorFlows(events: AgentEvent[], t: T): TutorFlow[] {
     thinking: (t as Record<string, string>).agentTutorStage_thinking || 'Thinking',
     tools: (t as Record<string, string>).agentTutorStage_tools || 'Tools',
     completed: (t as Record<string, string>).agentTutorStage_completed || 'Reply',
+    artifact: (t as Record<string, string>).agentTutorStage_artifact || 'Artifact',
   };
   // Each tutor turn gets its own lane so successive messages don't overwrite the previous
   // one. The server embeds "turn <uuid>" in the event's detail string; parse it out and
@@ -449,6 +452,12 @@ function tutorFlows(events: AgentEvent[], t: T): TutorFlow[] {
       'tutor.turn.done': 'completed',
       'tutor.turn.failed': 'completed',
       'tutor.action': 'tools',
+      'artifact.plan': 'artifact',
+      'artifact.write.start': 'artifact',
+      'artifact.chapter.done': 'artifact',
+      'artifact.check': 'artifact',
+      'artifact.ready': 'artifact',
+      'artifact.failed': 'artifact',
     };
     const stage = mapTo[event.action];
     if (stage) flow.stageEvents[stage].unshift(event);
@@ -481,6 +490,27 @@ function tutorFlows(events: AgentEvent[], t: T): TutorFlow[] {
         flow.stages.thinking = { status: 'failed', label: label.thinking };
         flow.stages.completed = { status: 'failed', label: label.completed };
         break;
+      case 'artifact.plan':
+      case 'artifact.write.start':
+        flow.stages.artifact = { status: 'active', label: label.artifact };
+        break;
+      case 'artifact.chapter.done':
+      case 'artifact.check':
+        flow.stages.artifact = { status: 'active', label: label.artifact };
+        break;
+      case 'artifact.ready':
+        flow.stages.artifact = { status: 'done', label: label.artifact };
+        break;
+      case 'artifact.failed':
+        flow.stages.artifact = { status: 'failed', label: label.artifact };
+        break;
+    }
+  }
+  // The artifact stage is a late addition: only tutor lanes whose turn actually started a
+  // generation carry events for it. Hide the stage otherwise so unrelated turns stay clean.
+  for (const flow of by.values()) {
+    if (!flow.stageEvents.artifact.length) {
+      flow.stages.artifact = { status: 'hidden' as Status, label: label.artifact };
     }
   }
   return [...by.values()].sort((a, b) => b.lastAt.localeCompare(a.lastAt));
@@ -642,7 +672,7 @@ export function AgentFlow({
               {(t as Record<string, string>).agentTool_tutor || 'Librarian'} · {flow.conversationLabel}
             </h3>
             <ol className="flow-stages">
-              {TUTOR_STAGES.map((stage) => {
+              {TUTOR_STAGES.filter((stage) => flow.stages[stage].status !== 'hidden').map((stage) => {
                 const state = flow.stages[stage];
                 const Icon = tutorStageIcon[stage];
                 const Mark =

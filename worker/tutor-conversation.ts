@@ -235,6 +235,7 @@ export class TutorConversation extends DurableObject<Env> {
           // A retried call returns the generation it already started.
           id: await stableId(`${record.id}:r${record.intentRevision}:${callId}`),
           conversationId: record.conversationId,
+          turnId: record.id,
           model: record.generation.model,
           request,
         }),

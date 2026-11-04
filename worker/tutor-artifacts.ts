@@ -44,6 +44,11 @@ export type TutorArtifactServices = {
   previous(fileId: string): Promise<TutorArtifactDocument | null>;
   /** Saves the document as the file's next version and returns that version. */
   save(job: TutorArtifactJob, document: TutorArtifactDocument): Promise<number>;
+  /** Fire-and-forget hook so the Agent activity panel can show the generation progress. */
+  emit?(
+    phase: 'plan' | 'write' | 'chapter' | 'check' | 'ready' | 'failed',
+    details: { job: TutorArtifactJob; chapterIndex?: number; error?: string },
+  ): void;
 };
 
 async function materials(storage: GlossaryStorage, request: TutorArtifactRequest) {
@@ -69,6 +74,7 @@ export async function startTutorArtifact(
   input: {
     id: string;
     conversationId: string;
+    turnId?: string;
     sessionId?: string;
     request: TutorArtifactRequest;
     locale: 'en' | 'es';
@@ -89,6 +95,7 @@ export async function startTutorArtifact(
     id: input.id,
     fileId: input.request.artifactId || crypto.randomUUID(),
     conversationId: input.conversationId,
+    ...(input.turnId ? { turnId: input.turnId } : {}),
     ...(input.sessionId ? { sessionId: input.sessionId } : {}),
     request: input.request,
     locale: input.locale,
@@ -165,10 +172,25 @@ async function run(
   services: TutorArtifactServices,
 ) {
   let job: TutorArtifactJob | null = initial;
+  const fire = (
+    phase: 'plan' | 'write' | 'chapter' | 'check' | 'ready' | 'failed',
+    chapterIndex?: number,
+    error?: string,
+  ) => {
+    try {
+      if (job)
+        services.emit?.(phase, {
+          job,
+          ...(chapterIndex !== undefined ? { chapterIndex } : {}),
+          ...(error ? { error } : {}),
+        });
+    } catch {}
+  };
   try {
     const sources = await materials(storage, job.request);
     const previous = job.request.artifactId ? await services.previous(job.fileId) : null;
     if (job.status === 'planning') {
+      fire('plan');
       const plan = await services.plan(job, sources, previous?.markdown || null);
       job = await progress(storage, job, {
         plan,
@@ -180,6 +202,7 @@ async function run(
     }
     const plan = job.plan!;
     if (job.status === 'writing') {
+      fire('write');
       // Chapters are written in parallel; each is saved as soon as it is ready.
       await Promise.all(
         plan.chapters.map(async (_, index) => {
@@ -193,12 +216,14 @@ async function run(
             saved.updatedAt = new Date().toISOString();
             await tx.put(jobKey(initial.id), saved);
           });
+          fire('chapter', index);
         }),
       );
       job = await progress(storage, job, { status: 'checking' });
       if (!job) return;
     }
     if (job.status === 'checking') {
+      fire('check');
       const ids = materialIds(sources);
       // One repair round for each chapter with problems; whatever remains is cleaned on assembly.
       const chapters = await Promise.all(
@@ -217,16 +242,15 @@ async function run(
     if (job.status === 'saving') {
       const document = assembleArtifact(plan, job.chapters as string[], sources, job.request);
       const version = await services.save(job, document);
-      await progress(storage, job, { status: 'ready', version });
+      job = await progress(storage, job, { status: 'ready', version });
+      fire('ready');
     }
   } catch (error) {
-    if (job)
-      await progress(storage, job, {
-        status: 'failed',
-        error: (error instanceof Error ? error.message : 'Artifact generation failed').slice(
-          0,
-          500,
-        ),
-      });
+    const message = (error instanceof Error ? error.message : 'Artifact generation failed').slice(
+      0,
+      500,
+    );
+    if (job) await progress(storage, job, { status: 'failed', error: message });
+    fire('failed', undefined, message);
   }
 }

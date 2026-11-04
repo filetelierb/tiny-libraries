@@ -394,6 +394,55 @@ export class Library extends DurableObject<Env> {
           return file.version;
         });
       },
+      emit: (phase, { job, chapterIndex, error }) => {
+        // Fire-and-forget: the Agent activity panel groups events by `turn <uuid>` in the
+        // detail string, so the artifact's progress lands in the originating turn's lane.
+        void (async () => {
+          try {
+            const project = ((await this.ctx.storage.get<string>('project')) as ProjectId) || 'default';
+            const total = job.plan?.chapters.length;
+            const done = job.chapters.filter((chapter) => chapter !== null).length;
+            const title = job.title || 'the artifact';
+            const summary =
+              phase === 'plan'
+                ? `Planning chapters for ${title}`
+                : phase === 'write'
+                  ? `Writing chapters of ${title}`
+                  : phase === 'chapter'
+                    ? total
+                      ? `Chapter ${(chapterIndex ?? 0) + 1} of ${total} written`
+                      : 'Chapter written'
+                    : phase === 'check'
+                      ? `Reviewing chapters of ${title}`
+                      : phase === 'ready'
+                        ? `Artifact ready: ${title}`
+                        : `Artifact failed${error ? `: ${error.slice(0, 160)}` : ''}`;
+            const action =
+              phase === 'plan'
+                ? 'artifact.plan'
+                : phase === 'write'
+                  ? 'artifact.write.start'
+                  : phase === 'chapter'
+                    ? 'artifact.chapter.done'
+                    : phase === 'check'
+                      ? 'artifact.check'
+                      : phase === 'ready'
+                        ? 'artifact.ready'
+                        : 'artifact.failed';
+            await recordEvent(this.env, project, {
+              tool: 'tutor',
+              action,
+              summary,
+              conversationId: job.conversationId,
+              ...(job.model ? { model: job.model } : {}),
+              ...(total ? { progress: { current: done, total } } : {}),
+              detail: job.turnId
+                ? `turn ${job.turnId} · artifact ${job.id}`
+                : `artifact ${job.id}`,
+            });
+          } catch {}
+        })();
+      },
     };
   }
   /** The library's own routes, for actions the tutor takes as the student would in the app. */
@@ -1043,6 +1092,7 @@ export class Library extends DurableObject<Env> {
           .object({
             id: z.string().uuid(),
             conversationId: z.string().min(1).max(200),
+            turnId: z.string().min(1).max(200).optional(),
             model: z.string().min(1).max(100),
             request: tutorArtifactRequestSchema,
           })
