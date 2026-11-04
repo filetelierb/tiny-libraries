@@ -909,6 +909,24 @@ export class Library extends DurableObject<Env> {
       } catch {}
     }
   }
+  /**
+   * One-time cleanup of auto-generated `.artifact` pointer files from before artifact
+   * auto-generation was removed. They were thin pointers with `linkedSourceId` set beside
+   * the source — now orphaned, they leak into the file tree and bloat the counter. Librarian
+   * artifacts have no `linkedSourceId` and stay untouched.
+   */
+  async sweepOrphanAutoArtifacts() {
+    const files = [...(await this.ctx.storage.list<Source>({ prefix: 'file:' })).values()];
+    const removed: string[] = [];
+    for (const file of files) {
+      if (file.kind !== 'artifact' || !file.linkedSourceId) continue;
+      await this.ctx.storage.delete(`file:${file.id}`);
+      for (let version = 1; version <= file.version; version++)
+        await this.env.FILES.delete(`original/${file.id}/${version}`).catch(() => {});
+      removed.push(file.id);
+    }
+    return { removed };
+  }
   async alarm() {
     // Every minute, this library quietly recovers stalled or orphaned preparation flows and
     // schedules the next check. The alarm lives on the Library DO itself, so projects without
@@ -920,6 +938,7 @@ export class Library extends DurableObject<Env> {
         await this.sweepPreparationJobs(settings.locale, apiKey);
         await this.sweepStalledFlashcards();
       }
+      await this.sweepOrphanAutoArtifacts();
     } catch {}
     await this.ctx.storage.setAlarm(Date.now() + 60_000);
   }
