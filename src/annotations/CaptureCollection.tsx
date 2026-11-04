@@ -3,7 +3,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Columns2,
-  ImagePlus,
   LayoutGrid,
   Camera,
   Pencil,
@@ -16,6 +15,7 @@ import type { SourceLocation } from '../../shared/locations';
 import { sourceLocationStamp } from '../../shared/capture-source';
 import type { TreeActions } from '../workspace/DirectoryTree';
 import { CaptureSourcePicker, type CaptureSourceChoice } from './CaptureSourcePicker';
+import { FramePicker } from './FramePicker';
 import { Button, IconButton, Modal } from '../design/components';
 import type { T } from '../i18n';
 import { CaptureWorkspace } from './CaptureWorkspace';
@@ -107,6 +107,7 @@ export function CaptureCollectionEditor({
     [retry, setRetry] = useState(0),
     [view, setView] = useState<'list' | 'grid'>('list'),
     [adding, setAdding] = useState(false),
+    [framePicker, setFramePicker] = useState(false),
     [cursor, setCursor] = useState(0),
     input = useRef<HTMLInputElement>(null);
   const missing = value.items
@@ -317,23 +318,6 @@ export function CaptureCollectionEditor({
           );
         })}
       </div>
-      <input
-        className="sr-only"
-        ref={input}
-        type="file"
-        accept="image/png,image/jpeg,image/webp"
-        disabled={disabled}
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          e.currentTarget.value = '';
-          if (!file) return;
-          setBusy(true);
-          void normalizedImage(file, t)
-            .then((blob) => workspace.add(blob, 'image', file.name.slice(0, 240)))
-            .catch((e) => setError(e instanceof Error ? e.message : t.error))
-            .finally(() => setBusy(false));
-        }}
-      />
       <div className="capture-add">
         <Button
           className={adding ? 'capture-add-trigger active' : 'capture-add-trigger'}
@@ -372,27 +356,28 @@ export function CaptureCollectionEditor({
                 </Button>
               </>
             )}
-            <Button
-              disabled={disabled || value.items.length >= 12}
-              onClick={() => {
-                setAdding(false);
-                setPicker('capture');
-              }}
-            >
-              {source && (source.kind === 'video' || source.kind === 'image' || source.kind === 'pdf')
-                ? t.captureFrameSearch
-                : t.captureFromLibrary}
-            </Button>
-            <Button
-              disabled={disabled || value.items.length >= 12}
-              onClick={() => {
-                setAdding(false);
-                input.current?.click();
-              }}
-            >
-              <ImagePlus />
-              {t.captureUpload}
-            </Button>
+            {source && source.kind === 'video' && (
+              <Button
+                disabled={disabled || value.items.length >= 12}
+                onClick={() => {
+                  setAdding(false);
+                  setFramePicker(true);
+                }}
+              >
+                {t.captureFrameSearch}
+              </Button>
+            )}
+            {!source && (
+              <Button
+                disabled={disabled || value.items.length >= 12}
+                onClick={() => {
+                  setAdding(false);
+                  setPicker('capture');
+                }}
+              >
+                {t.captureFromLibrary}
+              </Button>
+            )}
           </div>
         )}
       </div>
@@ -411,6 +396,22 @@ export function CaptureCollectionEditor({
           t={t}
           close={() => setPicker(null)}
           pick={chooseSource}
+        />
+      )}
+      {framePicker && source && source.kind === 'video' && (
+        <FramePicker
+          source={source}
+          position={sourcePaneTime(source.id) ?? location.seconds ?? 0}
+          t={t}
+          close={() => setFramePicker(false)}
+          pick={async ({ blob, seconds }) => {
+            const stamp = sourceLocationStamp(source, { seconds });
+            await workspace.add(blob, 'video_frame', source.name, stamp, false, {
+              id: source.id,
+              version: source.version,
+              name: source.name,
+            });
+          }}
         />
       )}
       {busy && <p role="status">{t.capturePreviewUpdating}</p>}

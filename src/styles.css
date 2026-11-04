@@ -2824,6 +2824,9 @@ body:has(.panel-resizer.resizing) {
 .modal:has(.concept-inspector) {
   --modal-w: 672px;
 }
+.modal.frame-picker {
+  --modal-w: 960px;
+}
 .modal:has(.chapter-quiz-heading)::backdrop,
 .modal:has(.card-deck)::backdrop {
   background: rgb(var(--shadow-rgb) / 65%);
@@ -7478,6 +7481,32 @@ body:has(.panel-resizer.resizing) {
   }
 }
 
+.frame-picker .frame-picker-video {
+  display: block;
+  width: 100%;
+  max-height: 65dvh;
+  border-radius: var(--radius-sm);
+  background: #000;
+  object-fit: contain;
+  margin: 12px 0;
+}
+.frame-picker-scrub {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.frame-picker-scrub input[type='range'] {
+  flex: 1;
+  accent-color: var(--primary);
+}
+.frame-picker-scrub output {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--font-size-small);
+  color: var(--muted-text);
+  min-width: 56px;
+  text-align: right;
+}
 .modal.capture-source-picker {
   width: min(1100px, calc(100vw - 32px));
 }

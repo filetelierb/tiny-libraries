@@ -1232,6 +1232,10 @@ const en = {
   captureFramePlain: 'Plain frame',
   captureFrameAnnotated: 'Annotated frame',
   captureFrameSearch: 'Search frame',
+  captureFramePicker: 'Choose frame',
+  captureFramePickerNotice:
+    'Move the slider to the image you want to attach. The video stays paused and muted.',
+  captureUseFrame: 'Use frame',
   captureCurrentTime: 'Add current time',
   captureCurrentPage: 'Add current page',
   captureViewToggle: 'Captures view',
@@ -2603,6 +2607,10 @@ const es: Dictionary = {
   captureFramePlain: 'Frame sin anotaciones',
   captureFrameAnnotated: 'Frame con anotaciones',
   captureFrameSearch: 'Buscar frame',
+  captureFramePicker: 'Escoger fotograma',
+  captureFramePickerNotice:
+    'Mueve el selector hasta la imagen que quieres adjuntar. El vídeo permanece pausado y sin sonido.',
+  captureUseFrame: 'Usar fotograma',
   captureCurrentTime: 'Añadir tiempo actual',
   captureCurrentPage: 'Añadir página actual',
   captureViewToggle: 'Vista de capturas',
