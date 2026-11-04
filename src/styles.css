@@ -11536,6 +11536,7 @@ body.agent-dragging {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  max-width: 18em;
   padding: 1px 8px;
   margin: 0 1px;
   border-radius: 999px;
@@ -11547,6 +11548,7 @@ body.agent-dragging {
   user-select: none;
   cursor: default;
   vertical-align: baseline;
+  overflow: hidden;
 }
 .composer-chip-inline .composer-chip-icon {
   flex: none;
@@ -11585,7 +11587,13 @@ body.agent-dragging {
   -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 19.5A2.5 2.5 0 0 1 6.5 17H20'/><path d='M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z'/></svg>");
 }
 .composer-chip-inline .composer-chip-inline-label {
-  display: inline;
+  display: inline-block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
 }
 /* TipTap placeholder — the editor adds this class to the first paragraph when empty. */
 .composer-editable p.is-editor-empty:first-child::before {

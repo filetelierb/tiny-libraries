@@ -182,6 +182,7 @@ export const TipTapComposer = React.forwardRef<
               mergeAttributes(
                 {
                   'data-type': 'mention',
+                  title: label,
                   ...(fileKind
                     ? { 'data-file-kind': fileKind }
                     : node.attrs.kind === 'concept'
