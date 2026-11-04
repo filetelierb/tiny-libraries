@@ -105,9 +105,13 @@ function fileFlows(events: AgentEvent[], t: T): FileFlow[] {
   const files = new Map<string, FileFlow>();
   const ensure = (event: AgentEvent) => {
     if (!event.fileId) return null;
+    const name = event.fileName || event.fileId;
+    // .artifact files are thin pointers to a source's study material — the actual artifact
+    // generation events live on the source file's flow, so showing a separate row would
+    // falsely imply another pipeline runs for the pointer.
+    if (kindFor(name) === 'artifact') return null;
     let flow = files.get(event.fileId);
     if (!flow) {
-      const name = event.fileName || event.fileId;
       const order = stagesForKind(kindFor(name));
       flow = {
         fileId: event.fileId,
