@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { Directory, Learning, Settings, Source } from '../shared/domain';
 import { sourceState } from '../shared/directories';
+import { PARALLEL_CALLS, runAtOnce } from '../shared/parallel';
 import {
   cardReviewInput,
   scheduleCard,
@@ -147,7 +148,7 @@ export async function startCardDecks(
   if (tasks.length)
     options.start(
       (async () => {
-        for (const { deck, learning } of tasks) {
+        await runAtOnce(tasks, PARALLEL_CALLS, async ({ deck, learning }) => {
           try {
             const reserved = await storage.transaction(async (tx) => {
               const current = await tx.get<StoredDeck>(deckKey(deck.id));
@@ -161,7 +162,7 @@ export async function startCardDecks(
               });
               return true;
             });
-            if (!reserved) continue;
+            if (!reserved) return;
             const plan = validateCardPlan(
               await options.generate(learning, deck.chapterId),
               learning,
@@ -197,7 +198,7 @@ export async function startCardDecks(
                 });
             });
           }
-        }
+        });
       })(),
     );
   return cardSnapshot(storage, sourceId, options.owner);

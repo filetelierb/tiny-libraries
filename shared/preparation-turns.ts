@@ -3,7 +3,7 @@
  * not read every video and call the model for all of them at once. A job holds a turn while
  * it works and renews it at each step; the others wait in line, first come, first served.
  */
-export const PREPARATION_TURNS = 4;
+export const PREPARATION_TURNS = 6;
 /** A turn nobody renews is free again, so a job that stopped cannot keep others waiting. */
 export const TURN_LEASE_MS = 6 * 60 * 1000;
 /** A job that stops asking leaves the line. */

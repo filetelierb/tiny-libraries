@@ -87,6 +87,23 @@ async function create(
   await Promise.all(tasks);
   return cardSnapshot(memory.storage(), sourceId, owner);
 }
+test('a file writes several decks at once, within the call limit', async () => {
+  const memory = await setup();
+  let running = 0,
+    busiest = 0;
+  const generate = async (_l: Learning, id: string) => {
+    busiest = Math.max(busiest, ++running);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    running--;
+    return plan(id);
+  };
+  const decks = await create(memory, ['first', 'second'], generate);
+  assert.equal(busiest, 2);
+  assert.deepEqual(
+    decks.map((deck) => deck.status),
+    ['ready', 'ready'],
+  );
+});
 function rating(deck: DeckView, grade: 'again' | 'hard' | 'good' | 'easy' = 'good') {
   return { requestId: crypto.randomUUID(), cardId: deck.cards[0].id, grade, expectedRevision: 0 };
 }

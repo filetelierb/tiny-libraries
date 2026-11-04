@@ -1,6 +1,8 @@
 import { DurableObject } from 'cloudflare:workers';
 import { visualKey, widgetImages } from '../shared/artifact-widgets';
+import { PARALLEL_CALLS, runAtOnce } from '../shared/parallel';
 import { synthesisWindows } from '../shared/synthesis-windows';
+import { translateStep, translationKey } from './translate-stage';
 import { ownedTurns } from '../shared/transcript';
 import {
   captions,
@@ -388,10 +390,9 @@ export class ProcessingJob extends DurableObject<Env> {
         const normalized = (await this.ctx.storage.get<Normalized>('normalized'))!;
         // Chunks are at most 300s + 2 × 20s = ~5m 40s and under 31 MB, inside Meta's
         // one-shot limits (10 min, 32 MB), so several can be transcribed in parallel.
-        const PARALLEL = 5;
         const jobId = job.id;
         const start = job.completedChunks,
-          batch = normalized.chunks.slice(start, start + PARALLEL);
+          batch = normalized.chunks.slice(start, start + PARALLEL_CALLS);
         const transcribeTracker = usageTracker();
         await Promise.all(
           batch.map(async (chunk) => {
@@ -442,53 +443,58 @@ export class ProcessingJob extends DurableObject<Env> {
         }
       } else if (job.stage === 'translate') {
         const segments = (await this.ctx.storage.get<Segment[]>('segments'))!.filter(
-            (s) => !s.id.startsWith('frame-'),
-          ),
-          translated: Segment[] = [];
-        const translateTracker = usageTracker();
-        const totalBatches = Math.max(1, Math.ceil(segments.length / 80));
-        await push(
-          'translate.start',
-          `Translating subtitles into ${job.locale.toUpperCase()} for ${file.name}`,
-          { progress: { current: 0, total: totalBatches }, model: settings.model },
+          (s) => !s.id.startsWith('frame-'),
         );
-        // Bound translation calls and persist each batch independently.
-        for (let i = 0; i < segments.length; i += 80) {
-          const cacheKey = `translation:${i}`;
-          let batch = await this.ctx.storage.get<Segment[]>(cacheKey);
-          if (!batch) {
-            batch = await this.translateBatch(
-              key,
-              settings.model,
-              segments.slice(i, i + 80),
-              job.locale,
-              translateTracker.sink,
-            );
-            await this.ctx.storage.put(cacheKey, batch);
-          }
-          translated.push(...batch);
-          const completed = Math.floor(i / 80) + 1;
-          if (completed < totalBatches)
-            await push(
-              'translate.chunk',
-              `Translated subtitle batch ${completed} of ${totalBatches}`,
-              {
-                progress: { current: completed, total: totalBatches },
-                model: settings.model,
-              },
-            );
+        const storage = this.ctx.storage;
+        if (!(await storage.get(translationKey(0)))) {
+          await storage.put('translation-started', stageStartedAt);
+          await push(
+            'translate.start',
+            `Translating subtitles into ${job.locale.toUpperCase()} for ${file.name}`,
+            {
+              progress: { current: 0, total: Math.max(1, Math.ceil(segments.length / 80)) },
+              model: settings.model,
+            },
+          );
         }
-        await this.saveCaptions(job.sourceId, 'translated', translated);
-        await push(
-          'translate.done',
-          `Translated subtitles into ${job.locale.toUpperCase()} for ${file.name}`,
+        const { locale } = job;
+        const translated = await translateStep(
+          segments,
           {
-            elapsedMs: Date.now() - stageStartedAt,
-            model: settings.model,
-            usage: translateTracker.usage,
+            get: (key) => storage.get<Segment[]>(key),
+            put: (key, value) => storage.put(key, value),
           },
+          async (batch) => {
+            const tracker = usageTracker();
+            return {
+              translated: await this.translateBatch(
+                key,
+                settings.model,
+                batch,
+                locale,
+                tracker.sink,
+              ),
+              usage: tracker.usage,
+            };
+          },
+          (completed, total, usage) =>
+            push('translate.chunk', `Translated subtitle batch ${completed} of ${total}`, {
+              progress: { current: completed, total },
+              model: settings.model,
+              usage,
+            }),
         );
-        job = { ...job, stage: 'synthesize', status: 'partial' };
+        // While batches remain the job stays on this stage, and its next step takes them up.
+        if (translated) {
+          await this.saveCaptions(job.sourceId, 'translated', translated);
+          const startedAt = (await storage.get<number>('translation-started')) ?? stageStartedAt;
+          await push(
+            'translate.done',
+            `Translated subtitles into ${job.locale.toUpperCase()} for ${file.name}`,
+            { elapsedMs: Date.now() - startedAt, model: settings.model },
+          );
+          job = { ...job, stage: 'synthesize', status: 'partial' };
+        }
       } else if (job.stage === 'synthesize') {
         const segments = (await this.ctx.storage.get<Segment[]>('segments'))!,
           normalized = (await this.ctx.storage.get<Normalized>('normalized'))!;
@@ -521,34 +527,41 @@ export class ProcessingJob extends DurableObject<Env> {
         else if (JSON.stringify(segments).length > 1500000)
           throw new MetaError('Source text exceeds the analysis limit', false);
         else if (done < windows.length) {
-          // Long sources are analysed one overlapping window per step; each part is kept.
-          if (!(await this.ctx.storage.get<Synthesis>(`part:${done}`)))
+          // Long sources are analysed in overlapping windows, several per step; each part is kept.
+          const { locale } = job;
+          const next = windows
+            .map((window, index) => ({ window, index }))
+            .slice(done, done + PARALLEL_CALLS);
+          await runAtOnce(next, PARALLEL_CALLS, async ({ window, index }) => {
+            if (await this.ctx.storage.get<Synthesis>(`part:${index}`)) return;
             await this.ctx.storage.put(
-              `part:${done}`,
+              `part:${index}`,
               await synthesizePart(
                 key,
                 settings.model,
                 segments,
-                windows[done],
-                done,
+                window,
+                index,
                 windows.length,
-                job.locale,
+                locale,
                 normalized.visuals,
                 bridgedFetch(this.env),
                 synthesizeTracker.sink,
               ),
             );
+          });
+          const completed = done + next.length;
           job = {
             ...job,
-            completedParts: done + 1,
+            completedParts: completed,
             totalParts: windows.length + 1,
             status: 'partial',
           };
           await push(
             'synthesize.part',
-            `Built chapters for window ${done + 1} of ${windows.length} of ${file.name}`,
+            `Built chapters for window ${completed} of ${windows.length} of ${file.name}`,
             {
-              progress: { current: done + 1, total: windows.length + 1 },
+              progress: { current: completed, total: windows.length + 1 },
               model: settings.model,
               usage: synthesizeTracker.usage,
             },

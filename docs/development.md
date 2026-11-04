@@ -423,3 +423,11 @@ Instrumented points:
 The panel polls every 2.5 s while open and every 15 s while closed, and stops when the tab is hidden. Consecutive events of the same file for `transcribe.chunk`, `glossary.round` and `synthesize.part` collapse into one row that shows the latest step. Clicking the bar opens the panel at ~1/3 of the viewport; a handle on the top edge resizes it between 120 px and 80 vh, saved to local storage.
 
 Verification: type checks and 322 tests pass. Through the API, with a fresh project and a markdown note queued for preparation (dummy API key so the queue runs through the first stage): `/api/agent-events` reported `preparation.queued`, `normalize.start`, and `normalize.done · Read Demo.md; no audio to transcribe` with its elapsed time. The dummy key was removed and the test project deleted. The panel itself was not verified in a browser in this session.
+
+### Parallel preparation
+
+Measured on a course of five files, translation (199–342 s per video) and flashcards (142–291 s per file) were the slow stages that made one call at a time, while transcription made five. Translation, flashcards and the windows of long sources now make up to `PARALLEL_CALLS` (5) calls at once, and `PREPARATION_TURNS` rose from 4 to 6 files. Token use does not change. Glossary rounds, review-test batches and the turns of one conversation stay in order, because each builds on the one before; separate conversations already ran side by side.
+
+Translation now takes several batches per step instead of the whole stage in one, so a job renews its turn while it works. Every finished batch is saved, so a retry repeats only what is missing, and `translate.chunk` carries each batch's usage.
+
+Verification: type checks and 330 tests pass. An isolated runtime with a stand-in for the companion and Meta ran a seven-batch translation: at most five calls ran together, a 429 repeated only its own batch, and a job cancelled mid-translation stayed cancelled with no further calls. Meta's rate limit for a key is unknown; 429s retry with backoff, and a job that still fails resumes from its saved steps.
