@@ -56,10 +56,29 @@ const PALETTE = [
   '#f53894',
 ];
 const DEFAULT_COLOR = '#f52e33';
-const initialStyles = () =>
-  Object.fromEntries(
+const STYLE_STORAGE_KEY = 'tl:capture:style';
+const initialStyles = (): Record<Tool, { color: string; width: number }> => {
+  const base = Object.fromEntries(
     (Object.keys(toolIcons) as Tool[]).map((name) => [name, { color: DEFAULT_COLOR, width: 3 }]),
   ) as Record<Tool, { color: string; width: number }>;
+  try {
+    const raw = localStorage.getItem(STYLE_STORAGE_KEY);
+    if (!raw) return base;
+    const parsed = JSON.parse(raw) as Partial<Record<Tool, { color?: string; width?: number }>>;
+    for (const name of Object.keys(toolIcons) as Tool[]) {
+      const entry = parsed[name];
+      if (entry?.color && /^#[0-9a-f]{6}$/i.test(entry.color)) base[name].color = entry.color;
+      if (typeof entry?.width === 'number' && entry.width >= 1 && entry.width <= 512)
+        base[name].width = entry.width;
+    }
+  } catch {}
+  return base;
+};
+const persistStyles = (styles: Record<Tool, { color: string; width: number }>) => {
+  try {
+    localStorage.setItem(STYLE_STORAGE_KEY, JSON.stringify(styles));
+  } catch {}
+};
 const textEditSchema = z.object({
   kind: z.literal('text'),
   id: z.string().uuid(),
@@ -167,14 +186,23 @@ function StudioBody({
     editor = useRef<HTMLTextAreaElement>(null),
     writes = useRef(new DraftWriteQueue()),
     history = useRef<CaptureDrawing[]>([]),
+    widthHistorySnapshot = useRef<CaptureDrawing | null>(null),
     future = useRef<CaptureDrawing[]>([]),
     alive = useRef(true),
     [position, setPosition] = useState({ left: 12, top: 100, width: 300, maxHeight: 300 });
   const { color, width } = styles[tool];
   const setColor = (value: string) =>
-    setStyles((current) => ({ ...current, [tool]: { ...current[tool], color: value } }));
+    setStyles((current) => {
+      const next = { ...current, [tool]: { ...current[tool], color: value } };
+      persistStyles(next);
+      return next;
+    });
   const setWidth = (value: number) =>
-    setStyles((current) => ({ ...current, [tool]: { ...current[tool], width: value } }));
+    setStyles((current) => {
+      const next = { ...current, [tool]: { ...current[tool], width: value } };
+      persistStyles(next);
+      return next;
+    });
   const gesture = useRef<{
     id: number;
     start: CapturePoint;
@@ -627,14 +655,17 @@ function StudioBody({
       setSelected(null);
     }
   }
-  function patchSelected(patch: Record<string, unknown>) {
+  function patchSelected(patch: Record<string, unknown>, remember = true) {
     if (active)
-      commit({
-        ...model.current,
-        objects: model.current.objects.map((o) =>
-          o.id === active.id ? ({ ...o, ...patch } as CaptureObject) : o,
-        ),
-      });
+      commit(
+        {
+          ...model.current,
+          objects: model.current.objects.map((o) =>
+            o.id === active.id ? ({ ...o, ...patch } as CaptureObject) : o,
+          ),
+        },
+        remember,
+      );
   }
   const pointsPath = (o: CaptureObject) =>
     'points' in o
@@ -713,20 +744,34 @@ function StudioBody({
                   ? clamp(Math.round(active.width * scale), 1, 24)
                   : width
               }
+              onPointerDown={() => {
+                widthHistorySnapshot.current = model.current;
+              }}
+              onPointerUp={() => {
+                const snapshot = widthHistorySnapshot.current;
+                widthHistorySnapshot.current = null;
+                if (snapshot && snapshot !== model.current) {
+                  history.current = [...history.current.slice(-39), snapshot];
+                  future.current = [];
+                }
+              }}
               onChange={(e) => {
                 setWidth(Number(e.target.value));
                 if (active && 'points' in active)
-                  patchSelected({
-                    width: clamp(
-                      Number(e.target.value) / scale,
-                      1,
-                      active.kind === 'pen' || active.kind === 'arrow'
-                        ? 128
-                        : active.kind === 'highlight'
-                          ? 256
-                          : 512,
-                    ),
-                  });
+                  patchSelected(
+                    {
+                      width: clamp(
+                        Number(e.target.value) / scale,
+                        1,
+                        active.kind === 'pen' || active.kind === 'arrow'
+                          ? 128
+                          : active.kind === 'highlight'
+                            ? 256
+                            : 512,
+                      ),
+                    },
+                    false,
+                  );
               }}
             />
           </label>
