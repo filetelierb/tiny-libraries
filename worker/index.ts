@@ -2243,14 +2243,19 @@ async function serve(request: Request, env: Env, url: URL): Promise<Response> {
         return startJob(env, file, data.locale, project);
       }
       if (url.pathname === '/api/jobs/resume' && request.method === 'POST') {
-        // Page reloads call this once to re-poke every non-terminal preparation job so that any
-        // DO that lost its alarm (crash / deploy / eviction mid-step) wakes up and keeps going.
+        // Page reloads call this once to (a) re-poke every non-terminal preparation job so that
+        // any DO that lost its alarm (crash / deploy / eviction mid-step) wakes up, and (b) start
+        // jobs for uploadable files that never had one — files uploaded before auto-queue covered
+        // their kind, or any file whose startJob never fired.
         const locale = localeSchema.parse((await boundedJson(request)).locale);
         const catalog = await call<{ files: Source[]; directories: Directory[] }>('/api/catalog');
         const files = catalog.files.filter(
           (file) => sourceState(file, catalog.directories) === 'files' && file.kind !== 'artifact',
         );
+        const prepared = new Set(await call<string[]>('/internal/prepared'));
+        const { key } = await call<{ key: string | null }>('/internal/key');
         const poked: string[] = [];
+        const started: string[] = [];
         await Promise.all(
           files.map(async (file) => {
             const id = `${file.id}-v${file.version}-${locale}`;
@@ -2258,11 +2263,17 @@ async function serve(request: Request, env: Env, url: URL): Promise<Response> {
               new Request('http://internal/resume', { method: 'POST' }),
             );
             const body = await response.json<Job | null>().catch(() => null);
-            if (body && body.status !== 'completed' && body.status !== 'cancelled')
-              poked.push(file.id);
+            if (body) {
+              if (body.status !== 'completed' && body.status !== 'cancelled') poked.push(file.id);
+              return;
+            }
+            if (key && !prepared.has(file.id)) {
+              await startJob(env, file, locale, project).catch(() => {});
+              started.push(file.id);
+            }
           }),
         );
-        return json({ resumed: poked });
+        return json({ resumed: poked, started });
       }
       const visualMatch = url.pathname.match(/^\/api\/visuals\/([a-f0-9-]+)\/(\d+)\/([^/]+)$/);
       if (visualMatch && request.method === 'GET') {
