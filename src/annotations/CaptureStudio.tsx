@@ -443,6 +443,11 @@ function StudioBody({
     event.preventDefault();
     if (tool === 'text') {
       if (dismissedTextThisGesture) return;
+      const existing = hit(p);
+      if (existing && existing.kind === 'text') {
+        openText(existing);
+        return;
+      }
       editText({
         kind: 'text',
         id: crypto.randomUUID(),
