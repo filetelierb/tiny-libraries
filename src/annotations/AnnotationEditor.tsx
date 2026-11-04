@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useEditor, useEditorState, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { TableKit } from '@tiptap/extension-table';
@@ -16,8 +16,11 @@ import {
   Code,
   Clock,
   FileText,
+  X,
 } from 'lucide-react';
 import { sourceLocationStamp } from '../../shared/capture-source';
+import { stampIdentity } from '../../shared/captures';
+import { stampLabel } from './captureLabels';
 import {
   annotationInputSchema,
   annotationSnapshotSchema,
@@ -30,7 +33,8 @@ import type { Source, Catalog } from '../../shared/domain';
 import type { TreeActions } from '../workspace/DirectoryTree';
 import { api } from '../api';
 import { Button, IconButton, Modal } from '../design/components';
-import { CaptureCollectionEditor } from './CaptureCollection';
+import { CaptureCollectionEditor, shortTime } from './CaptureCollection';
+import type { CaptureWorkspace } from './CaptureWorkspace';
 import { loadEditorSession, type EditorSession } from './editorSession';
 import {
   DraftWriteQueue,
@@ -71,6 +75,93 @@ type EditorProps = {
   inline?: boolean;
 };
 /** The editor frame: a dialog, or a tinted card inside the annotations panel. */
+function StampsRow({
+  source,
+  baseLocation,
+  workspace,
+  pending,
+  t,
+  onError,
+}: {
+  source: Source;
+  baseLocation: SourceLocation;
+  workspace: CaptureWorkspace;
+  pending: boolean;
+  t: T;
+  onError: (message: string) => void;
+}) {
+  const snapshot = useSyncExternalStore(workspace.subscribe, workspace.getSnapshot);
+  const supportsCurrent =
+    source.kind === 'video' || source.kind === 'audio' || source.kind === 'pdf';
+  const baseStamp =
+    baseLocation.page != null || baseLocation.seconds != null
+      ? sourceLocationStamp(source, baseLocation)
+      : null;
+  const baseKey = baseStamp && stampIdentity(baseStamp);
+  const hasBase = !!baseStamp && snapshot.stamps.some((s) => stampIdentity(s) === baseKey);
+  const chips = [
+    ...(baseStamp && !hasBase ? [baseStamp] : []),
+    ...snapshot.stamps,
+  ];
+  const label = (stamp: { location: { page?: number; seconds?: number } }) =>
+    stamp.location.page != null
+      ? `${t.page} ${stamp.location.page}`
+      : stamp.location.seconds != null
+        ? shortTime(stamp.location.seconds)
+        : '';
+  return (
+    <div className="annotation-source-chips" aria-label={t.captureLocationField}>
+      {chips.map((stamp, index) => {
+        const isBase = index === 0 && !hasBase && baseStamp && stamp === baseStamp;
+        return (
+          <span key={stamp.id || `base-${index}`} className="annotation-source-chip">
+            {label(stamp)}
+            {!isBase && (
+              <button
+                type="button"
+                aria-label={stampLabel(stamp, t)}
+                disabled={pending}
+                onClick={() =>
+                  void workspace
+                    .setStamps(snapshot.stamps.filter((item) => item.id !== stamp.id))
+                    .catch((e) => onError(e instanceof Error ? e.message : t.error))
+                }
+              >
+                <X />
+              </button>
+            )}
+          </span>
+        );
+      })}
+      {supportsCurrent && (
+        <Button
+          className="annotation-source-add"
+          disabled={pending}
+          onClick={() => {
+            const pane = [...document.querySelectorAll<HTMLElement>('[data-source-id]')].find(
+              (node) => node.dataset.sourceId === source.id,
+            );
+            const media = pane?.querySelector<HTMLMediaElement>('audio,video');
+            const page = pane?.querySelector<HTMLElement>('[data-pdf-page]')?.dataset.pdfPage;
+            const location =
+              source.kind === 'pdf'
+                ? { page: page ? Number(page) || 1 : 1 }
+                : {
+                    seconds:
+                      media && Number.isFinite(media.currentTime) ? media.currentTime : 0,
+                  };
+            void workspace
+              .addStamp(sourceLocationStamp(source, location))
+              .catch((e) => onError(e instanceof Error ? e.message : t.error));
+          }}
+        >
+          {source.kind === 'pdf' ? <FileText /> : <Clock />}
+          {source.kind === 'pdf' ? t.captureCurrentPage : t.captureCurrentTime}
+        </Button>
+      )}
+    </div>
+  );
+}
 function EditorShell({
   inline,
   title,
@@ -455,40 +546,15 @@ function EditorForm({
       <div className="annotation-editor" aria-busy={pending}>
         <fieldset className="annotation-edit-fields" disabled={pending || !!conflict}>
           <p className="annotation-source">{source?.name || t.sessionAnnotation}</p>
-          {source && (request.location.page || request.location.seconds != null) && (
-            <div className="annotation-source-chips" aria-label={t.captureLocationField}>
-              <span className="annotation-source-chip">
-                {request.location.page
-                  ? `${t.page} ${request.location.page}`
-                  : `${Math.floor(request.location.seconds! / 60)}:${String(Math.floor(request.location.seconds! % 60)).padStart(2, '0')}`}
-              </span>
-              {(source.kind === 'video' || source.kind === 'audio' || source.kind === 'pdf') && (
-                <Button
-                  className="annotation-source-add"
-                  disabled={pending}
-                  onClick={() => {
-                    const pane = [...document.querySelectorAll<HTMLElement>('[data-source-id]')].find(
-                      (node) => node.dataset.sourceId === source.id,
-                    );
-                    const media = pane?.querySelector<HTMLMediaElement>('audio,video');
-                    const page = pane?.querySelector<HTMLElement>('[data-pdf-page]')?.dataset.pdfPage;
-                    const location =
-                      source.kind === 'pdf'
-                        ? { page: page ? Number(page) || 1 : 1 }
-                        : {
-                            seconds:
-                              media && Number.isFinite(media.currentTime) ? media.currentTime : 0,
-                          };
-                    void session.workspace
-                      .addStamp(sourceLocationStamp(source, location))
-                      .catch((e) => setError(e instanceof Error ? e.message : t.error));
-                  }}
-                >
-                  {source.kind === 'pdf' ? <FileText /> : <Clock />}
-                  {source.kind === 'pdf' ? t.captureCurrentPage : t.captureCurrentTime}
-                </Button>
-              )}
-            </div>
+          {source && (
+            <StampsRow
+              source={source}
+              baseLocation={request.location}
+              workspace={session.workspace}
+              pending={pending}
+              t={t}
+              onError={setError}
+            />
           )}
           {request.location.quote && (
             <blockquote className="selected-quote">{request.location.quote}</blockquote>

@@ -6,7 +6,6 @@ import {
   ImagePlus,
   LayoutGrid,
   Camera,
-  MapPin,
   Pencil,
   Trash2,
   X,
@@ -43,7 +42,7 @@ function sourcePanePage(sourceId: string): number | undefined {
   return page ? Number(page) || undefined : undefined;
 }
 
-function shortTime(seconds: number) {
+export function shortTime(seconds: number) {
   const whole = Math.max(0, Math.floor(seconds)),
     h = Math.floor(whole / 3600),
     m = Math.floor((whole % 3600) / 60),
@@ -390,47 +389,6 @@ export function CaptureCollectionEditor({
           </div>
         )}
       </div>
-      {value.stamps.length > 0 && (
-        <div className="capture-stamp-chips" aria-label={t.captureLocations}>
-          {value.stamps.map((stamp) => (
-            <span
-              key={stamp.id}
-              id={`capture-location-${stamp.id}`}
-              className={`capture-stamp-chip ${highlight === stamp.id ? 'highlight' : ''}`}
-            >
-              {stampLabel(stamp, t)}
-              <button
-                type="button"
-                aria-label={`${t.captureRemoveLocation}: ${stamp.label}`}
-                disabled={disabled}
-                onClick={() =>
-                  action(workspace.setStamps(value.stamps.filter((item) => item.id !== stamp.id)))
-                }
-              >
-                <X />
-              </button>
-            </span>
-          ))}
-          <Button
-            className="capture-add-stamp"
-            disabled={disabled || value.stamps.length >= 100}
-            onClick={() => setPicker('location')}
-          >
-            <MapPin />
-            {t.captureAddLocation}
-          </Button>
-        </div>
-      )}
-      {value.stamps.length === 0 && (
-        <Button
-          className="capture-add-stamp"
-          disabled={disabled}
-          onClick={() => setPicker('location')}
-        >
-          <MapPin />
-          {t.captureAddLocation}
-        </Button>
-      )}
       {locationNotice && (
         <p role="status" className="capture-stamp-notice">
           {locationNotice}
