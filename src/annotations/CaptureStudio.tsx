@@ -5,6 +5,7 @@ import {
   Highlighter,
   MousePointer2,
   PenLine,
+  Square,
   Type,
   Undo2,
   Redo2,
@@ -33,13 +34,14 @@ import {
   transformCaptureObject,
 } from './drawingGeometry';
 
-type Tool = 'select' | 'highlight' | 'text' | 'pen' | 'arrow';
+type Tool = 'select' | 'highlight' | 'text' | 'pen' | 'arrow' | 'highlightBox';
 const toolIcons = {
   select: MousePointer2,
   highlight: Highlighter,
   text: Type,
   pen: PenLine,
   arrow: ArrowUpRight,
+  highlightBox: Square,
 };
 /** Ten capture swatches, in display order, plus the per-tool defaults. */
 const PALETTE = [
@@ -230,9 +232,10 @@ function StudioBody({
     arrow: t.captureArrow,
     text: t.captureText,
     pen: t.capturePen,
+    highlightBox: t.captureHighlightBox,
     redact: t.captureRedact,
     mosaic: t.captureMosaic,
-    spotlight: t.captureSpotlight,
+    spotlight: t.captureHighlightBox,
   };
   useEffect(
     () => () => {
@@ -448,6 +451,23 @@ function StudioBody({
     };
     if (tool === 'pen' || tool === 'highlight') return { ...base, kind: tool };
     if (tool === 'arrow') return { ...base, kind: 'arrow', points: [points[0], points.at(-1)!] };
+    if (tool === 'highlightBox') {
+      const a = points[0];
+      const b = points.at(-1)!;
+      const dx = Math.abs(b.x - a.x) * space.width * scale;
+      const dy = Math.abs(b.y - a.y) * space.height * scale;
+      if (dx < 3 || dy < 3) return null;
+      const strokeWidth = clamp(width / scale, 1, 64);
+      return {
+        id: base.id,
+        kind: 'spotlight',
+        shape: 'rect',
+        points: [a, b],
+        color,
+        width: strokeWidth,
+        borderWidth: strokeWidth,
+      };
+    }
     return null;
   }
   function down(event: ReactPointerEvent<SVGSVGElement>) {
@@ -867,9 +887,17 @@ function StudioBody({
                     y={Math.min(live.points[0].y, live.points.at(-1)!.y) * space.height}
                     width={Math.abs(live.points.at(-1)!.x - live.points[0].x) * space.width}
                     height={Math.abs(live.points.at(-1)!.y - live.points[0].y) * space.height}
-                    fill={live.kind === 'redact' ? '#000' : '#007f7833'}
-                    stroke="#007f78"
-                    strokeWidth={2 / scale}
+                    fill={
+                      live.kind === 'redact'
+                        ? '#000'
+                        : live.kind === 'spotlight'
+                          ? `${live.color}1a`
+                          : '#007f7833'
+                    }
+                    stroke={live.kind === 'spotlight' ? live.color : '#007f78'}
+                    strokeWidth={
+                      live.kind === 'spotlight' ? (live.borderWidth ?? 2) : 2 / scale
+                    }
                   />
                 ) : (
                   <polyline
