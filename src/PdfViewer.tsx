@@ -150,12 +150,37 @@ export default function PdfViewer({
   useLayoutEffect(() => {
     const element = scroll.current;
     if (!element) return;
+    // The resize observer fires on every frame of a drag. Coalesce updates with rAF and only
+    // publish a new size when it settles (last frame wins), so the PDF canvas renders once at
+    // the final width instead of dozens of times across the drag.
+    let scheduled = 0;
+    let settleTimer: ReturnType<typeof setTimeout> | null = null;
+    let pending: { width: number; height: number } | null = null;
+    const publish = () => {
+      scheduled = 0;
+      if (settleTimer) clearTimeout(settleTimer);
+      settleTimer = setTimeout(() => {
+        if (!pending) return;
+        const next = pending;
+        pending = null;
+        setSize((current) =>
+          Math.abs(current.width - next.width) < 1 && Math.abs(current.height - next.height) < 1
+            ? current
+            : next,
+        );
+      }, 120);
+    };
     const observer = new ResizeObserver(([entry]) => {
-      if (entry.contentRect.width > 0 && entry.contentRect.height > 0)
-        setSize({ width: entry.contentRect.width, height: entry.contentRect.height });
+      if (entry.contentRect.width <= 0 || entry.contentRect.height <= 0) return;
+      pending = { width: entry.contentRect.width, height: entry.contentRect.height };
+      if (!scheduled) scheduled = requestAnimationFrame(publish);
     });
     observer.observe(element);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      if (scheduled) cancelAnimationFrame(scheduled);
+      if (settleTimer) clearTimeout(settleTimer);
+    };
   }, []);
   useEffect(() => {
     try {
