@@ -768,16 +768,6 @@ export function App() {
       setUploading(null);
     }
   }
-  async function example() {
-    const text =
-      locale === 'es'
-        ? '# Muestreo y señales\n\nUna señal continua se representa con muestras discretas. La frecuencia de muestreo indica cuántas muestras se toman cada segundo.\n\n## El límite de Nyquist\n\nPara representar una frecuencia de 8 Hz se necesita una frecuencia de muestreo superior a 16 Hz. Si se toman 12 muestras por segundo, la señal puede confundirse con una de 4 Hz: ese fenómeno se llama aliasing.\n\n## Explora\n\nAbre el explorador de señales y cambia las frecuencias. Los puntos ámbar son muestras; la curva verde es la señal original. Este ejemplo es sintético y no representa datos clínicos.'
-        : '# Sampling and signals\n\nA continuous signal can be represented with discrete samples. The sampling frequency tells us how many samples are collected each second.\n\n## The Nyquist limit\n\nTo represent an 8 Hz signal, the sampling frequency must exceed 16 Hz. At 12 samples per second, that signal can appear to be 4 Hz. This ambiguity is called aliasing.\n\n## Explore it\n\nOpen the signal explorer and change the frequencies. Amber points are samples; the teal curve is the original signal. This authored example is synthetic and contains no clinical data.';
-    await addFiles(
-      [new File([text], `${t.example}.md`, { type: 'text/markdown' })],
-      locale === 'es' ? 'Ejemplos' : 'Examples',
-    );
-  }
   async function directoryMutation(
     directory: Directory,
     action: 'archive' | 'unarchive' | 'trash' | 'restore' | 'rename' | 'move',
@@ -2631,11 +2621,6 @@ export function App() {
               void run(() => addFiles(files, folder, directoryId, uploaded))
             }
           />
-          <div className="sample-material">
-            <Button variant="ghost" disabled={busy} onClick={() => void run(example)}>
-              {t.addDemo}
-            </Button>
-          </div>
         </Modal>
       )}
       {renamingSession && (
