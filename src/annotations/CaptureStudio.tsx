@@ -55,7 +55,7 @@ const PALETTE = [
   '#944df5',
   '#f53894',
 ];
-const DEFAULT_COLOR = '#ff3b30';
+const DEFAULT_COLOR = '#f52e33';
 const initialStyles = () =>
   Object.fromEntries(
     (Object.keys(toolIcons) as Tool[]).map((name) => [name, { color: DEFAULT_COLOR, width: 3 }]),
@@ -976,33 +976,6 @@ function StudioBody({
           </Button>
         </div>
       </div>
-      <details className="capture-object-list">
-        <summary>
-          {t.captureObjects} · {drawing.objects.length}
-        </summary>
-        {!drawing.objects.length ? (
-          <p>{t.captureNoObjects}</p>
-        ) : (
-          drawing.objects.map((o, i) => (
-            <Button
-              key={o.id}
-              aria-pressed={selected === o.id}
-              onClick={() => {
-                finishText();
-                setTool('select');
-                setSelected(o.id);
-              }}
-            >
-              {i + 1}. {labels[o.kind]}
-              {'text' in o
-                ? ` — ${o.text.slice(0, 70)}`
-                : o.kind === 'spotlight' && o.caption
-                  ? ` — ${o.caption}`
-                  : ''}
-            </Button>
-          ))
-        )}
-      </details>
       <p id="capture-keyboard-help" className="sr-only">
         {t.captureKeyboardHelp}
       </p>
