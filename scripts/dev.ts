@@ -150,4 +150,4 @@ const stop = () => {
 process.on('SIGINT', stop);
 process.on('SIGTERM', stop);
 start();
-console.log('Tailored Library: http://127.0.0.1:9876 — local files, optional Meta inference.');
+console.log('Tiny Libraries: http://127.0.0.1:9876 — local files, optional Meta inference.');

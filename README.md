@@ -1,4 +1,4 @@
-# Tailored Library
+# Tiny Libraries
 
 A local, open-source workspace that turns your recordings and documents into a library you can study: source-linked chapters, subtitles, practice, concepts, and interactive explanations powered by Meta models.
 

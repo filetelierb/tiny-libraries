@@ -39,7 +39,7 @@ export function HomePage() {
   const t: T = dictionaries[locale];
   useEffect(() => {
     document.documentElement.lang = locale;
-    document.title = 'Tailored Library';
+    document.title = 'Tiny Libraries';
   }, [locale]);
   function loadActivity() {
     // A week of margin covers either first day of the week.
@@ -96,7 +96,7 @@ export function HomePage() {
           <BookOpen size={18} />
         </span>
         <div>
-          <h1>Tailored Library</h1>
+          <h1>Tiny Libraries</h1>
           <p>{t.homeSubtitle}</p>
         </div>
       </header>
