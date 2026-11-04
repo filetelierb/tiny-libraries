@@ -100,7 +100,10 @@ function EditorShell({
         close();
       }}
     >
-      <h2>{title}</h2>
+      <header className="annotation-composer-head">
+        <h2>{title}</h2>
+        <p className="annotation-composer-intro">{t.annotationComposerIntro}</p>
+      </header>
       {children}
     </section>
   );
@@ -465,14 +468,16 @@ function EditorForm({
     >
       <div className="annotation-editor" aria-busy={pending}>
         <fieldset className="annotation-edit-fields" disabled={pending || !!conflict}>
-          <p className="annotation-source">
-            {source?.name || t.sessionAnnotation}
-            {request.location.page
-              ? ` · ${t.page} ${request.location.page}`
-              : request.location.seconds != null
-                ? ` · ${Math.floor(request.location.seconds / 60)}:${String(Math.floor(request.location.seconds % 60)).padStart(2, '0')}`
-                : ''}
-          </p>
+          <p className="annotation-source">{source?.name || t.sessionAnnotation}</p>
+          {(request.location.page || request.location.seconds != null) && (
+            <div className="annotation-source-chips" aria-label={t.captureLocationField}>
+              <span className="annotation-source-chip">
+                {request.location.page
+                  ? `${t.page} ${request.location.page}`
+                  : `${Math.floor(request.location.seconds! / 60)}:${String(Math.floor(request.location.seconds! % 60)).padStart(2, '0')}`}
+              </span>
+            </div>
+          )}
           {request.location.quote && (
             <blockquote className="selected-quote">{request.location.quote}</blockquote>
           )}
@@ -595,7 +600,12 @@ function EditorForm({
             >
               <Redo2 />
             </IconButton>
-            <Button disabled={pending} onClick={toggleSource}>
+            <Button
+              className="rich-toolbar-source"
+              disabled={pending}
+              onClick={toggleSource}
+              aria-pressed={sourceMode}
+            >
               {sourceMode ? t.visualEditor : t.markdownSource}
             </Button>
           </div>
@@ -631,6 +641,7 @@ function EditorForm({
               onBlur={() => typingPause.release()}
             />
           )}
+          <p className="annotation-list-hint">{t.annotationListHint}</p>
           <CaptureCollectionEditor
             catalog={catalog}
             actions={treeActions}
