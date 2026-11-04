@@ -27,7 +27,6 @@ import { CaptureWorkspace } from './CaptureWorkspace';
 import { type CaptureEntry, editorDrafts, DraftWriteQueue, workingDraftKey } from './draftStore';
 import { captureBaseUrl, capturePreviewUrl, stageCaptureDrawing } from './captureClient';
 import {
-  captureEditorPlacement,
   captureObjectBounds,
   distToSegment,
   moveCaptureObject,
@@ -167,7 +166,6 @@ function StudioBody({
     [selected, setSelected] = useState<string | null>(null),
     // Each tool keeps its own colour and width, as in the reference capture tools.
     [styles, setStyles] = useState(initialStyles),
-    [textStyle, setTextStyle] = useState<'plain' | 'sticky' | 'bubble'>('plain'),
     [zoom, setZoom] = useState(1),
     [viewport, setViewport] = useState({ width: 800, height: 500 }),
     [revision, setRevision] = useState(0),
@@ -188,8 +186,7 @@ function StudioBody({
     history = useRef<CaptureDrawing[]>([]),
     widthHistorySnapshot = useRef<CaptureDrawing | null>(null),
     future = useRef<CaptureDrawing[]>([]),
-    alive = useRef(true),
-    [position, setPosition] = useState({ left: 12, top: 100, width: 300, maxHeight: 300 });
+    alive = useRef(true);
   const { color, width } = styles[tool];
   const setColor = (value: string) =>
     setStyles((current) => {
@@ -342,42 +339,14 @@ function StudioBody({
   }, [selected, editing]);
   useEffect(() => {
     if (!editing) return;
-    const update = () => {
-      const rect = svg.current?.getBoundingClientRect();
-      if (!rect) return;
-      const view = window.visualViewport,
-        area = {
-          x: view?.offsetLeft || 0,
-          y: view?.offsetTop || 0,
-          width: view?.width || window.innerWidth,
-          height: view?.height || window.innerHeight,
-        };
-      setPosition(
-        captureEditorPlacement(
-          {
-            x: rect.left + ((editing.point.x - crop.x) / crop.width) * rect.width,
-            y: rect.top + ((editing.point.y - crop.y) / crop.height) * rect.height,
-          },
-          { width: 320, height: 240 },
-          area,
-        ),
-      );
-      if (editor.current) {
-        editor.current.style.height = 'auto';
-        editor.current.style.height = `${Math.min(160, Math.max(72, editor.current.scrollHeight))}px`;
-      }
-    };
-    update();
-    window.addEventListener('resize', update);
-    window.visualViewport?.addEventListener('resize', update);
-    scroll.current?.addEventListener('scroll', update);
-    editor.current?.focus();
-    return () => {
-      window.removeEventListener('resize', update);
-      window.visualViewport?.removeEventListener('resize', update);
-      scroll.current?.removeEventListener('scroll', update);
-    };
-  }, [editing, zoom, viewport, crop]);
+    const handle = window.requestAnimationFrame(() => {
+      const el = editor.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
+    });
+    return () => window.cancelAnimationFrame(handle);
+  }, [editing?.id]);
   function finishText() {
     const edit = text.current;
     if (!edit) return true;
@@ -508,7 +477,7 @@ function StudioBody({
           point: p,
           text: '',
           color,
-          style: textStyle,
+          style: 'plain',
           fontSize: clamp(17 / scale, 8, 512),
         },
       };
@@ -798,46 +767,6 @@ function StudioBody({
               }}
             />
           </label>
-          {(tool === 'text' || active?.kind === 'text') && (
-            <select
-              aria-label={t.textStyle}
-              value={active?.kind === 'text' ? active.style : textStyle}
-              onChange={(e) => {
-                const next = e.target.value as typeof textStyle;
-                setTextStyle(next);
-                if (active?.kind === 'text')
-                  patchSelected({
-                    style: next,
-                    tail:
-                      next === 'bubble'
-                        ? active.tail || {
-                            x: clamp(active.point.x + 0.06),
-                            y: clamp(active.point.y + 0.14),
-                          }
-                        : undefined,
-                  });
-              }}
-            >
-              <option value="plain">{t.capturePlain}</option>
-              <option value="sticky">{t.captureSticky}</option>
-              <option value="bubble">{t.captureBubble}</option>
-            </select>
-          )}
-          {active?.kind === 'text' && (
-            <label>
-              {t.captureFontSize}
-              <input
-                type="number"
-                min="8"
-                max="512"
-                value={Math.round(active.fontSize)}
-                onChange={(e) => {
-                  if (e.target.value)
-                    patchSelected({ fontSize: clamp(Number(e.target.value), 8, 512) });
-                }}
-              />
-            </label>
-          )}
           {active?.kind === 'text' && (
             <Button onClick={() => openText(active)}>{t.captureObjectEdit}</Button>
           )}
@@ -1031,39 +960,65 @@ function StudioBody({
             )}
             {editing &&
               (() => {
-                const draft = editing.text || '…';
                 const anchorX = editing.point.x * space.width;
                 const anchorY = editing.point.y * space.height;
-                const padding = editing.style === 'plain' ? 0 : 8;
-                const maxWidth = Math.min(360, Math.max(editing.fontSize, space.width - 2 * padding));
-                const estLines = Math.max(1, Math.ceil(draft.length / 30) + (draft.match(/\n/g)?.length || 0));
+                const maxWidth = Math.min(420, Math.max(editing.fontSize * 8, space.width - anchorX));
+                const estLines = Math.max(
+                  1,
+                  Math.ceil((editing.text || ' ').length / 30) +
+                    (editing.text.match(/\n/g)?.length || 0),
+                );
+                const height = Math.min(
+                  space.height - anchorY,
+                  estLines * editing.fontSize * 1.3 + 24,
+                );
                 return (
                   <foreignObject
                     x={Math.max(0, anchorX)}
                     y={Math.max(0, anchorY)}
-                    width={Math.min(space.width, maxWidth + 2 * padding + 4)}
-                    height={Math.min(space.height, estLines * editing.fontSize * 1.25 + 2 * padding + 8)}
-                    style={{ overflow: 'visible', pointerEvents: 'none' }}
+                    width={maxWidth}
+                    height={height}
+                    style={{ overflow: 'visible' }}
                   >
-                    <div
+                    <textarea
+                      ref={editor}
+                      autoFocus
+                      aria-label={t.captureTextBody}
+                      maxLength={2000}
+                      value={editing.text}
+                      onChange={(e) => editText({ ...editing, text: e.target.value })}
+                      onBlur={() => finishText()}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Escape') {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          editText(null);
+                          svg.current?.focus();
+                        } else if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          finishText();
+                          svg.current?.focus();
+                        }
+                      }}
                       style={{
                         fontFamily: '"Times New Roman", serif',
                         fontSize: `${editing.fontSize}px`,
-                        lineHeight: 1.25,
-                        padding: `${padding}px`,
-                        color: editing.style === 'plain' ? editing.color : '#ffffff',
-                        background: editing.style === 'plain' ? 'transparent' : '#202f36',
-                        border: editing.style === 'plain' ? 'none' : '1px solid #ffffff',
-                        borderRadius: editing.style === 'plain' ? 0 : '6px',
-                        display: 'inline-block',
-                        opacity: 0.85,
+                        lineHeight: 1.3,
+                        color: editing.color,
+                        background: 'rgba(255,255,255,0.08)',
+                        border: `1px dashed ${editing.color}`,
+                        borderRadius: '4px',
+                        padding: '2px 4px',
+                        margin: 0,
+                        width: '100%',
+                        height: '100%',
+                        resize: 'none',
+                        outline: 'none',
+                        overflow: 'hidden',
                         whiteSpace: 'pre-wrap',
                         wordBreak: 'break-word',
-                        maxWidth: `${maxWidth}px`,
                       }}
-                    >
-                      {draft}
-                    </div>
+                    />
                   </foreignObject>
                 );
               })()}
@@ -1113,54 +1068,6 @@ function StudioBody({
         <p className="form-error" role="alert">
           {error}
         </p>
-      )}
-      {editing && (
-        <div
-          className="capture-text-editor"
-          style={{ position: 'fixed', ...position }}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') {
-              e.preventDefault();
-              e.stopPropagation();
-              editText(null);
-            }
-            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-              e.preventDefault();
-              finishText();
-              svg.current?.focus();
-            }
-          }}
-        >
-          <label>
-            {t.captureTextBody}
-            <textarea
-              ref={editor}
-              aria-label={t.captureTextBody}
-              maxLength={2000}
-              value={editing.text}
-              onChange={(e) => editText({ ...editing, text: e.target.value })}
-            />
-          </label>
-          <div className="modal-actions">
-            <Button
-              variant="primary"
-              onClick={() => {
-                finishText();
-                svg.current?.focus();
-              }}
-            >
-              {t.captureApplyText}
-            </Button>
-            <Button
-              onClick={() => {
-                editText(null);
-                svg.current?.focus();
-              }}
-            >
-              {t.cancel}
-            </Button>
-          </div>
-        </div>
       )}
       <span className="sr-only">{revision}</span>
     </Modal>
