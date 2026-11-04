@@ -281,11 +281,10 @@ test('assessment preparation freezes journal messages supplied outside the stora
       return [journalConversation];
     },
     generate: async (frozen, _config, _previous, index) => {
-      assert.deepEqual(frozen.conversation, [
-        { role: 'assistant', content: 'Accepted journal answer' },
-      ]);
-      assert.ok(frozen.gaps.some((gap) => gap.includes('stopped')));
-      assert.ok(frozen.gaps.some((gap) => gap.includes('bounded selection')));
+      // Linked conversation is intentionally excluded from the frozen context so
+      // assessment generation uses only studied files, saved evidence and prior reports.
+      assert.deepEqual(frozen.conversation, []);
+      assert.equal(JSON.stringify(frozen).includes('Accepted journal answer'), false);
       assert.equal(JSON.stringify(frozen).includes('UNRELATED_JOURNAL_TEXT'), false);
       return batch(index);
     },
@@ -442,7 +441,10 @@ test('frozen context excludes unselected notes/conversation and clips whole medi
     ['s1'],
   );
   assert.equal(value.sources[0].limit, 7);
-  assert.deepEqual(value.conversation, [{ role: 'user', content: 'Selected only' }]);
+  // Conversation is no longer frozen into the assessment context — assessments use only
+  // studied files, saved evidence and prior reports.
+  assert.deepEqual(value.conversation, []);
+  assert.equal(JSON.stringify(value).includes('Selected only'), false);
   assert.equal(JSON.stringify(value).includes('OTHER_FILE'), false);
   await store.put(`annotation-source-summary:${sourceId}:note`, {
     id: 'note',

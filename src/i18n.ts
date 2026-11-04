@@ -1066,6 +1066,7 @@ const en = {
   agentTool_tutor: 'Librarian',
   agentTool_glossary: 'Glossary',
   agentTool_flashcards: 'Flashcards',
+  agentTool_assessment: 'Assessment',
   projectUnknown: 'Unknown project',
   newProjectFolderHint:
     'A folder of its own is made for the project under projects/ in the library data folder, where its files go as ordinary files on disk.',
@@ -2440,6 +2441,7 @@ const es: Dictionary = {
   agentTool_tutor: 'Bibliotecario',
   agentTool_glossary: 'Glosario',
   agentTool_flashcards: 'Flashcards',
+  agentTool_assessment: 'Evaluación',
   projectUnknown: 'Proyecto desconocido',
   newProjectFolderHint:
     'Al proyecto se le crea su propia carpeta bajo projects/ en la carpeta de datos de la biblioteca; sus archivos quedan ahí como archivos comunes en el disco.',

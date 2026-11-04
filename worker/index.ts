@@ -1423,6 +1423,17 @@ export class Library extends DurableObject<Env> {
         );
       }
       if (path.startsWith('/api/assessments')) {
+        const emit = (
+          action: string,
+          summary: string,
+          extra: Partial<Parameters<typeof recordEvent>[2]> = {},
+        ) =>
+          recordEvent(this.env, this.project, {
+            tool: 'assessment',
+            action,
+            summary,
+            ...extra,
+          });
         const options = {
           conversations: (sessionId: string, sourceIds: string[]) =>
             assessmentConversations(this.env, this.ctx.storage, sessionId, sourceIds),
@@ -1439,17 +1450,53 @@ export class Library extends DurableObject<Env> {
           ) => {
             const key = await this.apiKey();
             if (!key) throw new ApiError('Add a Meta API key in Settings', 409);
-            return generateAssessmentBatch(
-              key,
-              model,
-              context,
-              config,
-              previous,
-              batch,
-              locale,
-              bridgedFetch(this.env),
-              await readAssessmentImages(this.originals(), context),
+            const total = Math.ceil(config.count / 12);
+            const started = Date.now();
+            await emit(
+              'assessment.batch.start',
+              `Preparing questions ${batch * 12 + 1}–${Math.min(
+                (batch + 1) * 12,
+                config.count,
+              )} of ${config.count} from ${context.sources.length} file${
+                context.sources.length === 1 ? '' : 's'
+              }${context.prior.length ? ` and ${context.prior.length} prior weak answer${context.prior.length === 1 ? '' : 's'}` : ''}.`,
+              {
+                model,
+                reasoningEffort: 'auto',
+                progress: { current: batch, total },
+              },
             );
+            try {
+              const value = await generateAssessmentBatch(
+                key,
+                model,
+                context,
+                config,
+                previous,
+                batch,
+                locale,
+                bridgedFetch(this.env),
+                await readAssessmentImages(this.originals(), context),
+              );
+              await emit(
+                'assessment.batch.done',
+                `Prepared ${value.questions.length} question${value.questions.length === 1 ? '' : 's'} across ${value.topics.length} topic${value.topics.length === 1 ? '' : 's'}.`,
+                {
+                  model,
+                  reasoningEffort: 'auto',
+                  elapsedMs: Date.now() - started,
+                  progress: { current: batch + 1, total },
+                },
+              );
+              return value;
+            } catch (e) {
+              await emit(
+                'assessment.batch.failed',
+                e instanceof Error ? e.message : 'Assessment batch failed.',
+                { model, elapsedMs: Date.now() - started },
+              );
+              throw e;
+            }
           },
           analyze: async (
             context: import('../shared/assessments').AssessmentContext,
@@ -1460,16 +1507,37 @@ export class Library extends DurableObject<Env> {
           ) => {
             const key = await this.apiKey();
             if (!key) throw new ApiError('Add a Meta API key in Settings', 409);
-            return analyzeAssessment(
-              key,
-              model,
-              context,
-              plan,
-              grades,
-              locale,
-              bridgedFetch(this.env),
-              await readAssessmentImages(this.originals(), context),
+            const started = Date.now();
+            await emit(
+              'assessment.grade.start',
+              `Analysing ${grades.length} answer${grades.length === 1 ? '' : 's'} against the study context.`,
+              { model, reasoningEffort: 'auto' },
             );
+            try {
+              const value = await analyzeAssessment(
+                key,
+                model,
+                context,
+                plan,
+                grades,
+                locale,
+                bridgedFetch(this.env),
+                await readAssessmentImages(this.originals(), context),
+              );
+              await emit('assessment.grade.done', 'Grading and analysis complete.', {
+                model,
+                reasoningEffort: 'auto',
+                elapsedMs: Date.now() - started,
+              });
+              return value;
+            } catch (e) {
+              await emit(
+                'assessment.grade.failed',
+                e instanceof Error ? e.message : 'Assessment grading failed.',
+                { model, elapsedMs: Date.now() - started },
+              );
+              throw e;
+            }
           },
         };
         if (path === '/api/assessments/options' && request.method === 'POST') {

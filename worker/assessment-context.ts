@@ -219,26 +219,6 @@ export async function captureAssessmentContext(
       : await readQuestionAttachments(tx, sessionId, config.attachmentIds);
   const selected = new Set(config.sourceIds),
     conversation: AssessmentContext['conversation'] = [];
-  for (const chat of linkedConversations ??
-    (await tx.list<Conversation>({ prefix: 'conversation:' })).values()) {
-    if (chat.sessionId !== sessionId) continue;
-    if (chat.messageCount && chat.messageCount > chat.messages.length)
-      gaps.push(
-        'Linked conversation context uses a bounded selection of recent relevant messages. Earlier history remains saved.',
-      );
-    for (const message of chat.messages) {
-      const refs = conversationMessageSources(message, chat.sourceIds);
-      if (!refs.length || refs.some((id) => !selected.has(id))) continue;
-      conversation.push({ role: message.role, content: message.content.slice(0, 4000) });
-      if (message.status)
-        gaps.push(`A linked reply was ${message.status}; its text is partial study context.`);
-      if (message.content.length > 4000) gaps.push('A linked conversation message is an excerpt.');
-    }
-  }
-  if (conversation.length > 20)
-    gaps.push(
-      `Included the most recent 20 of ${conversation.length} clearly linked conversation messages.`,
-    );
   const prior: AssessmentContext['prior'] = [];
   for (const id of config.priorReportIds) {
     const record = await tx.get<AssessmentSummary>(`assessment:${id}`);

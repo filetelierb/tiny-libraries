@@ -96,45 +96,15 @@ export function AssessmentScope({
       <summary>
         {t.assessmentCapturedScope} · {context.sources.length}{' '}
         {context.sources.length === 1 ? t.reviewFile : t.files.toLowerCase()}
-        {!!context.attachments?.length &&
-          ` · ${t.assessmentSavedEvidence}: ${context.attachments.length}`}
       </summary>
-      <p className="muted">{t.assessmentScopeHint}</p>
-      {context.sources.map((source) => (
-        <section key={source.id}>
-          <strong>
-            {source.name} · v{source.version}
-          </strong>
-          <p className="muted">
-            {source.segments.length} / {source.studiedCount} {t.assessmentEvidenceSegments} ·{' '}
-            {source.reviewed ? t.reviewed : t.assessmentStudiedRange}
-          </p>
-          <small>
-            {t.preparationRevision}: {source.learningVersion}
-          </small>
-          {source.notes.length > 0 && (
-            <details>
-              <summary>
-                {t.assessmentIncludedNotes} ({source.notes.length})
-              </summary>
-              {source.notes.map((note) => (
-                <div key={note.id}>
-                  <h4>{note.title}</h4>
-                  <p>{note.text}</p>
-                  {note.quote && <blockquote>{note.quote}</blockquote>}
-                  <small>
-                    {note.id} · v{note.revision}
-                  </small>
-                </div>
-              ))}
-            </details>
-          )}
-        </section>
-      ))}
+      <ul className="assessment-scope-list">
+        {context.sources.map((source) => (
+          <li key={source.id}>{source.name}</li>
+        ))}
+      </ul>
       {!!context.attachments?.length && (
         <section aria-label={t.assessmentSavedEvidence}>
           <h4>{t.assessmentSavedEvidence}</h4>
-          <p className="muted">{t.assessmentSavedEvidenceNotice}</p>
           {context.attachments.map(({ attachment }) => (
             <div key={attachment.id}>
               <Button onClick={() => inspect(attachment.id)}>
@@ -158,34 +128,6 @@ export function AssessmentScope({
             </div>
           ))}
         </section>
-      )}
-      {context.gaps.length > 0 && (
-        <div className="notice">
-          <strong>{t.assessmentCoverageLimits}</strong>
-          <ul>
-            {context.gaps.map((gap, index) => (
-              <li key={index}>{gap}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {context.conversation.length > 0 && (
-        <details>
-          <summary>
-            {t.assessmentLinkedConversation} ({context.conversation.length})
-          </summary>
-          {context.conversation.map((message, index) => (
-            <p className="assessment-message" key={index}>
-              <strong>{message.role === 'user' ? t.assessmentLearner : t.assessmentTutor}:</strong>{' '}
-              {message.content}
-            </p>
-          ))}
-        </details>
-      )}
-      {context.prior.length > 0 && (
-        <p className="muted">
-          {context.prior.length} {t.assessmentPriorResults}
-        </p>
       )}
     </details>
   );

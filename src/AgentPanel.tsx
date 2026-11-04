@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Activity,
   BookOpen,
+  ClipboardList,
   FilePlus,
   ChevronDown,
   ChevronUp,
@@ -37,6 +38,7 @@ const toolIcons: Record<AgentTool, React.ComponentType<{ size?: number }>> = {
   tutor: Sparkles,
   glossary: BookOpen,
   flashcards: SquareStack,
+  assessment: ClipboardList,
 };
 
 const actionIcons: Record<string, React.ComponentType<{ size?: number }>> = {
