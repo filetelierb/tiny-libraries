@@ -916,9 +916,63 @@ export class Library extends DurableObject<Env> {
       ...(this.env.DATA_DIR ? { dataDir: this.env.DATA_DIR } : {}),
     };
   }
+  /**
+   * Pokes every non-terminal preparation job in this project and starts jobs for files that never
+   * got one. Called both by the /api/jobs/resume route (page reloads) and by the Library DO's
+   * periodic alarm so stalled flows recover without any client action.
+   */
+  async sweepPreparationJobs(locale: 'en' | 'es', apiKey: string | null) {
+    const [fileEntries, directoryEntries, learningKeys] = await Promise.all([
+      this.ctx.storage.list<Source>({ prefix: 'file:' }),
+      this.ctx.storage.list<Directory>({ prefix: 'directory:' }),
+      this.ctx.storage.list({ prefix: 'learning:' }),
+    ]);
+    const directories = [...directoryEntries.values()];
+    const prepared = new Set([...learningKeys.keys()].map((k) => k.slice('learning:'.length)));
+    const files = [...fileEntries.values()].filter(
+      (file) => sourceState(file, directories) === 'files' && file.kind !== 'artifact',
+    );
+    const poked: string[] = [];
+    const started: string[] = [];
+    await Promise.all(
+      files.map(async (file) => {
+        const id = `${file.id}-v${file.version}-${locale}`;
+        const response = await this.env.JOBS.get(this.env.JOBS.idFromName(id)).fetch(
+          new Request('http://internal/resume', { method: 'POST' }),
+        );
+        const body = await response.json<Job | null>().catch(() => null);
+        if (body) {
+          if (body.status !== 'completed' && body.status !== 'cancelled') poked.push(file.id);
+          return;
+        }
+        if (apiKey && !prepared.has(file.id)) {
+          await startJob(this.env, file, locale, this.project).catch(() => {});
+          started.push(file.id);
+        }
+      }),
+    );
+    return { poked, started };
+  }
+  async alarm() {
+    // Every minute, this library quietly recovers stalled or orphaned preparation flows and
+    // schedules the next check. The alarm lives on the Library DO itself, so projects without
+    // open clients still make progress on their uploads.
+    try {
+      const settings = await this.settings();
+      const apiKey = await this.apiKey();
+      if (apiKey) await this.sweepPreparationJobs(settings.locale, apiKey);
+    } catch {}
+    await this.ctx.storage.setAlarm(Date.now() + 60_000);
+  }
+  /** Schedules the periodic sweep if no alarm is pending yet; safe to call on every fetch. */
+  private async ensureSweepAlarm() {
+    const current = await this.ctx.storage.getAlarm();
+    if (current === null) await this.ctx.storage.setAlarm(Date.now() + 60_000);
+  }
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url),
       path = url.pathname;
+    void this.ensureSweepAlarm().catch(() => {});
     try {
       if (path === '/internal/prepared')
         return json(
@@ -926,6 +980,12 @@ export class Library extends DurableObject<Env> {
             key.slice('learning:'.length),
           ),
         );
+      if (path === '/internal/sweep-preparation' && request.method === 'POST') {
+        const body = (await boundedJson(request)) as { locale?: unknown; apiKey?: unknown };
+        const locale = localeSchema.parse(body.locale);
+        const apiKey = typeof body.apiKey === 'string' ? body.apiKey : null;
+        return json(await this.sweepPreparationJobs(locale, apiKey));
+      }
       if (path === '/internal/key') return json({ key: (await this.apiKey()) || null });
       if (path === '/internal/summary')
         return json({
@@ -2243,37 +2303,16 @@ async function serve(request: Request, env: Env, url: URL): Promise<Response> {
         return startJob(env, file, data.locale, project);
       }
       if (url.pathname === '/api/jobs/resume' && request.method === 'POST') {
-        // Page reloads call this once to (a) re-poke every non-terminal preparation job so that
-        // any DO that lost its alarm (crash / deploy / eviction mid-step) wakes up, and (b) start
-        // jobs for uploadable files that never had one — files uploaded before auto-queue covered
-        // their kind, or any file whose startJob never fired.
+        // Page reloads call this to run the same sweep the Library DO's periodic alarm runs:
+        // poke every non-terminal preparation job and start jobs for uploadable files without
+        // a DO yet. The DO alarm covers the gap between refreshes.
         const locale = localeSchema.parse((await boundedJson(request)).locale);
-        const catalog = await call<{ files: Source[]; directories: Directory[] }>('/api/catalog');
-        const files = catalog.files.filter(
-          (file) => sourceState(file, catalog.directories) === 'files' && file.kind !== 'artifact',
-        );
-        const prepared = new Set(await call<string[]>('/internal/prepared'));
         const { key } = await call<{ key: string | null }>('/internal/key');
-        const poked: string[] = [];
-        const started: string[] = [];
-        await Promise.all(
-          files.map(async (file) => {
-            const id = `${file.id}-v${file.version}-${locale}`;
-            const response = await env.JOBS.get(env.JOBS.idFromName(id)).fetch(
-              new Request('http://internal/resume', { method: 'POST' }),
-            );
-            const body = await response.json<Job | null>().catch(() => null);
-            if (body) {
-              if (body.status !== 'completed' && body.status !== 'cancelled') poked.push(file.id);
-              return;
-            }
-            if (key && !prepared.has(file.id)) {
-              await startJob(env, file, locale, project).catch(() => {});
-              started.push(file.id);
-            }
-          }),
+        const result = await call<{ poked: string[]; started: string[] }>(
+          '/internal/sweep-preparation',
+          { locale, apiKey: key },
         );
-        return json({ resumed: poked, started });
+        return json({ resumed: result.poked, started: result.started });
       }
       const visualMatch = url.pathname.match(/^\/api\/visuals\/([a-f0-9-]+)\/(\d+)\/([^/]+)$/);
       if (visualMatch && request.method === 'GET') {
