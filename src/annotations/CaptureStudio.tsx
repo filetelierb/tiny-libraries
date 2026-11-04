@@ -811,7 +811,12 @@ function StudioBody({
             style={{
               width: cropWidth * scale,
               height: cropHeight * scale,
-              cursor: tool === 'select' ? 'default' : 'crosshair',
+              cursor:
+                tool === 'select'
+                  ? 'default'
+                  : tool === 'text'
+                    ? 'text'
+                    : 'crosshair',
             }}
             viewBox={`${crop.x * space.width} ${crop.y * space.height} ${cropWidth} ${cropHeight}`}
             tabIndex={0}
