@@ -467,6 +467,128 @@ function tutorFlows(events: AgentEvent[], t: T): TutorFlow[] {
   return [...by.values()].sort((a, b) => b.lastAt.localeCompare(a.lastAt));
 }
 
+/** The stages an assessment preparation passes through: gathering study context, choosing
+ * topics and weaknesses, drafting questions, the full plan being ready, and later grading. */
+const ASSESSMENT_STAGES = ['context', 'topics', 'generate', 'ready', 'grade'] as const;
+type AssessmentStage = (typeof ASSESSMENT_STAGES)[number];
+const assessmentStageIcon: Record<AssessmentStage, React.ComponentType<{ size?: number }>> = {
+  context: Search,
+  topics: LayoutList,
+  generate: Sparkles,
+  ready: CircleDot,
+  grade: Check,
+};
+type AssessmentFlow = {
+  key: string;
+  label: string;
+  stages: Record<AssessmentStage, { status: Status; label: string }>;
+  stageEvents: Record<AssessmentStage, AgentEvent[]>;
+  lastAt: string;
+};
+const assessmentStageOf: Partial<Record<string, AssessmentStage>> = {
+  'assessment.context.sources': 'context',
+  'assessment.context.evidence': 'context',
+  'assessment.context.quizzes': 'context',
+  'assessment.context.flashcards': 'context',
+  'assessment.context.strengths': 'context',
+  'assessment.context.prior': 'context',
+  'assessment.batch.weaknesses': 'topics',
+  'assessment.batch.plan': 'topics',
+  'assessment.batch.generate': 'generate',
+  'assessment.batch.done': 'generate',
+  'assessment.batch.failed': 'generate',
+  'assessment.plan.complete': 'ready',
+  'assessment.grade.start': 'grade',
+  'assessment.grade.done': 'grade',
+  'assessment.grade.failed': 'grade',
+};
+
+/** Groups assessment events into a single lane keyed by their session, since assessment
+ * events do not carry a fileId (they span the selected sources together). */
+function assessmentFlows(events: AgentEvent[], t: T): AssessmentFlow[] {
+  const by = new Map<string, AssessmentFlow>();
+  const label: Record<AssessmentStage, string> = {
+    context: (t as Record<string, string>).agentAssessmentStage_context || 'Context',
+    topics: (t as Record<string, string>).agentAssessmentStage_topics || 'Topics',
+    generate: (t as Record<string, string>).agentAssessmentStage_generate || 'Questions',
+    ready: (t as Record<string, string>).agentAssessmentStage_ready || 'Ready',
+    grade: (t as Record<string, string>).agentAssessmentStage_grade || 'Grade',
+  };
+  const ensure = (event: AgentEvent): AssessmentFlow | null => {
+    if (event.tool !== 'assessment') return null;
+    const key = 'assessment';
+    let flow = by.get(key);
+    if (!flow) {
+      flow = {
+        key,
+        label: (t as Record<string, string>).agentAssessmentLabel || 'Review test',
+        stages: Object.fromEntries(
+          ASSESSMENT_STAGES.map((stage) => [
+            stage,
+            { status: 'pending' as Status, label: label[stage] },
+          ]),
+        ) as AssessmentFlow['stages'],
+        stageEvents: Object.fromEntries(
+          ASSESSMENT_STAGES.map((stage) => [stage, [] as AgentEvent[]]),
+        ) as AssessmentFlow['stageEvents'],
+        lastAt: event.at,
+      };
+      by.set(key, flow);
+    }
+    if (event.at > flow.lastAt) flow.lastAt = event.at;
+    return flow;
+  };
+  for (const event of [...events].reverse()) {
+    const flow = ensure(event);
+    if (!flow) continue;
+    const stage = assessmentStageOf[event.action];
+    if (stage) flow.stageEvents[stage].unshift(event);
+    switch (event.action) {
+      case 'assessment.context.sources':
+      case 'assessment.context.evidence':
+      case 'assessment.context.quizzes':
+      case 'assessment.context.flashcards':
+      case 'assessment.context.strengths':
+      case 'assessment.context.prior':
+        flow.stages.context = { status: 'active', label: label.context };
+        break;
+      case 'assessment.batch.weaknesses':
+        flow.stages.context = { status: 'done', label: label.context };
+        flow.stages.topics = { status: 'active', label: label.topics };
+        break;
+      case 'assessment.batch.plan':
+        flow.stages.topics = { status: 'active', label: label.topics };
+        break;
+      case 'assessment.batch.generate':
+        flow.stages.topics = { status: 'done', label: label.topics };
+        flow.stages.generate = { status: 'active', label: label.generate };
+        break;
+      case 'assessment.batch.done':
+        flow.stages.generate = { status: 'active', label: label.generate };
+        break;
+      case 'assessment.batch.failed':
+        flow.stages.generate = { status: 'failed', label: label.generate };
+        break;
+      case 'assessment.plan.complete':
+        flow.stages.context = { status: 'done', label: label.context };
+        flow.stages.topics = { status: 'done', label: label.topics };
+        flow.stages.generate = { status: 'done', label: label.generate };
+        flow.stages.ready = { status: 'done', label: label.ready };
+        break;
+      case 'assessment.grade.start':
+        flow.stages.grade = { status: 'active', label: label.grade };
+        break;
+      case 'assessment.grade.done':
+        flow.stages.grade = { status: 'done', label: label.grade };
+        break;
+      case 'assessment.grade.failed':
+        flow.stages.grade = { status: 'failed', label: label.grade };
+        break;
+    }
+  }
+  return [...by.values()].sort((a, b) => b.lastAt.localeCompare(a.lastAt));
+}
+
 /** Diagram view: one pipeline per file for preparation, one per conversation for the tutor. */
 export function AgentFlow({
   events,
@@ -479,9 +601,13 @@ export function AgentFlow({
 }) {
   const flows = useMemo(() => fileFlows(events, t), [events, t]);
   const tutorRows = useMemo(() => tutorFlows(events, t), [events, t]);
+  const assessmentRows = useMemo(() => assessmentFlows(events, t), [events, t]);
   const [selected, setSelected] = useState<Record<string, Stage | null>>({});
   const [tutorSelected, setTutorSelected] = useState<Record<string, TutorStage | null>>({});
-  if (!flows.length && !tutorRows.length) return null;
+  const [assessmentSelected, setAssessmentSelected] = useState<
+    Record<string, AssessmentStage | null>
+  >({});
+  if (!flows.length && !tutorRows.length && !assessmentRows.length) return null;
   return (
     <div className="agent-flows">
       {tutorRows.map((flow) => {
@@ -548,6 +674,113 @@ export function AgentFlow({
                 <header>
                   {(() => {
                     const Icon = tutorStageIcon[picked];
+                    return <Icon size={14} aria-hidden="true" />;
+                  })()}
+                  <strong>{flow.stages[picked].label}</strong>
+                  <small>
+                    {flow.stageEvents[picked].length}{' '}
+                    {flow.stageEvents[picked].length === 1 ? t.agentDetailStep : t.agentDetailSteps}
+                  </small>
+                </header>
+                <ol className="flow-timeline">
+                  {flow.stageEvents[picked].map((event) => (
+                    <li key={event.id} className="flow-timeline-item">
+                      <time
+                        className="flow-timeline-time"
+                        dateTime={event.at}
+                        title={new Date(event.at).toLocaleString(locale)}
+                      >
+                        {timeLabel(event.at, locale, t.agentJustNow)}
+                      </time>
+                      <div className="flow-timeline-body">
+                        <strong>{event.summary}</strong>
+                        {event.model && (
+                          <small className="flow-timeline-model">
+                            {event.model}
+                            {event.reasoningEffort
+                              ? ` · ${t.agentEffort}: ${event.reasoningEffort}`
+                              : ''}
+                          </small>
+                        )}
+                        {event.elapsedMs !== undefined && (
+                          <div className="flow-timeline-metrics">
+                            <span>{elapsed(event.elapsedMs)}</span>
+                          </div>
+                        )}
+                        {event.detail && <small className="agent-detail">{event.detail}</small>}
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            )}
+          </section>
+        );
+      })}
+      {assessmentRows.map((flow) => {
+        const picked = assessmentSelected[flow.key] ?? null;
+        return (
+          <section
+            key={`assessment:${flow.key}`}
+            className="flow-row flow-row-assessment"
+            aria-label={flow.label}
+          >
+            <h3>
+              <LayoutList size={13} aria-hidden="true" />
+              {(t as Record<string, string>).agentTool_assessment || 'Assessment'} · {flow.label}
+            </h3>
+            <ol className="flow-stages">
+              {ASSESSMENT_STAGES.map((stage) => {
+                const state = flow.stages[stage];
+                const Icon = assessmentStageIcon[stage];
+                const Mark =
+                  state.status === 'done'
+                    ? Check
+                    : state.status === 'active'
+                      ? LoaderCircle
+                      : state.status === 'failed'
+                        ? CircleAlert
+                        : null;
+                const empty = !flow.stageEvents[stage].length;
+                return (
+                  <li
+                    key={stage}
+                    className={`flow-stage ${state.status} ${picked === stage ? 'selected' : ''}`}
+                  >
+                    <button
+                      type="button"
+                      className="flow-stage-head-button"
+                      disabled={empty}
+                      aria-pressed={picked === stage}
+                      onClick={() =>
+                        setAssessmentSelected((prev) => ({
+                          ...prev,
+                          [flow.key]: prev[flow.key] === stage ? null : stage,
+                        }))
+                      }
+                    >
+                      <div className="flow-stage-head">
+                        <Icon size={16} aria-hidden="true" />
+                        <span>{state.label}</span>
+                      </div>
+                      <div
+                        className="flow-stage-mark"
+                        aria-label={t[`agentStatus_${state.status}` as keyof T] as string}
+                      >
+                        {Mark && (
+                          <Mark size={14} className={state.status === 'active' ? 'spin' : ''} />
+                        )}
+                      </div>
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
+            {picked && flow.stageEvents[picked].length > 0 && (
+              <div className="flow-stage-details">
+                <header>
+                  {(() => {
+                    const Icon = assessmentStageIcon[picked];
                     return <Icon size={14} aria-hidden="true" />;
                   })()}
                   <strong>{flow.stages[picked].label}</strong>
