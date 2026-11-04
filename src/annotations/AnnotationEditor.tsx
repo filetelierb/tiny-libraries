@@ -14,7 +14,10 @@ import {
   Link,
   Quote,
   Code,
+  Clock,
+  FileText,
 } from 'lucide-react';
+import { sourceLocationStamp } from '../../shared/capture-source';
 import {
   annotationInputSchema,
   annotationSnapshotSchema,
@@ -452,13 +455,39 @@ function EditorForm({
       <div className="annotation-editor" aria-busy={pending}>
         <fieldset className="annotation-edit-fields" disabled={pending || !!conflict}>
           <p className="annotation-source">{source?.name || t.sessionAnnotation}</p>
-          {(request.location.page || request.location.seconds != null) && (
+          {source && (request.location.page || request.location.seconds != null) && (
             <div className="annotation-source-chips" aria-label={t.captureLocationField}>
               <span className="annotation-source-chip">
                 {request.location.page
                   ? `${t.page} ${request.location.page}`
                   : `${Math.floor(request.location.seconds! / 60)}:${String(Math.floor(request.location.seconds! % 60)).padStart(2, '0')}`}
               </span>
+              {(source.kind === 'video' || source.kind === 'audio' || source.kind === 'pdf') && (
+                <Button
+                  className="annotation-source-add"
+                  disabled={pending}
+                  onClick={() => {
+                    const pane = [...document.querySelectorAll<HTMLElement>('[data-source-id]')].find(
+                      (node) => node.dataset.sourceId === source.id,
+                    );
+                    const media = pane?.querySelector<HTMLMediaElement>('audio,video');
+                    const page = pane?.querySelector<HTMLElement>('[data-pdf-page]')?.dataset.pdfPage;
+                    const location =
+                      source.kind === 'pdf'
+                        ? { page: page ? Number(page) || 1 : 1 }
+                        : {
+                            seconds:
+                              media && Number.isFinite(media.currentTime) ? media.currentTime : 0,
+                          };
+                    void session.workspace
+                      .addStamp(sourceLocationStamp(source, location))
+                      .catch((e) => setError(e instanceof Error ? e.message : t.error));
+                  }}
+                >
+                  {source.kind === 'pdf' ? <FileText /> : <Clock />}
+                  {source.kind === 'pdf' ? t.captureCurrentPage : t.captureCurrentTime}
+                </Button>
+              )}
             </div>
           )}
           {request.location.quote && (

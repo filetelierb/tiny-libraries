@@ -21,11 +21,27 @@ import { Button, IconButton, Modal } from '../design/components';
 import type { T } from '../i18n';
 import { CaptureWorkspace } from './CaptureWorkspace';
 import { CaptureStudio } from './CaptureStudio';
+import { captureSource } from './capture';
 import { capturePreviewUrl, capturePath } from './captureClient';
 import { api } from '../api';
 import { stampLabel } from './captureLabels';
 export { stampLabel } from './captureLabels';
 import { captureDrawingSchema, type CaptureDrawing } from '../../shared/capture-drawing';
+
+function sourcePaneTime(sourceId: string): number | undefined {
+  const pane = [...document.querySelectorAll<HTMLElement>('[data-source-id]')].find(
+    (node) => node.dataset.sourceId === sourceId,
+  );
+  const media = pane?.querySelector<HTMLMediaElement>('audio,video');
+  return media && Number.isFinite(media.currentTime) ? media.currentTime : undefined;
+}
+function sourcePanePage(sourceId: string): number | undefined {
+  const pane = [...document.querySelectorAll<HTMLElement>('[data-source-id]')].find(
+    (node) => node.dataset.sourceId === sourceId,
+  );
+  const page = pane?.querySelector<HTMLElement>('[data-pdf-page]')?.dataset.pdfPage;
+  return page ? Number(page) || undefined : undefined;
+}
 
 function shortTime(seconds: number) {
   const whole = Math.max(0, Math.floor(seconds)),
@@ -171,6 +187,25 @@ export function CaptureCollectionEditor({
   function action(work: Promise<unknown>) {
     void work.catch((e) => setError(e instanceof Error ? e.message : t.error));
   }
+  async function captureCurrentFrame(annotate: boolean) {
+    if (!source) throw new Error(t.captureChooseSource);
+    const current =
+      source.kind === 'pdf'
+        ? { page: sourcePanePage(source.id) ?? location.page ?? 1 }
+        : { seconds: sourcePaneTime(source.id) ?? location.seconds ?? 0 };
+    const stamp = sourceLocationStamp(source, current);
+    const image = await captureSource(source, current);
+    if (!image?.blob) throw new Error(t.captureNotReady);
+    const id = await workspace.add(image.blob, 'image', source.name, stamp, false, {
+      id: source.id,
+      version: source.version,
+      name: source.name,
+    });
+    if (annotate && id) {
+      await workspace.stageOne(id);
+      setStudio(id);
+    }
+  }
   const entries = value.items.flatMap((item) =>
       item.version ? [{ ...item.version, label: item.label }] : [],
     ),
@@ -303,6 +338,34 @@ export function CaptureCollectionEditor({
         </Button>
         {adding && (
           <div className="capture-add-options" role="group" aria-label={t.captureAdd}>
+            {source && (source.kind === 'video' || source.kind === 'image' || source.kind === 'pdf') && (
+              <>
+                <Button
+                  disabled={disabled || busy || value.items.length >= 12}
+                  onClick={() => {
+                    setAdding(false);
+                    setBusy(true);
+                    void captureCurrentFrame(false)
+                      .catch((e) => setError(e instanceof Error ? e.message : t.error))
+                      .finally(() => setBusy(false));
+                  }}
+                >
+                  {t.captureFramePlain}
+                </Button>
+                <Button
+                  disabled={disabled || busy || value.items.length >= 12}
+                  onClick={() => {
+                    setAdding(false);
+                    setBusy(true);
+                    void captureCurrentFrame(true)
+                      .catch((e) => setError(e instanceof Error ? e.message : t.error))
+                      .finally(() => setBusy(false));
+                  }}
+                >
+                  {t.captureFrameAnnotated}
+                </Button>
+              </>
+            )}
             <Button
               disabled={disabled || value.items.length >= 12}
               onClick={() => {
@@ -310,7 +373,9 @@ export function CaptureCollectionEditor({
                 setPicker('capture');
               }}
             >
-              {t.captureFromLibrary}
+              {source && (source.kind === 'video' || source.kind === 'image' || source.kind === 'pdf')
+                ? t.captureFrameSearch
+                : t.captureFromLibrary}
             </Button>
             <Button
               disabled={disabled || value.items.length >= 12}

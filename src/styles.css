@@ -2078,6 +2078,14 @@ body:has(.panel-resizer.resizing) {
   font-size: var(--font-size-small);
   font-variant-numeric: tabular-nums;
 }
+.annotation-source-add {
+  padding: 4px 12px;
+  font-size: var(--font-size-small);
+}
+.annotation-source-add > svg {
+  width: 14px;
+  height: 14px;
+}
 .annotation-rich {
   margin: 8px 0;
   border: 1px solid var(--border);
@@ -6951,9 +6959,12 @@ body:has(.panel-resizer.resizing) {
 .capture-tile-preview img {
   display: block;
   width: 100%;
-  aspect-ratio: 16 / 9;
+  max-height: 140px;
   object-fit: contain;
   background: var(--muted);
+}
+.capture-collection-grid .capture-tile-preview img {
+  max-height: 110px;
 }
 .capture-tile-bar {
   display: grid;
