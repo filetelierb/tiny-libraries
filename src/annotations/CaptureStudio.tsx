@@ -295,6 +295,24 @@ function StudioBody({
     };
   }, [drawing]);
   useEffect(() => {
+    if (!selected || editing) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== 'Delete' && event.key !== 'Backspace') return;
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable)
+      )
+        return;
+      event.preventDefault();
+      removeSelected();
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [selected, editing]);
+  useEffect(() => {
     if (!editing) return;
     const update = () => {
       const rect = svg.current?.getBoundingClientRect();
@@ -527,6 +545,7 @@ function StudioBody({
       return;
     }
     let object: CaptureObject | null = null;
+    const transient = g.mode === 'move' || g.mode === 'resize';
     if (g.mode === 'move' && g.object)
       object = moveCaptureObject(g.object, { x: p.x - g.start.x, y: p.y - g.start.y }, space);
     else if (g.mode === 'resize' && g.object) {
@@ -540,14 +559,28 @@ function StudioBody({
     else object = makeObject([...g.points, p]);
     if (
       object &&
-      commit({
-        ...model.current,
-        objects: g.object
-          ? model.current.objects.map((o) => (o.id === object!.id ? object! : o))
-          : [...model.current.objects, object],
-      })
-    )
-      setSelected(object.id);
+      commit(
+        {
+          ...model.current,
+          objects: g.object
+            ? model.current.objects.map((o) => (o.id === object!.id ? object! : o))
+            : [...model.current.objects, object],
+        },
+        !transient,
+      )
+    ) {
+      // Fresh draws don't auto-select so the handles don't flash in; moves/resizes
+      // keep the existing selection and do not push a new history entry either.
+      if (g.mode !== 'draw' && !transient) setSelected(object.id);
+    }
+  }
+  function abandonGesture() {
+    const g = gesture.current;
+    if (!g) return;
+    gesture.current = null;
+    setLive(null);
+    const svgEl = svg.current;
+    if (svgEl && svgEl.hasPointerCapture(g.id)) svgEl.releasePointerCapture(g.id);
   }
   async function leave(discard = false) {
     if (busy) return;
@@ -570,6 +603,7 @@ function StudioBody({
     }
   }
   function undo(back: boolean) {
+    abandonGesture();
     if (editing) {
       editText(null);
       return;
