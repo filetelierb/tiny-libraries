@@ -534,14 +534,14 @@ export async function createAssessment(
     }
     if (!options.settings.configured)
       throw new AssessmentError('Add a Meta API key in Settings to prepare an assessment.', 409);
-    const existing = [...(await tx.list<Stored>({ prefix: 'assessment:' })).values()].find(
+    // The session's previous unfinished assessment is auto-cancelled; the saved-tests list and
+    // Resume banner were removed from the UI, so blocking here would leave the user with a
+    // button that silently does nothing and no path to resolve it.
+    const abandoned = [...(await tx.list<Stored>({ prefix: 'assessment:' })).values()].filter(
       (r) => r.sessionId === input.sessionId && !['completed', 'cancelled'].includes(r.status),
     );
-    if (existing)
-      throw new AssessmentError(
-        'This session already has an unfinished assessment. Resume, retry or cancel it first.',
-        409,
-      );
+    for (const r of abandoned)
+      await tx.put(key(r.id), { ...r, status: 'cancelled', updatedAt: new Date().toISOString() });
     const context = await captureAssessmentContext(
       tx,
       input.sessionId,
