@@ -1,6 +1,6 @@
 import type { AnnotationSummary } from '../shared/annotations';
 import { conversationMessageSources, type Conversation } from '../shared/conversations';
-import type { Directory, Learning, Source, StudySession } from '../shared/domain';
+import type { Attempt, Directory, Learning, Source, StudySession } from '../shared/domain';
 import type {
   AssessmentConfig,
   AssessmentContext,
@@ -9,6 +9,7 @@ import type {
   AssessmentSource,
   AssessmentSummary,
 } from '../shared/assessments';
+import type { CardReview, CardSchedule, Flashcard } from '../shared/flashcards';
 import { sourceState } from '../shared/directories';
 import { validateAssessmentCitation } from '../shared/assessments';
 import { readQuestionAttachments } from './tutor-attachments';
@@ -274,12 +275,14 @@ export async function captureAssessmentContext(
         });
     }
   }
+  const studyHistory = await captureStudyHistory(tx, config.sourceIds, sources);
   const context = {
     sources,
     ...(attachments !== undefined ? { attachments } : {}),
     conversation: conversation.slice(-20),
     gaps: [...new Set(gaps)],
     prior: prior.slice(0, 60),
+    ...(studyHistory.length ? { studyHistory } : {}),
     capturedAt: new Date().toISOString(),
   };
   if (prior.length > 60)
@@ -292,4 +295,84 @@ export async function captureAssessmentContext(
       413,
     );
   return context;
+}
+/**
+ * Mini-quiz attempts and flashcard reviews tied to each selected source — turned into weak
+ * concept counts and struggling card snippets so the Librarian can bias questions toward the
+ * learner's weak spots. Keeps the output bounded so it stays small enough to fit in the
+ * generation prompt.
+ */
+async function captureStudyHistory(
+  tx: GlossaryStore,
+  sourceIds: string[],
+  sources: AssessmentSource[],
+): Promise<NonNullable<AssessmentContext['studyHistory']>> {
+  const selected = new Set(sourceIds);
+  const attempts = [...(await tx.list<Attempt>({ prefix: 'attempt:' })).values()].filter(
+    (attempt) => selected.has(attempt.sourceId),
+  );
+  const decks = [
+    ...(
+      await tx.list<{
+        id: string;
+        sourceId: string;
+        sourceVersion: number;
+        status: string;
+        cards: Flashcard[];
+      }>({ prefix: 'card-deck:' })
+    ).values(),
+  ].filter((deck) => selected.has(deck.sourceId) && deck.status === 'ready');
+  const reviewsByCard = new Map<string, CardReview[]>();
+  for (const review of (await tx.list<CardReview>({ prefix: 'card-review:' })).values()) {
+    const list = reviewsByCard.get(review.cardId) || [];
+    list.push(review);
+    reviewsByCard.set(review.cardId, list);
+  }
+  const history: NonNullable<AssessmentContext['studyHistory']> = [];
+  for (const sourceId of sourceIds) {
+    const file = sources.find((s) => s.id === sourceId);
+    if (!file) continue;
+    const sourceAttempts = attempts.filter((a) => a.sourceId === sourceId);
+    const grouped = new Map<string, { concept: string; wrong: number; total: number }>();
+    for (const a of sourceAttempts) {
+      const key = a.concept.toLowerCase();
+      const entry = grouped.get(key) || { concept: a.concept, wrong: 0, total: 0 };
+      entry.total++;
+      if (!a.correct) entry.wrong++;
+      grouped.set(key, entry);
+    }
+    const weakConcepts = [...grouped.values()]
+      .filter((g) => g.wrong > 0)
+      .sort((a, b) => b.wrong / Math.max(b.total, 1) - a.wrong / Math.max(a.total, 1))
+      .slice(0, 8);
+    const sourceCards = decks.flatMap((d) => d.cards);
+    const struggling: NonNullable<AssessmentContext['studyHistory']>[number]['strugglingCards'] =
+      [];
+    for (const card of sourceCards) {
+      const schedule = await tx.get<CardSchedule>(`card-schedule:${card.id}`);
+      if (!schedule) continue;
+      const reviews = (reviewsByCard.get(card.id) || []).sort((a, b) =>
+        a.createdAt.localeCompare(b.createdAt),
+      );
+      const last = reviews.at(-1);
+      // Treat a card as "struggling" if the learner lapsed at least once OR their most recent
+      // rating was "again" or "hard" — the AI is looking for topics they still stumble on.
+      if (schedule.lapses === 0 && last && last.grade !== 'again' && last.grade !== 'hard')
+        continue;
+      struggling.push({
+        front: card.front.slice(0, 180),
+        lastGrade: last?.grade || 'none',
+        lapses: schedule.lapses,
+      });
+    }
+    struggling.sort((a, b) => b.lapses - a.lapses);
+    if (weakConcepts.length || struggling.length)
+      history.push({
+        sourceId,
+        sourceName: file.name,
+        weakConcepts,
+        strugglingCards: struggling.slice(0, 10),
+      });
+  }
+  return history;
 }

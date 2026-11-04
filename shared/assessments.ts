@@ -138,6 +138,15 @@ export type AssessmentContext = {
     feedback: string;
     citations: AssessmentCitation[];
   }>;
+  /** Signals from the learner's prior study inside this project: wrong mini-quiz
+   * answers and flashcards they keep failing. Used by the Librarian to pick weak
+   * topics when planning questions. */
+  studyHistory?: Array<{
+    sourceId: string;
+    sourceName: string;
+    weakConcepts: Array<{ concept: string; wrong: number; total: number }>;
+    strugglingCards: Array<{ front: string; lastGrade: string; lapses: number }>;
+  }>;
 };
 export type AssessmentImageData = { attachmentId: string; image: AttachmentImage; data: string };
 export const assessmentAnswerSchema = z.object({

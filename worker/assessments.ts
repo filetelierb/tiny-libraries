@@ -105,6 +105,7 @@ async function storeContext(tx: GlossaryStore, id: string, context: AssessmentCo
     ...(context.attachments !== undefined
       ? { attachmentIds: context.attachments.map((item) => item.attachment.id) }
       : {}),
+    ...(context.studyHistory ? { studyHistory: context.studyHistory } : {}),
   });
   for (const { attachment, segments } of context.attachments || []) {
     await boundedPut(tx, `assessment-attachment:${id}:${attachment.id}`, attachment);
@@ -131,7 +132,7 @@ async function storeContext(tx: GlossaryStore, id: string, context: AssessmentCo
 }
 async function loadContext(tx: GlossaryStore, record: Stored): Promise<AssessmentContext> {
   const base = await tx.get<
-    Pick<AssessmentContext, 'gaps' | 'capturedAt'> & { attachmentIds?: string[] }
+    Pick<AssessmentContext, 'gaps' | 'capturedAt' | 'studyHistory'> & { attachmentIds?: string[] }
   >(`assessment-context:${record.id}`);
   if (!base) throw new AssessmentError('Saved assessment context is unavailable.', 409);
   const attachments: AttachmentContent[] = [];
@@ -167,6 +168,7 @@ async function loadContext(tx: GlossaryStore, record: Stored): Promise<Assessmen
     gaps: base.gaps,
     capturedAt: base.capturedAt,
     ...(base.attachmentIds !== undefined ? { attachments } : {}),
+    ...(base.studyHistory ? { studyHistory: base.studyHistory } : {}),
     sources,
     conversation: [
       ...(
@@ -571,21 +573,78 @@ export async function createAssessment(
   });
   if (record) {
     if (options.emit) {
-      const files = record.context.sources.length;
-      const totalPassages = record.context.sources.reduce((n, s) => n + s.segments.length, 0);
+      const ctx = record.context;
+      const files = ctx.sources.length;
+      const totalPassages = ctx.sources.reduce((n, s) => n + s.segments.length, 0);
       void options.emit(
         'assessment.context.sources',
         `Analysed ${files} studied file${files === 1 ? '' : 's'} and captured ${totalPassages} evidence passage${totalPassages === 1 ? '' : 's'}.`,
-        { detail: record.context.sources.map((s) => s.name).join(', ') },
+        { detail: ctx.sources.map((s) => s.name).join(', ') },
       );
-      const attachmentCount = record.context.attachments?.length || 0;
+      const attachmentCount = ctx.attachments?.length || 0;
       if (attachmentCount)
         void options.emit(
           'assessment.context.evidence',
           `Linked ${attachmentCount} saved evidence attachment${attachmentCount === 1 ? '' : 's'}.`,
         );
-      const priorCount = record.context.prior.length;
-      const priorReports = new Set(record.context.prior.map((p) => p.reportId)).size;
+      const miniQuizCount = (ctx.studyHistory || []).reduce(
+        (n, h) => n + h.weakConcepts.reduce((x, c) => x + c.total, 0),
+        0,
+      );
+      const miniQuizWrong = (ctx.studyHistory || []).reduce(
+        (n, h) => n + h.weakConcepts.reduce((x, c) => x + c.wrong, 0),
+        0,
+      );
+      if (miniQuizCount) {
+        const topConcepts = (ctx.studyHistory || [])
+          .flatMap((h) => h.weakConcepts)
+          .slice(0, 5)
+          .map((c) => `${c.concept} (${c.wrong}/${c.total})`)
+          .join(', ');
+        void options.emit(
+          'assessment.context.quizzes',
+          `Scanned ${miniQuizCount} mini-quiz attempt${miniQuizCount === 1 ? '' : 's'} across the selected files and found ${miniQuizWrong} miss${miniQuizWrong === 1 ? '' : 'es'} in weak concepts.`,
+          { detail: topConcepts || undefined },
+        );
+      } else {
+        void options.emit(
+          'assessment.context.quizzes',
+          'No mini-quiz history for the selected files yet.',
+        );
+      }
+      const strugglingCards = (ctx.studyHistory || []).reduce(
+        (n, h) => n + h.strugglingCards.length,
+        0,
+      );
+      if (strugglingCards) {
+        const top = (ctx.studyHistory || [])
+          .flatMap((h) => h.strugglingCards)
+          .slice(0, 5)
+          .map((c) => `${c.front} (${c.lastGrade}, lapses ${c.lapses})`)
+          .join(' | ');
+        void options.emit(
+          'assessment.context.flashcards',
+          `Reviewed flashcard history and flagged ${strugglingCards} card${strugglingCards === 1 ? '' : 's'} the learner keeps missing.`,
+          { detail: top || undefined },
+        );
+      } else {
+        void options.emit(
+          'assessment.context.flashcards',
+          'No struggling flashcards for the selected files.',
+        );
+      }
+      if (miniQuizWrong || strugglingCards) {
+        const sources = (ctx.studyHistory || [])
+          .map((h) => `${h.sourceName}: ${h.weakConcepts.length} weak concept${h.weakConcepts.length === 1 ? '' : 's'}, ${h.strugglingCards.length} struggling card${h.strugglingCards.length === 1 ? '' : 's'}`)
+          .join(' · ');
+        void options.emit(
+          'assessment.context.strengths',
+          'Identified strength and weakness signals per selected file to steer topic selection.',
+          { detail: sources || undefined },
+        );
+      }
+      const priorCount = ctx.prior.length;
+      const priorReports = new Set(ctx.prior.map((p) => p.reportId)).size;
       if (priorCount) {
         void options.emit(
           'assessment.context.prior',
@@ -594,7 +653,7 @@ export async function createAssessment(
       } else {
         void options.emit(
           'assessment.context.prior',
-          'No prior report answers were available to infer weak topics; starting from the study context alone.',
+          'No prior report answers were available to infer weak topics; using mini-quiz and flashcard signals plus the study context.',
         );
       }
     }
