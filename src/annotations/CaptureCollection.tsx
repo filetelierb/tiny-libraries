@@ -340,25 +340,23 @@ export function CaptureCollectionEditor({
             {source && (source.kind === 'video' || source.kind === 'image' || source.kind === 'pdf') && (
               <>
                 <Button
-                  disabled={disabled || busy || value.items.length >= 12}
+                  disabled={disabled || value.items.length >= 12}
                   onClick={() => {
                     setAdding(false);
-                    setBusy(true);
-                    void captureCurrentFrame(false)
-                      .catch((e) => setError(e instanceof Error ? e.message : t.error))
-                      .finally(() => setBusy(false));
+                    void captureCurrentFrame(false).catch((e) =>
+                      setError(e instanceof Error ? e.message : t.error),
+                    );
                   }}
                 >
                   {t.captureFramePlain}
                 </Button>
                 <Button
-                  disabled={disabled || busy || value.items.length >= 12}
+                  disabled={disabled || value.items.length >= 12}
                   onClick={() => {
                     setAdding(false);
-                    setBusy(true);
-                    void captureCurrentFrame(true)
-                      .catch((e) => setError(e instanceof Error ? e.message : t.error))
-                      .finally(() => setBusy(false));
+                    void captureCurrentFrame(true).catch((e) =>
+                      setError(e instanceof Error ? e.message : t.error),
+                    );
                   }}
                 >
                   {t.captureFrameAnnotated}
