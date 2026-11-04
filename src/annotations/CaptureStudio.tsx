@@ -865,7 +865,86 @@ function StudioBody({
             }}
           >
             <image href={captureBaseUrl(owner, id)} width={space.width} height={space.height} />
+            {drawing.objects.map((obj) => {
+              const o = live && live.id === obj.id ? live : obj;
+              if (o.kind === 'pen' || o.kind === 'highlight')
+                return (
+                  <polyline
+                    key={o.id}
+                    points={pointsPath(o)}
+                    fill="none"
+                    stroke={o.color}
+                    strokeWidth={o.width}
+                    strokeOpacity={o.kind === 'highlight' ? 0.3 : 1}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                );
+              if (o.kind === 'arrow') {
+                const [a, b] = o.points;
+                const ax = a.x * space.width,
+                  ay = a.y * space.height,
+                  bx = b.x * space.width,
+                  by = b.y * space.height;
+                const angle = Math.atan2(by - ay, bx - ax);
+                const head = Math.max(10, o.width * 3);
+                const hx1 = bx - head * Math.cos(angle - Math.PI / 6);
+                const hy1 = by - head * Math.sin(angle - Math.PI / 6);
+                const hx2 = bx - head * Math.cos(angle + Math.PI / 6);
+                const hy2 = by - head * Math.sin(angle + Math.PI / 6);
+                return (
+                  <g key={o.id} stroke={o.color} strokeWidth={o.width} fill="none" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1={ax} y1={ay} x2={bx} y2={by} />
+                    <polyline points={`${hx1},${hy1} ${bx},${by} ${hx2},${hy2}`} />
+                  </g>
+                );
+              }
+              if (o.kind === 'spotlight' && o.shape === 'rect') {
+                const [p1, p2] = [o.points[0], o.points.at(-1)!];
+                return (
+                  <rect
+                    key={o.id}
+                    x={Math.min(p1.x, p2.x) * space.width}
+                    y={Math.min(p1.y, p2.y) * space.height}
+                    width={Math.abs(p2.x - p1.x) * space.width}
+                    height={Math.abs(p2.y - p1.y) * space.height}
+                    fill={`${o.color}1a`}
+                    stroke={o.color}
+                    strokeWidth={o.borderWidth ?? o.width}
+                  />
+                );
+              }
+              if (o.kind === 'text' && (!editing || editing.id !== o.id)) {
+                return (
+                  <foreignObject
+                    key={o.id}
+                    x={o.point.x * space.width}
+                    y={o.point.y * space.height}
+                    width={Math.min(space.width, 420)}
+                    height={Math.max(40, o.fontSize * 2)}
+                    style={{ overflow: 'visible', pointerEvents: tool === 'select' ? 'auto' : 'none' }}
+                  >
+                    <div
+                      style={{
+                        fontFamily: '"Times New Roman", serif',
+                        fontSize: `${o.fontSize}px`,
+                        lineHeight: 1.3,
+                        color: o.color,
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word',
+                      }}
+                    >
+                      {o.text}
+                    </div>
+                  </foreignObject>
+                );
+              }
+              return null;
+            })}
             {preview &&
+              !drawing.objects.some((o) =>
+                ['comment', 'redact', 'mosaic'].includes(o.kind),
+              ) ? null : preview ? (
               (() => {
                 const pc = preview.drawing.crop || wholeCapture;
                 return (
@@ -875,9 +954,11 @@ function StudioBody({
                     y={pc.y * space.height}
                     width={pc.width * space.width}
                     height={pc.height * space.height}
+                    opacity={0.001}
                   />
                 );
-              })()}
+              })()
+            ) : null}
             {live &&
               ('points' in live ? (
                 (live.kind === 'redact' || live.kind === 'mosaic' || live.kind === 'spotlight') &&
