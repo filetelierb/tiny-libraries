@@ -146,6 +146,11 @@ async function prepareIntent(
     if (!source || sourceState(source, directories) === 'trash')
       throw new TutorJournalError('Restore or remove a deleted reference before sending');
     sources.set(id, source);
+    // Artifacts don't go through the preparation pipeline (chapters/glossary/flashcards are
+    // generated for uploaded sources, not for the Librarian's own writings). The tutor reads
+    // their body through browse_library/read_artifact instead, so a missing learning record
+    // is expected rather than a blocker.
+    if (source.kind === 'artifact') continue;
     const learning = await storage.get<Learning>(`learning:${id}`);
     if (
       (!learning || learning.sourceVersion !== source.version) &&
@@ -178,7 +183,7 @@ async function prepareIntent(
         );
       sourceIds.push(source.id);
     }
-    if (!materials.some((material) => material.sourceId === source.id)) {
+    if (source.kind !== 'artifact' && !materials.some((material) => material.sourceId === source.id)) {
       const learning = await storage.get<Learning>(`learning:${source.id}`);
       if (learning?.sourceVersion === source.version) materials.push(learning);
       else if (!context.location.quote)
