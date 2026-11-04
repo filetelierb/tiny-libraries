@@ -29,6 +29,7 @@ import { captureBaseUrl, capturePreviewUrl, stageCaptureDrawing } from './captur
 import {
   captureEditorPlacement,
   captureObjectBounds,
+  distToSegment,
   moveCaptureObject,
   transformCaptureObject,
 } from './drawingGeometry';
@@ -395,9 +396,25 @@ function StudioBody({
     );
   }
   function hit(p: CapturePoint) {
+    const tolerance = 5 / scale;
+    const pView = { x: p.x * space.width, y: p.y * space.height };
     return [...model.current.objects].reverse().find((o) => {
+      if ('points' in o && !('shape' in o && o.shape === 'rect')) {
+        const threshold = o.width / 2 + tolerance;
+        const pts = o.points;
+        if (pts.length === 1) {
+          const a = { x: pts[0].x * space.width, y: pts[0].y * space.height };
+          return Math.hypot(pView.x - a.x, pView.y - a.y) <= threshold;
+        }
+        for (let i = 1; i < pts.length; i++) {
+          const a = { x: pts[i - 1].x * space.width, y: pts[i - 1].y * space.height };
+          const b = { x: pts[i].x * space.width, y: pts[i].y * space.height };
+          if (distToSegment(pView, a, b) <= threshold) return true;
+        }
+        return false;
+      }
       const b = captureObjectBounds(o, space),
-        m = 5 / scale;
+        m = tolerance;
       return (
         p.x >= b.x - m / space.width &&
         p.x <= b.x + b.width + m / space.width &&

@@ -6,6 +6,19 @@ import type {
 } from '../../shared/capture-drawing';
 
 const clamp = (value: number, min = 0, max = 1) => Math.max(min, Math.min(max, value));
+export function distToSegment(
+  p: { x: number; y: number },
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+): number {
+  const dx = b.x - a.x,
+    dy = b.y - a.y,
+    len2 = dx * dx + dy * dy;
+  const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2));
+  const qx = a.x + t * dx,
+    qy = a.y + t * dy;
+  return Math.hypot(p.x - qx, p.y - qy);
+}
 export function captureObjectBounds(object: CaptureObject, space: CaptureSpace): CaptureRect {
   if (object.kind === 'text') {
     const padding = object.style === 'plain' ? 0 : 16,
