@@ -208,7 +208,7 @@ function StudioBody({
     start: CapturePoint;
     points: CapturePoint[];
     object?: CaptureObject;
-    mode: 'draw' | 'move' | 'resize' | 'tail' | 'text';
+    mode: 'draw' | 'move' | 'resize' | 'tail' | 'text' | 'arrowTip' | 'arrowTail';
     before: CaptureDrawing;
     pendingText?: TextEdit;
   } | null>(null);
@@ -527,7 +527,18 @@ function StudioBody({
       start: p,
       points: [p],
       object,
-      mode: target === 'resize' ? 'resize' : target === 'tail' ? 'tail' : object ? 'move' : 'draw',
+      mode:
+        target === 'resize'
+          ? 'resize'
+          : target === 'tail'
+            ? 'tail'
+            : target === 'arrowTip'
+              ? 'arrowTip'
+              : target === 'arrowTail'
+                ? 'arrowTail'
+                : object
+                  ? 'move'
+                  : 'draw',
       before: model.current,
     };
   }
@@ -547,7 +558,13 @@ function StudioBody({
         }),
       );
     } else if (g.mode === 'tail' && g.object?.kind === 'text') setLive({ ...g.object, tail: p });
-    else if (g.mode === 'draw') {
+    else if ((g.mode === 'arrowTip' || g.mode === 'arrowTail') && g.object?.kind === 'arrow') {
+      const [tail, tip] = g.object.points;
+      setLive({
+        ...g.object,
+        points: g.mode === 'arrowTip' ? [tail, p] : [p, tip],
+      });
+    } else if (g.mode === 'draw') {
       const last = g.points.at(-1)!;
       if (Math.hypot((last.x - p.x) * space.width, (last.y - p.y) * space.height) * scale < 2)
         return;
@@ -584,7 +601,13 @@ function StudioBody({
         height: Math.min(1 - b.y, Math.max(8 / scale / space.height, p.y - b.y)),
       });
     } else if (g.mode === 'tail' && g.object?.kind === 'text') object = { ...g.object, tail: p };
-    else object = makeObject([...g.points, p]);
+    else if ((g.mode === 'arrowTip' || g.mode === 'arrowTail') && g.object?.kind === 'arrow') {
+      const [tail, tip] = g.object.points;
+      object = {
+        ...g.object,
+        points: g.mode === 'arrowTip' ? [tail, p] : [p, tip],
+      };
+    } else object = makeObject([...g.points, p]);
     if (
       object &&
       commit(
@@ -953,17 +976,45 @@ function StudioBody({
                   strokeDasharray={`${5 / scale} ${3 / scale}`}
                   pointerEvents="none"
                 />
-                <rect
-                  data-handle="resize"
-                  aria-label={t.captureResize}
-                  x={(bounds.x + bounds.width) * space.width - 7 / scale}
-                  y={(bounds.y + bounds.height) * space.height - 7 / scale}
-                  width={14 / scale}
-                  height={14 / scale}
-                  fill="#fff"
-                  stroke="#007f78"
-                  strokeWidth={2 / scale}
-                />
+                {active?.kind === 'arrow' ? (
+                  <>
+                    <circle
+                      data-handle="arrowTail"
+                      aria-label={t.captureTail}
+                      cx={(live && 'points' in live ? live.points[0].x : active.points[0].x) * space.width}
+                      cy={(live && 'points' in live ? live.points[0].y : active.points[0].y) * space.height}
+                      r={8 / scale}
+                      fill="#fff"
+                      stroke="#007f78"
+                      strokeWidth={2 / scale}
+                      style={{ cursor: 'grab' }}
+                    />
+                    <circle
+                      data-handle="arrowTip"
+                      aria-label={t.captureTip}
+                      cx={(live && 'points' in live ? live.points[1].x : active.points[1].x) * space.width}
+                      cy={(live && 'points' in live ? live.points[1].y : active.points[1].y) * space.height}
+                      r={8 / scale}
+                      fill="#fff"
+                      stroke="#007f78"
+                      strokeWidth={2 / scale}
+                      style={{ cursor: 'grab' }}
+                    />
+                  </>
+                ) : (
+                  <rect
+                    data-handle="resize"
+                    aria-label={t.captureResize}
+                    x={(bounds.x + bounds.width) * space.width - 7 / scale}
+                    y={(bounds.y + bounds.height) * space.height - 7 / scale}
+                    width={14 / scale}
+                    height={14 / scale}
+                    fill="#fff"
+                    stroke="#007f78"
+                    strokeWidth={2 / scale}
+                    style={{ cursor: 'nwse-resize' }}
+                  />
+                )}
                 {active?.kind === 'text' && active.tail && (
                   <circle
                     data-handle="tail"
