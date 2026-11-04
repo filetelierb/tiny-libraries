@@ -6,19 +6,17 @@ import { Markdown } from '@tiptap/markdown';
 import {
   Bold,
   Italic,
-  Underline,
+  Heading2,
   List,
   ListOrdered,
+  IndentIncrease,
+  IndentDecrease,
   Link,
   Quote,
-  Code2,
-  Table,
-  Undo2,
-  Redo2,
+  Code,
 } from 'lucide-react';
 import {
   annotationInputSchema,
-  richDocumentSchema,
   annotationSnapshotSchema,
   richText,
   type Annotation,
@@ -180,7 +178,6 @@ function EditorForm({
     },
     [],
   );
-  const { sourceMode, markdown } = draft;
   function changeNote(patch: Partial<NoteDraft>, semantic = true) {
     const next = {
       ...draftRef.current,
@@ -200,7 +197,6 @@ function EditorForm({
       });
     return next;
   }
-  const setMarkdown = (markdown: string) => changeNote({ markdown });
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -247,22 +243,14 @@ function EditorForm({
     selector: ({ editor }) => ({
       bold: editor?.isActive('bold'),
       italic: editor?.isActive('italic'),
-      underline: editor?.isActive('underline'),
+      heading: editor?.isActive('heading', { level: 2 }),
       list: editor?.isActive('bulletList'),
       ordered: editor?.isActive('orderedList'),
-      table: editor?.isActive('table'),
-      heading: editor?.isActive('heading')
-        ? String(editor.getAttributes('heading').level)
-        : 'paragraph',
+      quote: editor?.isActive('blockquote'),
+      code: editor?.isActive('code'),
+      link: editor?.isActive('link'),
     }),
   });
-  const toggleSource = () => {
-    if (!editor) return;
-    if (sourceMode) {
-      editor.commands.setContent(markdown, { contentType: 'markdown' });
-      changeNote({ sourceMode: false, document: editor.getJSON() });
-    } else changeNote({ sourceMode: true, markdown: editor.getMarkdown() });
-  };
   function localFields(note: NoteDraft): NoteEdit {
     const collection = session.workspace.getSnapshot();
     return {
@@ -376,10 +364,6 @@ function EditorForm({
       if (request.sourceId && !source) throw new Error(t.sourceUnavailable);
       let current = draftRef.current;
       if (!current.pending) {
-        if (current.sourceMode) {
-          editor.commands.setContent(current.markdown, { contentType: 'markdown' });
-          current = changeNote({ document: richDocumentSchema.parse(editor.getJSON()) });
-        }
         const collection = await session.workspace.stageAll(),
           fields = localFields(current);
         const input = annotationInputSchema.parse({
@@ -480,30 +464,11 @@ function EditorForm({
           {request.location.quote && (
             <blockquote className="selected-quote">{request.location.quote}</blockquote>
           )}
+          <div className="annotation-rich">
           <div className="rich-toolbar" role="toolbar" aria-label={t.annotationFormatting}>
-            <select
-              aria-label={t.textStyle}
-              disabled={sourceMode || pending}
-              value={toolbar?.heading || 'paragraph'}
-              onChange={(event) => {
-                if (event.target.value === 'paragraph')
-                  editor?.chain().focus().setParagraph().run();
-                else
-                  editor
-                    ?.chain()
-                    .focus()
-                    .toggleHeading({ level: Number(event.target.value) as 1 | 2 | 3 })
-                    .run();
-              }}
-            >
-              <option value="paragraph">{t.paragraph}</option>
-              <option value="1">{t.headingOne}</option>
-              <option value="2">{t.headingTwo}</option>
-              <option value="3">{t.headingThree}</option>
-            </select>
             <IconButton
               label={t.bold}
-              disabled={sourceMode || pending}
+              disabled={pending}
               aria-pressed={toolbar?.bold}
               onClick={() => editor?.chain().focus().toggleBold().run()}
             >
@@ -511,23 +476,23 @@ function EditorForm({
             </IconButton>
             <IconButton
               label={t.italic}
-              disabled={sourceMode || pending}
+              disabled={pending}
               aria-pressed={toolbar?.italic}
               onClick={() => editor?.chain().focus().toggleItalic().run()}
             >
               <Italic />
             </IconButton>
             <IconButton
-              label={t.underline}
-              disabled={sourceMode || pending}
-              aria-pressed={toolbar?.underline}
-              onClick={() => editor?.chain().focus().toggleUnderline().run()}
+              label={t.headingTwo}
+              disabled={pending}
+              aria-pressed={toolbar?.heading}
+              onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}
             >
-              <Underline />
+              <Heading2 />
             </IconButton>
             <IconButton
               label={t.bulletList}
-              disabled={sourceMode || pending}
+              disabled={pending}
               aria-pressed={toolbar?.list}
               onClick={() => editor?.chain().focus().toggleBulletList().run()}
             >
@@ -535,98 +500,58 @@ function EditorForm({
             </IconButton>
             <IconButton
               label={t.numberedList}
-              disabled={sourceMode || pending}
+              disabled={pending}
               aria-pressed={toolbar?.ordered}
               onClick={() => editor?.chain().focus().toggleOrderedList().run()}
             >
               <ListOrdered />
             </IconButton>
             <IconButton
-              label={t.insertLink}
-              disabled={sourceMode || pending}
-              onClick={() => setLink(editor?.getAttributes('link').href || 'https://')}
+              label={t.indentIncrease}
+              disabled={pending}
+              onClick={() => editor?.chain().focus().sinkListItem('listItem').run()}
             >
-              <Link />
+              <IndentIncrease />
+            </IconButton>
+            <IconButton
+              label={t.indentDecrease}
+              disabled={pending}
+              onClick={() => editor?.chain().focus().liftListItem('listItem').run()}
+            >
+              <IndentDecrease />
             </IconButton>
             <IconButton
               label={t.blockQuote}
-              disabled={sourceMode || pending}
+              disabled={pending}
+              aria-pressed={toolbar?.quote}
               onClick={() => editor?.chain().focus().toggleBlockquote().run()}
             >
               <Quote />
             </IconButton>
             <IconButton
               label={t.codeBlock}
-              disabled={sourceMode || pending}
-              onClick={() => editor?.chain().focus().toggleCodeBlock().run()}
-            >
-              <Code2 />
-            </IconButton>
-            <IconButton
-              label={t.insertTable}
-              disabled={sourceMode || pending}
-              onClick={() =>
-                editor?.chain().focus().insertTable({ rows: 3, cols: 2, withHeaderRow: true }).run()
-              }
-            >
-              <Table />
-            </IconButton>
-            <IconButton
-              label={t.undo}
-              disabled={sourceMode || pending}
-              onClick={() => editor?.chain().focus().undo().run()}
-            >
-              <Undo2 />
-            </IconButton>
-            <IconButton
-              label={t.redo}
-              disabled={sourceMode || pending}
-              onClick={() => editor?.chain().focus().redo().run()}
-            >
-              <Redo2 />
-            </IconButton>
-            <Button
-              className="rich-toolbar-source"
               disabled={pending}
-              onClick={toggleSource}
-              aria-pressed={sourceMode}
+              aria-pressed={toolbar?.code}
+              onClick={() => editor?.chain().focus().toggleCode().run()}
             >
-              {sourceMode ? t.visualEditor : t.markdownSource}
-            </Button>
+              <Code />
+            </IconButton>
+            <IconButton
+              label={t.insertLink}
+              disabled={pending}
+              aria-pressed={toolbar?.link}
+              onClick={() => setLink(editor?.getAttributes('link').href || 'https://')}
+            >
+              <Link />
+            </IconButton>
           </div>
-          {toolbar?.table && !sourceMode && (
-            <fieldset disabled={pending} className="table-tools">
-              <Button onClick={() => editor?.chain().focus().addRowAfter().run()}>
-                {t.addRow}
-              </Button>
-              <Button onClick={() => editor?.chain().focus().addColumnAfter().run()}>
-                {t.addColumn}
-              </Button>
-              <Button onClick={() => editor?.chain().focus().deleteTable().run()}>
-                {t.removeTable}
-              </Button>
-            </fieldset>
-          )}
-          {sourceMode ? (
-            <textarea
-              disabled={pending}
-              className="annotation-markdown"
-              aria-label={t.annotationMarkdown}
-              value={markdown}
-              onChange={(event) => {
-                typingPause.pulse();
-                setMarkdown(event.target.value);
-              }}
-              onBlur={() => typingPause.release()}
-            />
-          ) : (
-            <EditorContent
-              editor={editor}
-              className="annotation-body"
-              onBlur={() => typingPause.release()}
-            />
-          )}
+          <EditorContent
+            editor={editor}
+            className="annotation-body"
+            onBlur={() => typingPause.release()}
+          />
           <p className="annotation-list-hint">{t.annotationListHint}</p>
+          </div>
           <CaptureCollectionEditor
             catalog={catalog}
             actions={treeActions}

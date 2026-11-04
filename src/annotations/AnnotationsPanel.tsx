@@ -148,25 +148,29 @@ export function AnnotationsPanel({
             <p>{t.notes}</p>
             <small>{all ? t.openSessionResources : source?.name || t.selectMaterial}</small>
           </div>
-          <IconButton label={t.newAnnotation} onClick={create}>
-            <Plus />
-          </IconButton>
+          {!composer && (
+            <IconButton label={t.newAnnotation} onClick={create}>
+              <Plus />
+            </IconButton>
+          )}
         </div>
-        <div className="segmented" role="tablist" aria-label={t.annotationScope}>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={!all}
-            disabled={!source}
-            onClick={() => setAll(false)}
-          >
-            {t.currentResource}
-          </button>
-          <button type="button" role="tab" aria-selected={all} onClick={() => setAll(true)}>
-            {t.allResources}
-          </button>
-        </div>
-        {all && (
+        {!composer && (
+          <div className="segmented" role="tablist" aria-label={t.annotationScope}>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={!all}
+              disabled={!source}
+              onClick={() => setAll(false)}
+            >
+              {t.currentResource}
+            </button>
+            <button type="button" role="tab" aria-selected={all} onClick={() => setAll(true)}>
+              {t.allResources}
+            </button>
+          </div>
+        )}
+        {!composer && all && (
           <details className="annotation-resource-filter">
             <summary>
               {t.filterResources} · {selectedIds.size} / {openFiles.length}

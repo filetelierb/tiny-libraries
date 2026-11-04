@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import {
-  ArrowLeft,
-  ArrowRight,
   ChevronLeft,
   ChevronRight,
+  Columns2,
   ImagePlus,
+  LayoutGrid,
   Camera,
   MapPin,
   Pencil,
   Trash2,
+  X,
 } from 'lucide-react';
 import { stampIdentity, type PublishedCapture } from '../../shared/captures';
 import type { Catalog, Source } from '../../shared/domain';
@@ -26,6 +27,13 @@ import { stampLabel } from './captureLabels';
 export { stampLabel } from './captureLabels';
 import { captureDrawingSchema, type CaptureDrawing } from '../../shared/capture-drawing';
 
+function shortTime(seconds: number) {
+  const whole = Math.max(0, Math.floor(seconds)),
+    h = Math.floor(whole / 3600),
+    m = Math.floor((whole % 3600) / 60),
+    s = String(whole % 60).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`;
+}
 async function normalizedImage(file: File, t: T) {
   if (
     !['image/png', 'image/jpeg', 'image/webp'].includes(file.type) ||
@@ -82,6 +90,9 @@ export function CaptureCollectionEditor({
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
     [retry, setRetry] = useState(0),
+    [view, setView] = useState<'list' | 'grid'>('list'),
+    [adding, setAdding] = useState(false),
+    [cursor, setCursor] = useState(0),
     input = useRef<HTMLInputElement>(null);
   const missing = value.items
     .filter(
@@ -164,153 +175,202 @@ export function CaptureCollectionEditor({
       item.version ? [{ ...item.version, label: item.label }] : [],
     ),
     selected = value.items.find((item) => item.descriptor.id === studio);
+  const total = value.items.length;
+  const safeCursor = Math.max(0, Math.min(cursor, total - 1));
+  if (total && cursor !== safeCursor) setCursor(safeCursor);
+  const displayed = view === 'list' && total ? [value.items[safeCursor]] : value.items;
   return (
     <section className="capture-collection" aria-label={t.captureCollection}>
-      <header>
+      <header className="capture-collection-head">
         <h3>
-          {t.captureCollection} <small>{value.items.length} / 12</small>
+          {total === 1 ? t.captureCountSingular : t.captureCountPlural.replace('{n}', String(total))}
         </h3>
+        <div className="capture-view-toggle" role="group" aria-label={t.captureViewToggle}>
+          <IconButton
+            label={t.captureViewList}
+            aria-pressed={view === 'list'}
+            onClick={() => setView('list')}
+          >
+            <Columns2 />
+          </IconButton>
+          <IconButton
+            label={t.captureViewGrid}
+            aria-pressed={view === 'grid'}
+            onClick={() => setView('grid')}
+          >
+            <LayoutGrid />
+          </IconButton>
+        </div>
+        {view === 'list' && total > 1 && (
+          <div className="capture-pagination" aria-label={t.capturePagination}>
+            <IconButton
+              label={t.capturePrevious}
+              disabled={safeCursor === 0}
+              onClick={() => setCursor(safeCursor - 1)}
+            >
+              <ChevronLeft />
+            </IconButton>
+            <IconButton
+              label={t.captureNext}
+              disabled={safeCursor >= total - 1}
+              onClick={() => setCursor(safeCursor + 1)}
+            >
+              <ChevronRight />
+            </IconButton>
+          </div>
+        )}
+      </header>
+      <div className={`capture-collection-items capture-collection-${view}`}>
+        {displayed.map((item) => {
+          const index = value.items.indexOf(item);
+          return (
+            <article className="capture-tile" key={item.descriptor.id}>
+              <button
+                type="button"
+                className="capture-tile-preview"
+                aria-label={`${t.openCapture} ${index + 1}`}
+                disabled={!item.version}
+                onClick={() => setGallery(item.descriptor.id)}
+              >
+                {item.version ? (
+                  <img
+                    src={capturePreviewUrl(workspace.context.annotationId, item.version)}
+                    alt={item.label || `${t.captureImage} ${index + 1}`}
+                    loading="lazy"
+                  />
+                ) : (
+                  <span>{t.captureLoading}</span>
+                )}
+              </button>
+              <div className="capture-tile-bar">
+                <span className="capture-tile-stamp">
+                  {item.descriptor.stamp?.location.page !== undefined
+                    ? `${t.page} ${item.descriptor.stamp.location.page}`
+                    : item.descriptor.stamp?.location.seconds !== undefined
+                      ? shortTime(item.descriptor.stamp.location.seconds)
+                      : item.label || `${t.captureImage} ${index + 1}`}
+                </span>
+                <IconButton
+                  label={`${t.captureEdit} ${index + 1}`}
+                  disabled={
+                    disabled ||
+                    !item.version ||
+                    (!!item.localDrawingDigest &&
+                      item.localDrawingDigest !== item.version.drawingDigest)
+                  }
+                  onClick={() => setStudio(item.descriptor.id)}
+                >
+                  <Pencil />
+                </IconButton>
+                <IconButton
+                  label={`${t.captureRemove} ${index + 1}`}
+                  disabled={disabled}
+                  onClick={() => action(workspace.remove(item.descriptor.id))}
+                >
+                  <X />
+                </IconButton>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+      <input
+        className="sr-only"
+        ref={input}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        disabled={disabled}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.currentTarget.value = '';
+          if (!file) return;
+          setBusy(true);
+          void normalizedImage(file, t)
+            .then((blob) => workspace.add(blob, 'image', file.name.slice(0, 240)))
+            .catch((e) => setError(e instanceof Error ? e.message : t.error))
+            .finally(() => setBusy(false));
+        }}
+      />
+      <div className="capture-add">
         <Button
+          className={adding ? 'capture-add-trigger active' : 'capture-add-trigger'}
           disabled={disabled || value.items.length >= 12}
-          onClick={() => setPicker('capture')}
+          aria-expanded={adding}
+          onClick={() => setAdding((v) => !v)}
         >
           <Camera />
-          {t.captureFromLibrary}
+          {t.captureAdd}
         </Button>
-        <Button
-          disabled={disabled || value.items.length >= 12}
-          onClick={() => input.current?.click()}
-        >
-          <ImagePlus />
-          {t.captureUpload}
-        </Button>
-        <input
-          className="sr-only"
-          ref={input}
-          type="file"
-          accept="image/png,image/jpeg,image/webp"
-          disabled={disabled}
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            e.currentTarget.value = '';
-            if (!file) return;
-            setBusy(true);
-            void normalizedImage(file, t)
-              .then((blob) => workspace.add(blob, 'image', file.name.slice(0, 240)))
-              .catch((e) => setError(e instanceof Error ? e.message : t.error))
-              .finally(() => setBusy(false));
-          }}
-        />
-      </header>
-      <div className="capture-collection-grid">
-        {value.items.map((item, index) => (
-          <article className="capture-tile" key={item.descriptor.id}>
-            <button
-              className="capture-tile-preview"
-              aria-label={`${t.openCapture} ${index + 1}`}
-              disabled={!item.version}
-              onClick={() => setGallery(item.descriptor.id)}
+        {adding && (
+          <div className="capture-add-options" role="group" aria-label={t.captureAdd}>
+            <Button
+              disabled={disabled || value.items.length >= 12}
+              onClick={() => {
+                setAdding(false);
+                setPicker('capture');
+              }}
             >
-              {item.version ? (
-                <img
-                  src={capturePreviewUrl(workspace.context.annotationId, item.version)}
-                  alt={item.label || `${t.captureImage} ${index + 1}`}
-                  loading="lazy"
-                />
-              ) : (
-                <span>{t.captureLoading}</span>
-              )}
-            </button>
-            <label>
-              <span className="sr-only">
-                {t.captureImageLabel} {index + 1}
-              </span>
-              <input
-                aria-label={`${t.captureImageLabel} ${index + 1}`}
-                maxLength={240}
-                value={item.label}
-                disabled={disabled}
-                onChange={(e) => action(workspace.setLabel(item.descriptor.id, e.target.value))}
-              />
-            </label>
-            {item.descriptor.stamp && <small>{stampLabel(item.descriptor.stamp, t)}</small>}
-            {!item.descriptor.stamp && item.descriptor.originSource && (
-              <small>
-                {item.descriptor.originSource.name} · {t.sourceVersion}{' '}
-                {item.descriptor.originSource.version}
-              </small>
-            )}
-            <div className="capture-tile-actions">
-              <Button
-                disabled={
-                  disabled ||
-                  !item.version ||
-                  (!!item.localDrawingDigest &&
-                    item.localDrawingDigest !== item.version.drawingDigest)
-                }
-                onClick={() => setStudio(item.descriptor.id)}
-              >
-                <Pencil />
-                {t.captureEdit}
-              </Button>
-              <IconButton
-                label={`${t.captureMoveEarlier} ${index + 1}`}
-                disabled={disabled || index === 0}
-                onClick={() => action(workspace.move(item.descriptor.id, -1))}
-              >
-                <ArrowLeft />
-              </IconButton>
-              <IconButton
-                label={`${t.captureMoveLater} ${index + 1}`}
-                disabled={disabled || index === value.items.length - 1}
-                onClick={() => action(workspace.move(item.descriptor.id, 1))}
-              >
-                <ArrowRight />
-              </IconButton>
-              <IconButton
-                label={`${t.captureRemove} ${index + 1}`}
-                disabled={disabled}
-                onClick={() => action(workspace.remove(item.descriptor.id))}
-              >
-                <Trash2 />
-              </IconButton>
-            </div>
-          </article>
-        ))}
+              {t.captureFromLibrary}
+            </Button>
+            <Button
+              disabled={disabled || value.items.length >= 12}
+              onClick={() => {
+                setAdding(false);
+                input.current?.click();
+              }}
+            >
+              <ImagePlus />
+              {t.captureUpload}
+            </Button>
+          </div>
+        )}
       </div>
-      <div className="capture-location-list">
-        <header>
-          <h4>
-            {t.captureLocations} · {value.stamps.length} / 100
-          </h4>
+      {value.stamps.length > 0 && (
+        <div className="capture-stamp-chips" aria-label={t.captureLocations}>
+          {value.stamps.map((stamp) => (
+            <span
+              key={stamp.id}
+              id={`capture-location-${stamp.id}`}
+              className={`capture-stamp-chip ${highlight === stamp.id ? 'highlight' : ''}`}
+            >
+              {stampLabel(stamp, t)}
+              <button
+                type="button"
+                aria-label={`${t.captureRemoveLocation}: ${stamp.label}`}
+                disabled={disabled}
+                onClick={() =>
+                  action(workspace.setStamps(value.stamps.filter((item) => item.id !== stamp.id)))
+                }
+              >
+                <X />
+              </button>
+            </span>
+          ))}
           <Button
+            className="capture-add-stamp"
             disabled={disabled || value.stamps.length >= 100}
             onClick={() => setPicker('location')}
           >
             <MapPin />
             {t.captureAddLocation}
           </Button>
-        </header>
-        {value.stamps.map((stamp) => (
-          <div
-            key={stamp.id}
-            id={`capture-location-${stamp.id}`}
-            className={highlight === stamp.id ? 'capture-location-highlight' : ''}
-          >
-            <span>{stampLabel(stamp, t)}</span>
-            <IconButton
-              label={`${t.captureRemoveLocation}: ${stamp.label}`}
-              disabled={disabled}
-              onClick={() =>
-                action(workspace.setStamps(value.stamps.filter((item) => item.id !== stamp.id)))
-              }
-            >
-              <Trash2 />
-            </IconButton>
-          </div>
-        ))}
-        {locationNotice && <p role="status">{locationNotice}</p>}
-      </div>
+        </div>
+      )}
+      {value.stamps.length === 0 && (
+        <Button
+          className="capture-add-stamp"
+          disabled={disabled}
+          onClick={() => setPicker('location')}
+        >
+          <MapPin />
+          {t.captureAddLocation}
+        </Button>
+      )}
+      {locationNotice && (
+        <p role="status" className="capture-stamp-notice">
+          {locationNotice}
+        </p>
+      )}
       {picker && (
         <CaptureSourcePicker
           catalog={catalog}
