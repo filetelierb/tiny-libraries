@@ -436,11 +436,13 @@ function StudioBody({
   }
   function down(event: ReactPointerEvent<SVGSVGElement>) {
     if (busy || event.button !== 0 || gesture.current) return;
+    const dismissedTextThisGesture = text.current !== null;
     if (!finishText()) return;
     const p = point(event);
     event.currentTarget.focus();
     event.preventDefault();
     if (tool === 'text') {
+      if (dismissedTextThisGesture) return;
       editText({
         kind: 'text',
         id: crypto.randomUUID(),
