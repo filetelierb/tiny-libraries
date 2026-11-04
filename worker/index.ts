@@ -68,7 +68,14 @@ import {
   type LibraryCall,
 } from './tutor-actions';
 import { tutorActionSchema } from '../shared/tutor-actions';
-import { cardSnapshot, deckSize, startCardDecks, rateCard, CardError } from './flashcards';
+import {
+  cardSnapshot,
+  deckSize,
+  startCardDecks,
+  rateCard,
+  CardError,
+  type StoredDeck,
+} from './flashcards';
 import { visualKey } from '../shared/artifact-widgets';
 import { artifactStudySnapshot, deleteArtifactStudy, startArtifactStudy } from './artifact-study';
 import {
@@ -872,6 +879,36 @@ export class Library extends DurableObject<Env> {
     );
     return { poked, started };
   }
+  /**
+   * Re-attempts flashcard decks that stalled: queued/running past their lease, or failed. The
+   * startAutoFlashcards helper is idempotent — startCardDecks skips decks already in 'ready'
+   * state and only touches stale ones — so re-running it per file picks up where things broke.
+   */
+  async sweepStalledFlashcards() {
+    const learnings = [
+      ...(await this.ctx.storage.list<Learning>({ prefix: 'learning:' })).values(),
+    ];
+    const now = Date.now();
+    for (const learning of learnings) {
+      const file = await this.ctx.storage.get<Source>(`file:${learning.sourceId}`);
+      if (!file || file.trashed || file.version !== learning.sourceVersion) continue;
+      const decks = [
+        ...(await this.ctx.storage.list<StoredDeck>({ prefix: 'card-deck:' })).values(),
+      ].filter((deck) => deck.sourceId === file.id && deck.learningVersion === learning.createdAt);
+      const stuck = decks.some(
+        (deck) =>
+          deck.status === 'failed' ||
+          (['queued', 'running'].includes(deck.status) && (deck.until || 0) <= now),
+      );
+      const missing =
+        learning.synthesis.chapters.length >
+        decks.filter((deck) => deck.status === 'ready').length;
+      if (!stuck && !missing) continue;
+      try {
+        await this.startAutoFlashcards(file, learning);
+      } catch {}
+    }
+  }
   async alarm() {
     // Every minute, this library quietly recovers stalled or orphaned preparation flows and
     // schedules the next check. The alarm lives on the Library DO itself, so projects without
@@ -879,7 +916,10 @@ export class Library extends DurableObject<Env> {
     try {
       const settings = await this.settings();
       const apiKey = await this.apiKey();
-      if (apiKey) await this.sweepPreparationJobs(settings.locale, apiKey);
+      if (apiKey) {
+        await this.sweepPreparationJobs(settings.locale, apiKey);
+        await this.sweepStalledFlashcards();
+      }
     } catch {}
     await this.ctx.storage.setAlarm(Date.now() + 60_000);
   }

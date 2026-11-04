@@ -21,7 +21,7 @@ export class CardError extends Error {
     super(message);
   }
 }
-type StoredDeck = CardDeck & { owner: string; operation: string; until: number };
+export type StoredDeck = CardDeck & { owner: string; operation: string; until: number };
 const deckKey = (id: string) => `card-deck:${id}`;
 const indexKey = (learning: Learning, chapterId: string) =>
   `card-index:${learning.sourceId}:${learning.sourceVersion}:${learning.createdAt}:${chapterId}`;
