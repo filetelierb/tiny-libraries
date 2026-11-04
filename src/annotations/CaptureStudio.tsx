@@ -180,8 +180,9 @@ function StudioBody({
     start: CapturePoint;
     points: CapturePoint[];
     object?: CaptureObject;
-    mode: 'draw' | 'move' | 'resize' | 'tail';
+    mode: 'draw' | 'move' | 'resize' | 'tail' | 'text';
     before: CaptureDrawing;
+    pendingText?: TextEdit;
   } | null>(null);
   const owner = workspace.context.annotationId,
     id = entry.descriptor.id,
@@ -448,15 +449,23 @@ function StudioBody({
         openText(existing);
         return;
       }
-      editText({
-        kind: 'text',
-        id: crypto.randomUUID(),
-        point: p,
-        text: '',
-        color,
-        style: textStyle,
-        fontSize: clamp(17 / scale, 8, 512),
-      });
+      event.currentTarget.setPointerCapture(event.pointerId);
+      gesture.current = {
+        id: event.pointerId,
+        start: p,
+        points: [p],
+        mode: 'text',
+        before: model.current,
+        pendingText: {
+          kind: 'text',
+          id: crypto.randomUUID(),
+          point: p,
+          text: '',
+          color,
+          style: textStyle,
+          fontSize: clamp(17 / scale, 8, 512),
+        },
+      };
       return;
     }
     const selectedObject = model.current.objects.find((o) => o.id === selected),
@@ -509,6 +518,14 @@ function StudioBody({
     setLive(null);
     if (event.currentTarget.hasPointerCapture(event.pointerId))
       event.currentTarget.releasePointerCapture(event.pointerId);
+    if (g.mode === 'text') {
+      if (g.pendingText) {
+        const dx = (p.x - g.start.x) * space.width * scale;
+        const dy = (p.y - g.start.y) * space.height * scale;
+        if (Math.hypot(dx, dy) < 5) editText(g.pendingText);
+      }
+      return;
+    }
     let object: CaptureObject | null = null;
     if (g.mode === 'move' && g.object)
       object = moveCaptureObject(g.object, { x: p.x - g.start.x, y: p.y - g.start.y }, space);
