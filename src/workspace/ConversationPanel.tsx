@@ -1453,8 +1453,11 @@ function ConversationThread({
       />
       <form
         className={`tutor-composer ${dropActive ? 'drop-active' : ''}`}
-        onDragOver={(event) => {
+        onDragOverCapture={(event) => {
           if (!accepts(event)) return;
+          // Capture phase: TipTap/ProseMirror would otherwise consume the drop at its own
+          // contenteditable element and paste the filename as text. Preventing default here
+          // (before the native drop handler runs) keeps the file-as-chip flow intact.
           event.preventDefault();
           event.dataTransfer.dropEffect = 'copy';
           setDropActive(true);
@@ -1463,9 +1466,10 @@ function ConversationThread({
           if (!event.currentTarget.contains(event.relatedTarget as Node | null))
             setDropActive(false);
         }}
-        onDrop={(event) => {
+        onDropCapture={(event) => {
           if (!accepts(event)) return;
           event.preventDefault();
+          event.stopPropagation();
           setDropActive(false);
           void dropOnComposer(event);
         }}

@@ -6,6 +6,7 @@ import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import Mention from '@tiptap/extension-mention';
 import type { SuggestionProps } from '@tiptap/suggestion';
+import { kindFor } from '../../shared/domain';
 
 /**
  * Payload the parent needs to render its menu. `command` commits the highlighted candidate as
@@ -167,10 +168,28 @@ export const TipTapComposer = React.forwardRef<
           // Default node spec prints `@label`; the chip visual already looks like a tag, so
           // the `@` would duplicate the signal. Serialized text (copy/paste) still uses `@`.
           renderHTML({ node, HTMLAttributes }) {
+            const label = node.attrs.label ?? node.attrs.id;
+            const fileKind = node.attrs.kind === 'file' ? kindFor(label) : null;
+            // The stylesheet paints the icon via a kind-specific mask-image on the icon span,
+            // so the reader sees a file-type cue to the left of the name. An inline <svg>
+            // doesn't work here: ProseMirror serialises its spec as plain HTML, lowercasing
+            // the viewBox attribute, which makes the SVG render empty.
             return [
               'span',
-              mergeAttributes({ 'data-type': 'mention' }, this.options.HTMLAttributes, HTMLAttributes),
-              node.attrs.label ?? node.attrs.id,
+              mergeAttributes(
+                {
+                  'data-type': 'mention',
+                  ...(fileKind
+                    ? { 'data-file-kind': fileKind }
+                    : node.attrs.kind === 'concept'
+                      ? { 'data-chip-kind': 'concept' }
+                      : {}),
+                },
+                this.options.HTMLAttributes,
+                HTMLAttributes,
+              ),
+              ['span', { class: 'composer-chip-icon', 'aria-hidden': 'true' }],
+              ['span', { class: 'composer-chip-inline-label' }, label],
             ];
           },
           addAttributes() {

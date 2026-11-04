@@ -11533,12 +11533,13 @@ body.agent-dragging {
   pointer-events: none;
 }
 .composer-chip-inline {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   padding: 1px 8px;
   margin: 0 1px;
   border-radius: 999px;
   background: color-mix(in oklch, var(--primary) 10%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--primary) 55%, var(--border));
   color: var(--primary);
   font-weight: var(--font-weight-medium);
   font-size: 0.95em;
@@ -11546,6 +11547,45 @@ body.agent-dragging {
   user-select: none;
   cursor: default;
   vertical-align: baseline;
+}
+.composer-chip-inline .composer-chip-icon {
+  flex: none;
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  background-color: currentColor;
+  opacity: 0.85;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  -webkit-mask-size: contain;
+}
+.composer-chip-inline[data-file-kind="video"] .composer-chip-icon {
+  mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='2' y='3' width='20' height='18' rx='2'/><path d='m10 8 6 4-6 4z'/></svg>");
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='2' y='3' width='20' height='18' rx='2'/><path d='m10 8 6 4-6 4z'/></svg>");
+}
+.composer-chip-inline[data-file-kind="audio"] .composer-chip-icon {
+  mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 18V10a9 9 0 0 1 18 0v8'/><rect x='3' y='14' width='4' height='7' rx='1'/><rect x='17' y='14' width='4' height='7' rx='1'/></svg>");
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 18V10a9 9 0 0 1 18 0v8'/><rect x='3' y='14' width='4' height='7' rx='1'/><rect x='17' y='14' width='4' height='7' rx='1'/></svg>");
+}
+.composer-chip-inline[data-file-kind="pdf"] .composer-chip-icon,
+.composer-chip-inline[data-file-kind="markdown"] .composer-chip-icon,
+.composer-chip-inline[data-file-kind="text"] .composer-chip-icon {
+  mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><polyline points='14 2 14 8 20 8'/><line x1='8' y1='13' x2='16' y2='13'/><line x1='8' y1='17' x2='16' y2='17'/></svg>");
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/><polyline points='14 2 14 8 20 8'/><line x1='8' y1='13' x2='16' y2='13'/><line x1='8' y1='17' x2='16' y2='17'/></svg>");
+}
+.composer-chip-inline[data-file-kind="image"] .composer-chip-icon {
+  mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='3' width='18' height='18' rx='2'/><circle cx='8.5' cy='8.5' r='1.5'/><path d='m21 15-5-5L5 21'/></svg>");
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='3' width='18' height='18' rx='2'/><circle cx='8.5' cy='8.5' r='1.5'/><path d='m21 15-5-5L5 21'/></svg>");
+}
+.composer-chip-inline[data-chip-kind="concept"] .composer-chip-icon {
+  mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 19.5A2.5 2.5 0 0 1 6.5 17H20'/><path d='M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z'/></svg>");
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 19.5A2.5 2.5 0 0 1 6.5 17H20'/><path d='M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z'/></svg>");
+}
+.composer-chip-inline .composer-chip-inline-label {
+  display: inline;
 }
 /* TipTap placeholder — the editor adds this class to the first paragraph when empty. */
 .composer-editable p.is-editor-empty:first-child::before {
