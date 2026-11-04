@@ -2108,8 +2108,16 @@ async function serve(request: Request, env: Env, url: URL): Promise<Response> {
             summary: `Added ${stored.name}${stored.folder ? ` to ${stored.folder}` : ''}`,
             detail: `${Math.round(stored.size / 1024)} KB · ${stored.kind}${path ? ` · ${path}` : ''}`,
           });
-          // Videos and audio go to the preparation queue on arrival; others wait for the student.
-          if (stored.kind === 'video' || stored.kind === 'audio') {
+          // Every uploadable kind goes to the preparation queue on arrival so the student does
+          // not have to prompt a second step before the chapters/glossary/artifact pipeline runs.
+          if (
+            stored.kind === 'video' ||
+            stored.kind === 'audio' ||
+            stored.kind === 'pdf' ||
+            stored.kind === 'markdown' ||
+            stored.kind === 'text' ||
+            stored.kind === 'image'
+          ) {
             const { key } = await call<{ key: string | null }>('/internal/key');
             const settings = await call<{ locale: 'en' | 'es' }>('/api/settings');
             if (key) void startJob(env, stored, settings.locale, project).catch(() => {});
